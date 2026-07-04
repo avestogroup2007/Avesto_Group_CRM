@@ -32,7 +32,9 @@ function handleIiko(fn) {
       if (e instanceof IikoNotConfiguredError) {
         return res.status(503).json({ error: e.message, configured: false });
       }
-      next(e);
+      // Показываем реальную причину от iiko (эндпоинт под requireAuth) —
+      // помогает при настройке (неверный apiLogin, не тот регион и т.п.).
+      return res.status(502).json({ error: e.message || "Ошибка запроса к iiko" });
     }
   });
 }
