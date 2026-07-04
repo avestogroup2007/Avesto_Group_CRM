@@ -32,11 +32,16 @@ function sha1(s) {
 // Авторизация: возвращает токен (строка). Токен живёт недолго и одна сессия —
 // поэтому логинимся под каждый запрос и затем разлогиниваемся.
 async function auth() {
-  const url =
-    `${BASE}/resto/api/auth` +
-    `?login=${encodeURIComponent(env.IIKO_SERVER_LOGIN)}` +
+  // Логин/пароль передаём в теле как application/x-www-form-urlencoded —
+  // эндпоинт auth использует @FormParam и отклоняет query-параметры.
+  const body =
+    `login=${encodeURIComponent(env.IIKO_SERVER_LOGIN)}` +
     `&pass=${sha1(env.IIKO_SERVER_PASSWORD)}`;
-  const res = await fetch(url, { method: "POST" });
+  const res = await fetch(`${BASE}/resto/api/auth`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
   const text = (await res.text()).trim();
   if (!res.ok) {
     throw new Error(`iiko auth → ${res.status} ${text}`.trim());
