@@ -231,13 +231,14 @@ const COMPANIES = [
   { id: 2, name: "ИП Ахмедов", inn: "770987654321" },
 ];
 const BRANCHES = [
-  { id: 1, companyId: 1, name: "Центр" },
-  { id: 2, companyId: 1, name: "Север" },
-  { id: 3, companyId: 1, name: "Юг" },
-  { id: 4, companyId: 2, name: "Восток" },
+  { id: 1, companyId: 1, name: "Микрорайон" },
+  { id: 2, companyId: 1, name: "Узбекистанская" },
+  { id: 3, companyId: 1, name: "Аэропорт" },
+  { id: 4, companyId: 2, name: "Цех «Навруз»" },
+  { id: 5, companyId: 1, name: "Магазин «Навруз»" },
 ];
 // Месячные бюджетные лимиты по филиалам (Этап улучшений: контроль перерасхода)
-const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000 };
+const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000, 5: 300000 };
 
 const USERS = [
   { id: "u1",  name: "Соколов Д. А.",  role: "director",   pos: "Генеральный директор",     level: 1, branchId: null, parentId: null },
@@ -409,9 +410,9 @@ function makeSeed() {
   // демо-отчёты по кассам филиалов
   const cashReports = [];
   const dstr = (ms) => { const dt = new Date(ms); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`; };
-  const BR_MGR = { 1: "u8", 2: "u5", 3: "u4", 4: "u10" };
+  const BR_MGR = { 1: "u8", 2: "u5", 3: "u4", 4: "u10", 5: "u4" };
   const rnd = (base, p) => Math.round((base * p) / 1000) * 1000;
-  [1, 2, 3, 4].forEach((bId, bi) => {
+  [1, 2, 3, 4, 5].forEach((bId, bi) => {
     for (let d = 1; d <= 6; d++) {
       const base = 6_000_000 + bi * 1_400_000 + ((d * 37) % 9) * 300_000;
       const fiscal = rnd(base, 0.55), nonFiscal = rnd(base, 0.12);
@@ -433,7 +434,7 @@ function makeSeed() {
 
   // демо-инкассации (передачи наличных в головной офис)
   const cashHandovers = [];
-  [1, 2, 3, 4].forEach((bId) => {
+  [1, 2, 3, 4, 5].forEach((bId) => {
     const cashTotal = cashReports.filter((r) => r.branchId === bId).reduce((a, r) => a + (r.fiscal || 0) + (r.nonFiscal || 0), 0);
     const part1 = Math.round(cashTotal * 0.6 / 1000) * 1000;
     const part2 = Math.round(cashTotal * 0.25 / 1000) * 1000;
