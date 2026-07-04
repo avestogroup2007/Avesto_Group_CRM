@@ -40,7 +40,8 @@ async function iikoFetch(path, body, token) {
 async function getToken() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
-  const data = await iikoFetch("/api/1/access_token", {
+  // Ключи новых аккаунтов требуют v2 (старый /api/1/access_token отвечает 403).
+  const data = await iikoFetch("/api/v2/access_token", {
     apiLogin: env.IIKO_API_LOGIN,
   });
   cachedToken = data.token;
