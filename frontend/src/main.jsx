@@ -37,8 +37,8 @@ function AuthGate() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#F4F6FB",
-          color: "#475569",
+          background: "#F7F4EF",
+          color: "#5E5049",
           fontFamily: "'Manrope', system-ui, sans-serif",
           fontSize: 14,
         }}

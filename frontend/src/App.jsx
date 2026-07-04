@@ -9,6 +9,7 @@ import {
   Info, Award, Mic, AlertCircle, Camera, ListChecks, Server, Lock, Activity,
   TrendingUp, Wallet, Menu, CalendarDays,
 } from "lucide-react";
+import Logo from "./Logo.jsx";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -22,9 +23,9 @@ const FONT =
 
 // Дизайн-токены: высокий контраст, доступность для всех поколений (Этап 3)
 const C = {
-  bg: "#F4F6FB", surface: "#FFFFFF", ink: "#0F172A", sub: "#475569", faint: "#94A3B8",
-  border: "#E5EAF2", line: "#EDF1F7",
-  brandA: "#2563EB", brandB: "#06B6D4", violet: "#7C3AED",
+  bg: "#F7F4EF", surface: "#FFFFFF", ink: "#1B1512", sub: "#5E5049", faint: "#A2938B",
+  border: "#E7DFD4", line: "#F1EBE2",
+  brandA: "#7B2D1F", brandB: "#C8892E", violet: "#7C3AED",
   ok: "#16A34A", warn: "#D97706", bad: "#DC2626",
 };
 
@@ -1734,8 +1735,8 @@ function AboutView() {
   ];
   return (
     <div className="space-y-5 max-w-3xl">
-      <div className="rounded-2xl p-6 text-white" style={{ background: `linear-gradient(135deg, ${C.brandA}, ${C.violet})` }}>
-        <div className="flex items-center gap-2 mb-2"><ShieldCheck size={22} /><h2 className="font-extrabold" style={{ fontSize: 22 }}>Avesto Group CRM System</h2></div>
+      <div className="rounded-2xl p-6 text-white" style={{ background: `linear-gradient(135deg, ${C.brandA}, #5A2113)` }}>
+        <div className="flex items-center gap-3 mb-2"><Logo size={40} radius={11} /><h2 className="font-extrabold" style={{ fontSize: 22 }}>Avesto Group CRM System</h2></div>
         <p style={{ fontSize: 14.5, lineHeight: 1.55, opacity: .95 }}>
           Это рабочий интерактивный прототип (MVP) на основе вашего ТЗ. Логика, интерфейс и ИИ-сценарии работают прямо здесь;
           данные сохраняются между сессиями. Серверные модули ниже спроектированы в ТЗ и подключаются на этапе бэкенда.
@@ -1802,7 +1803,7 @@ function TimesheetView({ s, me, now, branchScope }) {
   return (
     <div className="space-y-5 max-w-4xl">
       {/* моё время */}
-      <div className="rounded-2xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${C.brandA}, ${C.violet})` }}>
+      <div className="rounded-2xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${C.brandA}, #5A2113)` }}>
         <div className="flex items-center gap-2 mb-3"><Clock size={18} /><span className="font-bold" style={{ fontSize: 15 }}>{tr("Моё рабочее время")}</span></div>
         <div className="flex items-end gap-6 flex-wrap">
           <div><div style={{ fontSize: 12, opacity: .85 }}>{tr("Сегодня")}</div><div className="font-extrabold" style={{ fontSize: 26, lineHeight: 1.1 }}>{fmtWork(mine.today)}</div></div>
@@ -2873,9 +2874,7 @@ function Sidebar({ view, setView, role }) {
   return (
     <aside className="hidden md:flex flex-col" style={{ position: "fixed", left: 0, top: 0, width: 250, height: "100vh", overflowY: "auto", borderRight: `1px solid ${C.border}`, background: "#fff", zIndex: 40 }}>
       <div className="shrink-0 flex items-center gap-3" style={{ height: 65, paddingLeft: 16, paddingRight: 16, borderBottom: `1px solid ${C.border}` }}>
-        <div className="rounded-xl flex items-center justify-center shrink-0" style={{ width: 36, height: 36, background: `linear-gradient(135deg, ${C.brandA}, ${C.brandB})` }}>
-          <ShieldCheck size={20} color="#fff" />
-        </div>
+        <Logo size={36} radius={10} />
         <div className="min-w-0 flex flex-col justify-center">
           <div className="font-extrabold truncate" style={{ color: C.ink, fontSize: 15.5, lineHeight: 1.25 }}>Avesto Group</div>
           <div className="truncate" style={{ fontSize: 11, color: C.faint, lineHeight: 1.25 }}>CRM System</div>
