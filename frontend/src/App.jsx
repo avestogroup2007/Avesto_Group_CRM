@@ -2569,7 +2569,7 @@ function useIikoSales({ from, to, department }) {
         const byDay = arr(res?.byDay);
         const byPay = arr(res?.byPay);
         const byDish = arr(res?.byDish);
-        const byGroup = arr(res?.byGroup);
+        const byGroups = arr(res?.byGroups);
         const num = (v) => {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
@@ -2591,6 +2591,8 @@ function useIikoSales({ from, to, department }) {
           .sort()
           .map((d) => ({ date: d, revenue: dayMap[d].revenue, qty: dayMap[d].qty }));
         const total = days.reduce((a, d) => a + d.revenue, 0);
+        // Количество чеков — сумма уникальных заказов по всем строкам.
+        const checks = byDay.reduce((a, r) => a + num(r["UniqOrderId"]), 0);
         // По типам оплат.
         const payMap = {};
         byPay.forEach((r) => {
@@ -2610,23 +2612,30 @@ function useIikoSales({ from, to, department }) {
           dishMap[name].qty += num(r["DishAmountInt"]);
         });
         const products = Object.values(dishMap).sort((a, b) => b.sum - a.sum);
-        // По группам блюд 1-го уровня.
-        const groupMap = {};
-        byGroup.forEach((r) => {
-          const name =
-            r["DishGroup.TopParent"] || r["DishGroup"] || r["DishCategory"] || "—";
-          if (!groupMap[name]) groupMap[name] = { name, qty: 0, sum: 0 };
-          groupMap[name].sum += rev(r);
-          groupMap[name].qty += num(r["DishAmountInt"]);
-        });
-        const groups = Object.values(groupMap).sort((a, b) => b.sum - a.sum);
+        // Группы блюд по трём уровням (1/2/3) — агрегируем из одного среза.
+        const aggBy = (field) => {
+          const m = {};
+          byGroups.forEach((r) => {
+            const name = r[field] || "—";
+            if (!m[name]) m[name] = { name, qty: 0, sum: 0 };
+            m[name].sum += rev(r);
+            m[name].qty += num(r["DishAmountInt"]);
+          });
+          return Object.values(m).sort((a, b) => b.sum - a.sum);
+        };
+        const group1 = aggBy("DishGroup.TopParent");
+        const group2 = aggBy("DishGroup.SecondParent");
+        const group3 = aggBy("DishGroup.ThirdParent");
         setState({
           status: days.length ? "ok" : "empty",
           days,
           total,
+          checks,
           pay,
           products,
-          groups,
+          group1,
+          group2,
+          group3,
         });
       })
       .catch((e) => {
@@ -2711,6 +2720,7 @@ function SalesAnalytics({ s, me, branchScope }) {
   const payRows = liveOn && live.pay && live.pay.length
     ? live.pay.map((p, i) => [p.name, p.value, payColor(p.name, i)])
     : demoPayRows;
+  const payTotal = payRows.reduce((a, r) => a + r[1], 0) || 1;
 
   // динамика по дням
   const dayMap = {};
@@ -2719,6 +2729,12 @@ function SalesAnalytics({ s, me, branchScope }) {
 
   // Если iiko отдал живые продажи — показываем их вместо демо-данных.
   const displayRevenue = liveOn ? live.total : revenue;
+  const displayChecks = liveOn ? live.checks || 0 : checks;
+  const displayAvg = liveOn
+    ? displayChecks
+      ? Math.round(displayRevenue / displayChecks)
+      : 0
+    : avgCheck;
   const displaySeries = liveOn
     ? live.days.map((d) => ({ label: d.date.slice(8) + "." + d.date.slice(5, 7), day: d.date, revenue: d.revenue }))
     : series;
@@ -2744,23 +2760,28 @@ function SalesAnalytics({ s, me, branchScope }) {
   const top = abcProducts.slice(0, 5);
   const bottom = abcProducts.slice(-5).reverse();
   const abcColor = (g) => g === "A" ? { bg: "#E9F9EF", fg: C.ok } : g === "B" ? { bg: "#FEF3C7", fg: "#92400E" } : { bg: "#F1F5F9", fg: C.faint };
-  // ABC можно смотреть по блюдам или по группам блюд (если iiko отдал группы).
-  const groupsLive = liveOn && live.groups && live.groups.length ? live.groups : null;
-  const abcRows = abcMode === "group" && groupsLive ? withAbc(groupsLive) : abcProducts;
+  // ABC можно смотреть по блюдам или по группам блюд 1/2/3 (если iiko отдал их).
+  const groupLists = liveOn
+    ? { g1: live.group1, g2: live.group2, g3: live.group3 }
+    : {};
+  const hasGroups = ["g1", "g2", "g3"].some((k) => groupLists[k] && groupLists[k].length);
+  const abcSource = groupLists[abcMode];
+  const abcRows = abcSource && abcSource.length ? withAbc(abcSource) : abcProducts;
   const abcTotal = abcRows.reduce((a, p) => a + p.sum, 0) || 1;
   const abcCount = (g) => abcRows.filter((p) => p.abc === g).length;
   const abcSum = (g) => abcRows.filter((p) => p.abc === g).reduce((a, p) => a + p.sum, 0);
 
   // рекомендации
   const insights = [];
-  if (growth != null) insights.push(growth >= 0
+  if (!liveOn && growth != null) insights.push(growth >= 0
     ? `Выручка выросла на ${growth.toFixed(1)}% к прошлому периоду — держим темп.`
     : `Выручка снизилась на ${Math.abs(growth).toFixed(1)}% — стоит усилить продвижение.`);
+  if (liveOn) insights.push(`Выручка за период: ${fmtSum(displayRevenue)}${displayChecks ? ` · ${displayChecks.toLocaleString("ru-RU")} чеков` : ""} (данные из iiko).`);
   if (top[0]) insights.push(`Лидер продаж: ${top[0].name} — ${fmtSum(top[0].sum)} (${(top[0].share * 100).toFixed(0)}% выручки).`);
   const cItems = abcProducts.filter((p) => p.abc === "C");
   if (cItems.length) insights.push(`Аутсайдеры (группа C): ${cItems.slice(0, 4).map((p) => p.name).join(", ")} — рассмотрите акции или замену в меню.`);
-  if (avgCheck) insights.push(`Средний чек ${fmtSum(avgCheck)}${avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`);
-  if (payRows[0]) insights.push(`Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / (revenue || 1)) * 100).toFixed(0)}% выручки.`);
+  if (displayAvg) insights.push(`Средний чек ${fmtSum(displayAvg)}${!liveOn && avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`);
+  if (payRows[0]) insights.push(`Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / payTotal) * 100).toFixed(0)}% оплат.`);
 
   const inpSt = { border: `1px solid ${C.border}`, fontSize: 13.5, background: "#fff", color: C.ink };
   const KPI = ({ label, value, sub, tone }) => (
@@ -2798,8 +2819,8 @@ function SalesAnalytics({ s, me, branchScope }) {
       {/* KPI */}
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
         <KPI label={tr("Выручка за период")} value={fmtSum(displayRevenue)} sub={liveOn ? "● данные из iiko" : gr.s} tone={liveOn ? "up" : gr.t} />
-        <KPI label={tr("Средний чек")} value={fmtSum(avgCheck)} sub={agr.s} tone={agr.t} />
-        <KPI label={tr("Количество чеков")} value={checks.toLocaleString("ru-RU")} sub={prevChecks ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}` : null} tone={checks - prevChecks >= 0 ? "up" : "down"} />
+        <KPI label={tr("Средний чек")} value={fmtSum(displayAvg)} sub={liveOn ? "● данные из iiko" : agr.s} tone={liveOn ? "up" : agr.t} />
+        <KPI label={tr("Количество чеков")} value={displayChecks.toLocaleString("ru-RU")} sub={liveOn ? "● данные из iiko" : (prevChecks ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}` : null)} tone={liveOn ? "up" : (checks - prevChecks >= 0 ? "up" : "down")} />
         <KPI label={tr("Прошлый период")} value={fmtSum(prevRevenue)} sub={`${dm(prevFrom)} — ${dm(prevTo)}`} />
       </div>
 
@@ -2846,7 +2867,7 @@ function SalesAnalytics({ s, me, branchScope }) {
           <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Выручка по типам оплат")}</h3>
           <div className="space-y-2.5">
             {payRows.map(([name, val, col]) => {
-              const share = revenue ? (val / revenue) * 100 : 0;
+              const share = (val / payTotal) * 100;
               return (
                 <div key={name}>
                   <div className="flex items-center justify-between gap-2" style={{ fontSize: 13 }}>
@@ -2870,11 +2891,11 @@ function SalesAnalytics({ s, me, branchScope }) {
           <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("ABC-анализ")}</h3>
           <span style={{ fontSize: 12, color: C.faint }}>{tr("A — основная выручка, C — аутсайдеры")}</span>
         </div>
-        {/* переключатель разреза ABC: по блюдам / по группам (если iiko отдал группы) */}
-        {groupsLive && (
-          <div className="inline-flex rounded-xl p-1 mb-3" style={{ border: `1px solid ${C.border}`, background: "#fff" }}>
-            {[["dish", "По блюдам"], ["group", "По группам"]].map(([k, l]) => (
-              <button key={k} onClick={() => setAbcMode(k)} className="rounded-lg px-3 py-1.5 font-bold" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
+        {/* переключатель разреза ABC: блюда / группы 1–3 (если iiko отдал группы) */}
+        {hasGroups && (
+          <div className="inline-flex rounded-xl p-1 mb-3 overflow-x-auto" style={{ border: `1px solid ${C.border}`, background: "#fff" }}>
+            {[["dish", "Блюда"], ["g1", "Группа 1"], ["g2", "Группа 2"], ["g3", "Группа 3"]].map(([k, l]) => (
+              <button key={k} onClick={() => setAbcMode(k)} className="rounded-lg px-3 py-1.5 font-bold whitespace-nowrap" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
                 {tr(l)}
               </button>
             ))}
@@ -2883,7 +2904,7 @@ function SalesAnalytics({ s, me, branchScope }) {
         <div className="flex flex-wrap gap-2 mb-3">
           {["A", "B", "C"].map((g) => { const c = abcColor(g); return (
             <div key={g} className="rounded-xl px-3 py-2" style={{ background: c.bg, minWidth: 128 }}>
-              <div style={{ fontSize: 12, color: c.fg, fontWeight: 800 }}>{tr("Группа")} {g} · {abcCount(g)} {abcMode === "group" ? tr("гр.") : tr("тов.")}</div>
+              <div style={{ fontSize: 12, color: c.fg, fontWeight: 800 }}>{tr("Группа")} {g} · {abcCount(g)} {abcMode !== "dish" ? tr("гр.") : tr("тов.")}</div>
               <div style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}>{fmtSum(abcSum(g))} · {((abcSum(g) / abcTotal) * 100).toFixed(0)}%</div>
             </div>
           ); })}
@@ -2892,7 +2913,7 @@ function SalesAnalytics({ s, me, branchScope }) {
           <div className="hidden md:block">
             <table className="w-full" style={{ borderCollapse: "collapse", fontSize: 13 }}>
               <thead><tr style={{ color: C.faint, textAlign: "right" }}>
-                <th className="py-2" style={{ textAlign: "left" }}>{abcMode === "group" ? tr("Группа") : tr("Товар")}</th>
+                <th className="py-2" style={{ textAlign: "left" }}>{abcMode !== "dish" ? tr("Группа") : tr("Товар")}</th>
                 <th style={{ textAlign: "left" }}>{tr("Категория")}</th>
                 <th>{tr("Кол-во")}</th><th>{tr("Выручка")}</th><th>{tr("Доля")}</th><th>{tr("Накопит.")}</th><th>ABC</th>
               </tr></thead>
