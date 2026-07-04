@@ -68,6 +68,10 @@ r.post(
     });
 
     res.json({
+      // token в теле — для кросс-доменной связки (фронт на github.io ↔ бэкенд
+      // на onrender.com), где межсайтовые cookie ненадёжны. Фронт шлёт его
+      // в заголовке Authorization: Bearer. Cookie тоже ставится (для same-origin).
+      token,
       id: user.id,
       name: user.name,
       role: user.role,

@@ -2950,7 +2950,7 @@ function MoreSheet({ open, onClose, items, view, setView }) {
     </div>
   );
 }
-function TopBar({ me, shift, dispatch, onToggleShift }) {
+function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
   const [open, setOpen] = useState(false);
   return (
     <header className="topbar-h bg-white px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0" style={{ minHeight: 65, borderBottom: `1px solid ${C.border}`, zIndex: 20 }}>
@@ -2984,6 +2984,12 @@ function TopBar({ me, shift, dispatch, onToggleShift }) {
         </button>
         {open && (
           <div className="absolute right-0 top-12 z-30 rounded-2xl bg-white p-2 shadow-xl" style={{ border: `1px solid ${C.border}`, width: "min(280px, calc(100vw - 24px))" }}>
+            {authUser && (
+              <div className="px-2.5 py-2 mb-1 rounded-xl" style={{ background: "#F1F5FD" }}>
+                <div style={{ fontSize: 11.5, color: C.faint, fontWeight: 700 }}>{tr("Вход выполнен")}</div>
+                <div className="truncate" style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}>{authUser.name} · {authUser.role}</div>
+              </div>
+            )}
             <div className="px-2 py-1.5" style={{ fontSize: 12, color: C.faint, fontWeight: 700 }}>{tr("Войти как (демо ролей):")}</div>
             <div className="max-h-80 overflow-y-auto">
               {ORG.users.filter((u) => u.active !== false).map((u) => (
@@ -2999,6 +3005,13 @@ function TopBar({ me, shift, dispatch, onToggleShift }) {
                 </button>
               ))}
             </div>
+            {onLogout && (
+              <button onClick={() => { setOpen(false); onLogout(); }}
+                className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2.5 mt-1 font-bold"
+                style={{ color: C.bad, borderTop: `1px solid ${C.line}` }}>
+                <Power size={16} /> {tr("Выйти")}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -3007,7 +3020,7 @@ function TopBar({ me, shift, dispatch, onToggleShift }) {
 }
 
 /* ------------------------------ приложение --------------------------------- */
-export default function App() {
+export default function App({ authUser, onLogout }) {
   const [s, dispatch] = useReducer(reducer, undefined, init);
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState(null);
@@ -3034,6 +3047,14 @@ export default function App() {
       departments: s.departments, catDept: s.catDept, routes: s.routes,
     });
   }, [s.hydrated, s.tasks, s.history, s.shifts, s.timesheet, s.cashReports, s.cashHandovers, s.currentUserId, s.companies, s.branches, s.positions, s.users, s.budgets, s.sla, s.sops, s.settings, s.departments, s.catDept, s.routes]);
+
+  // Реальный вход: роль приходит с сервера — открываем приложение под ролью
+  // (демо-пользователь той же роли ведёт демо-данные до переноса данных на сервер).
+  useEffect(() => {
+    if (!authUser || !s.hydrated) return;
+    const demo = USERS.find((u) => u.role === authUser.role) || USERS[0];
+    if (s.currentUserId !== demo.id) dispatch({ type: "SET_USER", id: demo.id });
+  }, [authUser, s.hydrated]); // eslint-disable-line
 
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 20000); return () => clearInterval(id); }, []);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2600); return () => clearTimeout(t); }, [toast]);
@@ -3078,7 +3099,7 @@ export default function App() {
       <div className="flex" style={{ minHeight: "100vh" }}>
         <Sidebar view={s.view} setView={setView} role={me.role} />
         <div className="flex-1 min-w-0 flex flex-col desk-shift">
-          <TopBar me={me} shift={myShift} dispatch={dispatch} onToggleShift={() => { dispatch({ type: "TOGGLE_SHIFT", id: me.id }); notify(myShift.open ? "Смена закрыта" : "Смена открыта — задачи доступны"); }} />
+          <TopBar me={me} shift={myShift} dispatch={dispatch} authUser={authUser} onLogout={onLogout} onToggleShift={() => { dispatch({ type: "TOGGLE_SHIFT", id: me.id }); notify(myShift.open ? "Смена закрыта" : "Смена открыта — задачи доступны"); }} />
 
           <main className="flex-1 p-4 md:p-6 pb-28 md:pb-6">
             <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-4">

@@ -97,6 +97,13 @@ test("полный поток: login → me → logout → me 401", async () => 
   const loginBody = await loginRes.json();
   assert.equal(loginBody.name, TEST_LOGIN);
   assert.equal(loginBody.role, "director");
+  assert.ok(loginBody.token, "login должен вернуть token в теле");
+
+  // me по Bearer-токену (кросс-доменный путь github.io↔onrender)
+  const meBearer = await fetch(`${base}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${loginBody.token}` },
+  });
+  assert.equal(meBearer.status, 200);
 
   const cookie = tokenCookie(loginRes);
   assert.ok(cookie, "должна прийти cookie token");

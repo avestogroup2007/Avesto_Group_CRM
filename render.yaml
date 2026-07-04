@@ -19,8 +19,8 @@ services:
     rootDir: backend
     # Установка зависимостей и генерация клиента Prisma.
     buildCommand: npm ci && npx prisma generate
-    # Применяем миграции (идемпотентно) и запускаем сервер.
-    startCommand: npx prisma migrate deploy && npm start
+    # Миграции + демо-учётки (идемпотентно, upsert) + запуск сервера.
+    startCommand: npx prisma migrate deploy && node prisma/seed.js && npm start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
