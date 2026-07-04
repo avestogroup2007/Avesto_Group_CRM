@@ -23,7 +23,7 @@ function cookieOptions() {
   return {
     httpOnly: true, // JS не может прочитать
     secure: env.COOKIE_SECURE, // только по HTTPS (в проде true)
-    sameSite: "strict", // защита от CSRF
+    sameSite: env.COOKIE_SAMESITE, // strict локально; none для кросс-домена (github.io↔onrender)
     path: "/",
   };
 }

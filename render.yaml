@@ -1,0 +1,49 @@
+# Render Blueprint — разворачивает бэкенд Avesto Group CRM System.
+# На render.com: New → Blueprint → выбрать этот репозиторий. Render прочитает
+# этот файл и создаст веб-сервис + управляемый PostgreSQL автоматически.
+# Docs: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: avesto-crm-db
+    plan: free
+    databaseName: avesto_crm
+    user: avesto_crm
+
+services:
+  - type: web
+    name: avesto-crm-backend
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    # Установка зависимостей и генерация клиента Prisma.
+    buildCommand: npm ci && npx prisma generate
+    # Применяем миграции (идемпотентно) и запускаем сервер.
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Строка подключения берётся из созданной выше базы автоматически.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: avesto-crm-db
+          property: connectionString
+      # Секрет для JWT — Render сгенерирует случайное значение сам.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      # Продакшен по HTTPS — cookie только Secure.
+      - key: COOKIE_SECURE
+        value: "true"
+      # Фронт (github.io) и бэкенд (onrender.com) на разных доменах → SameSite=None.
+      - key: COOKIE_SAMESITE
+        value: none
+      # Разрешённый источник для CORS — домен фронтенда на GitHub Pages.
+      - key: FRONTEND_URL
+        value: https://avestogroup2007.github.io
+      # iiko (Этап 3) — заполняется в панели Render, НЕ в этом файле и не в git.
+      # - key: IIKO_API_LOGIN
+      #   sync: false
+      # - key: IIKO_BASE_URL
+      #   value: https://api-ru.iiko.services
