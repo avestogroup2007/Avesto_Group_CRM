@@ -231,14 +231,14 @@ const COMPANIES = [
   { id: 1, name: "ООО «Take Eat»", inn: "7701234567" },
   { id: 2, name: "ИП Ахмедов", inn: "770987654321" },
 ];
-// iikoId — organizationId точки в iiko (из /api/iiko/organizations),
-// нужен для запросов реальных продаж по конкретному филиалу.
+// iikoDept — имя торгового предприятия (Department) в iikoServer,
+// нужно для фильтра реальных продаж по конкретному филиалу.
 const BRANCHES = [
-  { id: 1, companyId: 1, name: "Микрорайон", iikoId: "24ef3d24-508c-4f7c-9cae-873ba69af661" },
-  { id: 2, companyId: 1, name: "Узбекистанская", iikoId: "79619c8d-5b80-4266-b0e7-375b1e20ee5f" },
-  { id: 3, companyId: 1, name: "Аэропорт", iikoId: "d797897a-083f-4115-ab45-584ca68c1428" },
-  { id: 4, companyId: 2, name: "Цех «Навруз»", iikoId: "06f9a794-1e44-4b7b-ae53-7d8cb9874e58" },
-  { id: 5, companyId: 1, name: "Магазин «Навруз»", iikoId: "ff1f4e76-64e6-4ee1-b8a7-077cb4807ae9" },
+  { id: 1, companyId: 1, name: "Микрорайон", iikoDept: "Микрорайон" },
+  { id: 2, companyId: 1, name: "Узбекистанская", iikoDept: "Uzbekistanskaya" },
+  { id: 3, companyId: 1, name: "Аэропорт", iikoDept: "Aeroport" },
+  { id: 4, companyId: 2, name: "Цех «Навруз»", iikoDept: "Navruzi Цех" },
+  { id: 5, companyId: 1, name: "Магазин «Навруз»", iikoDept: "Наврузи Магазин" },
 ];
 // Месячные бюджетные лимиты по филиалам (Этап улучшений: контроль перерасхода)
 const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000, 5: 300000 };
@@ -2555,19 +2555,14 @@ function dayChecks(dateStr, branchId, revenue) {
   return Math.max(1, Math.round(revenue / avg));
 }
 
-// Живые продажи из iiko (OLAP) за период [from,to], опц. по точке (iikoId).
+// Живые продажи из iiko (OLAP) за период [from,to], опц. по филиалу (department).
 // status: loading | ok | empty | off (iiko не настроен) | error.
-function useIikoSales({ from, to, iikoId }) {
+function useIikoSales({ from, to, department }) {
   const [state, setState] = useState({ status: "loading" });
   useEffect(() => {
     let alive = true;
     setState({ status: "loading" });
-    apiPost("/api/iiko/olap", {
-      report: "sales",
-      from,
-      to,
-      organizationId: iikoId || undefined,
-    })
+    apiPost("/api/iiko/olap", { from, to, department: department || undefined })
       .then((res) => {
         if (!alive) return;
         const rows = Array.isArray(res?.data)
@@ -2579,13 +2574,14 @@ function useIikoSales({ from, to, iikoId }) {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
         };
-        const rev = (r) =>
-          num(r["DishDiscountSumInt"] ?? r["DishSumInt"] ?? r["DishSum"]);
+        // Выручка со скидкой (фактически оплачено); запасной — без скидки.
+        const rev = (r) => num(r["DishDiscountSumInt"] ?? r["DishSumInt"]);
         const dayMap = {};
         rows.forEach((r) => {
-          const d = r["OpenDate.Typed"] || r["OpenDate"] || r["Date"];
-          if (!d) return;
-          const key = String(d).slice(0, 10);
+          // OpenDate в iikoServer приходит как "2014.01.01" — приводим к ISO.
+          const raw = r["OpenDate"] || r["OpenDate.Typed"] || r["Date"] || "";
+          const key = String(raw).slice(0, 10).replace(/\./g, "-");
+          if (!key) return;
           if (!dayMap[key]) dayMap[key] = { revenue: 0, qty: 0 };
           dayMap[key].revenue += rev(r);
           dayMap[key].qty += num(r["DishAmountInt"]);
@@ -2605,7 +2601,7 @@ function useIikoSales({ from, to, iikoId }) {
     return () => {
       alive = false;
     };
-  }, [from, to, iikoId]);
+  }, [from, to, department]);
   return state;
 }
 
@@ -2638,10 +2634,10 @@ function SalesAnalytics({ s, me, branchScope }) {
   const [from, setFrom] = useState(init.from);
   const [to, setTo] = useState(init.to);
   const fBranch = isMgr ? myBranch : (branchScope || 0);
-  // Живые продажи из iiko: по выбранному филиалу (его iikoId) или по всем точкам.
+  // Живые продажи из iiko: по выбранному филиалу (его Department) или по всем.
   const selBranchObj = branchById(fBranch || 0);
-  const selIikoId = fBranch && selBranchObj ? selBranchObj.iikoId : null;
-  const live = useIikoSales({ from, to, iikoId: selIikoId });
+  const selDept = fBranch && selBranchObj ? selBranchObj.iikoDept : null;
+  const live = useIikoSales({ from, to, department: selDept });
   const pick = (p) => { setPreset(p); const r = rangeOf(p); if (r) { setFrom(r.from); setTo(r.to); } };
   // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
   const REPORTS = [["revenue", "Динамика выручки"], ["pay", "Оплаты"], ["dishes", "Блюда"], ["abc", "ABC"], ["insights", "Выводы"]];
