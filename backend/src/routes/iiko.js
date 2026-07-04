@@ -25,7 +25,7 @@ const REPORT_MAP = {
 
 // Превращает «iiko не настроен» в 503, остальное — дальше в errorHandler.
 function handleIiko(fn) {
-  return asyncHandler(async (req, res, next) => {
+  return asyncHandler(async (req, res) => {
     try {
       await fn(req, res);
     } catch (e) {
@@ -34,7 +34,9 @@ function handleIiko(fn) {
       }
       // Показываем реальную причину от iiko (эндпоинт под requireAuth) —
       // помогает при настройке (неверный apiLogin, не тот регион и т.п.).
-      return res.status(502).json({ error: e.message || "Ошибка запроса к iiko" });
+      return res
+        .status(502)
+        .json({ error: e.message || "Ошибка запроса к iiko" });
     }
   });
 }
