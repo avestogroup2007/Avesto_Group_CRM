@@ -10,6 +10,7 @@ import {
   TrendingUp, Wallet, Menu, CalendarDays,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
+import IikoPanel from "./IikoPanel.jsx";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -2652,6 +2653,9 @@ function SalesAnalytics({ s, me, branchScope }) {
 
   return (
     <div className="space-y-5 max-w-5xl">
+      {/* проверка подключения iiko */}
+      <IikoPanel />
+
       {/* период + филиал */}
       <div className="rounded-2xl bg-white p-3.5" style={{ border: `1px solid ${C.border}` }}>
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
