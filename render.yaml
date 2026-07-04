@@ -6,6 +6,7 @@
 databases:
   - name: avesto-crm-db
     plan: free
+    region: frankfurt # ДОЛЖЕН совпадать с регионом веб-сервиса, иначе внутренний адрес БД недоступен (P1001)
     databaseName: avesto_crm
     user: avesto_crm
 
