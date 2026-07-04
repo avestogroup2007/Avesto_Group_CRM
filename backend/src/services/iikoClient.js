@@ -40,10 +40,10 @@ async function iikoFetch(path, body, token) {
 async function getToken() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
-  // Ключи новых аккаунтов требуют v2 с полем clientSecret (старый
-  // /api/1/access_token с apiLogin отвечает 403).
+  // Ключи новых аккаунтов требуют v2 с полем apiKey (старый /api/1/access_token
+  // с apiLogin отвечает 403; v2 хочет apiKey).
   const data = await iikoFetch("/api/v2/access_token", {
-    clientSecret: env.IIKO_API_LOGIN,
+    apiKey: env.IIKO_API_LOGIN,
   });
   cachedToken = data.token || data.access_token || data.accessToken;
   tokenExpiry = Date.now() + 55 * 60 * 1000;
