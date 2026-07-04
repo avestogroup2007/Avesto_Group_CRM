@@ -52,7 +52,7 @@ const ACTION_LABEL = {
 
 const M = 60_000, H = 3_600_000, D = 86_400_000;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-const STORAGE_KEY = "crm.bpm.v8";
+const STORAGE_KEY = "avesto.crm.v9"; // бренд + реальные филиалы — старые локальные данные игнорируются
 
 /* ============================ ДВУЯЗЫЧНОСТЬ (RU / UZ) ======================== */
 let LANG = "ru";
