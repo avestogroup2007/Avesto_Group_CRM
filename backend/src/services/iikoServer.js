@@ -78,7 +78,8 @@ export async function salesByDay({ from, to, departments }) {
   const key = await auth();
   try {
     const filters = {
-      OpenDate: {
+      // Этот сервер требует фильтр именно по «Учётному дню» (OpenDate.Typed).
+      "OpenDate.Typed": {
         filterType: "DateRange",
         periodType: "CUSTOM",
         from: dayStart(from),
@@ -102,7 +103,7 @@ export async function salesByDay({ from, to, departments }) {
     const body = {
       reportType: "SALES",
       buildSummary: false,
-      groupByRowFields: ["OpenDate", "Department"],
+      groupByRowFields: ["OpenDate.Typed", "Department"],
       groupByColFields: [],
       aggregateFields: ["DishSumInt", "DishDiscountSumInt", "DishAmountInt"],
       filters,
