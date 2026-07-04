@@ -44,6 +44,8 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: /Avesto_Group_CRM/
+          # Адрес бэкенда на Render — фронт на Pages обращается к нему за API.
+          VITE_API_URL: https://avesto-crm-backend.onrender.com
 
       # SPA-фолбэк: любой прямой заход отдаёт index.html.
       - name: 404 → index.html
