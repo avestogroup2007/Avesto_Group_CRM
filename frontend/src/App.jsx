@@ -2732,7 +2732,7 @@ function SalesAnalytics({ s, me, branchScope }) {
         {isMgr && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>{tr("Ваш филиал")}: <b style={{ color: C.sub }}>{branchById(myBranch)?.name}</b></div>}
         {/* статус живых данных iiko */}
         {live.status === "loading" && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>Загрузка данных из iiko…</div>}
-        {live.status === "ok" && <div className="mt-2" style={{ fontSize: 12, color: C.ok, fontWeight: 700 }}>● Данные из iiko{selIikoId ? ` · ${selBranchObj?.name}` : " · все точки"}</div>}
+        {live.status === "ok" && <div className="mt-2" style={{ fontSize: 12, color: C.ok, fontWeight: 700 }}>● Данные из iiko{selDept ? ` · ${selBranchObj?.name}` : " · все точки"}</div>}
         {live.status === "empty" && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>iiko: продаж за период нет — показаны демо-данные.</div>}
         {live.status === "error" && <div className="mt-2" style={{ fontSize: 12, color: C.warn }}>iiko недоступен ({live.error}) — показаны демо-данные.</div>}
       </div>
