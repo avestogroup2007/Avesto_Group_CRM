@@ -1,0 +1,147 @@
+// Схема базы данных ПроЦесс CRM/BPM.
+// Повторяет структуры фронтенда (задачи, юзеры, филиалы, кассы),
+// но как настоящие таблицы со связями и ограничениями целостности.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id       String   @id @default(cuid())
+  name     String
+  inn      String
+  branches Branch[]
+}
+
+model Branch {
+  id            String       @id @default(cuid())
+  name          String
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id])
+  monthlyBudget Int          @default(0)
+  users         User[]
+  tasks         Task[]
+  cashReports   CashReport[]
+
+  @@index([companyId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String   @unique // используется как логин
+  passwordHash String // bcrypt-хэш, никогда не пароль
+  role         String // director|finance|manager|accountant|sysadmin|staff
+  position     String   @default("")
+  departmentId String?
+  branchId     String?
+  branch       Branch?  @relation(fields: [branchId], references: [id])
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  createdTasks Task[]     @relation("creator")
+  auditLogs    AuditLog[]
+
+  @@index([branchId])
+  @@index([role])
+}
+
+model Task {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  branchId     String
+  branch       Branch   @relation(fields: [branchId], references: [id])
+  departmentId String
+  executorId   String
+  controllerId String
+  createdById  String
+  createdBy    User     @relation("creator", fields: [createdById], references: [id])
+  phase        Int      @default(1) // 1..5
+  category     String
+  priority     String
+  amount       Int?
+  overBudget   Boolean  @default(false)
+  slaDeadline  DateTime
+  extra        Json? // гибкие доп. поля (JSONB)
+  createdAt    DateTime @default(now())
+
+  history  TaskHistory[]
+  comments Comment[]
+
+  @@index([branchId])
+  @@index([executorId])
+  @@index([controllerId])
+  @@index([createdById])
+}
+
+// Неизменяемый журнал — записи только добавляются, никогда не меняются/удаляются
+model TaskHistory {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id])
+  userId    String
+  action    String // created|viewed|start|review|done|return|comment|step
+  fromPhase Int?
+  toPhase   Int?
+  note      String?
+  at        DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Comment {
+  id     String   @id @default(cuid())
+  taskId String
+  task   Task     @relation(fields: [taskId], references: [id])
+  userId String
+  text   String
+  at     DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model CashReport {
+  id          String    @id @default(cuid())
+  branchId    String
+  branch      Branch    @relation(fields: [branchId], references: [id])
+  date        String // YYYY-MM-DD
+  userId      String
+  status      String    @default("submitted") // submitted|confirmed
+  fiscal      Int       @default(0)
+  nonFiscal   Int       @default(0)
+  humo        Int       @default(0)
+  uzcard      Int       @default(0)
+  click       Int       @default(0)
+  payme       Int       @default(0)
+  uzumTezkor  Int       @default(0)
+  yandex      Int       @default(0)
+  transfer    Int       @default(0)
+  expenses    Int       @default(0)
+  iiko        Int       @default(0)
+  comment     String?
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+  confirmedBy String?
+
+  @@unique([branchId, date]) // один отчёт на филиал в день
+  @@index([branchId])
+}
+
+// Журнал безопасности — кто что выгружал, кто пытался копировать
+model AuditLog {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id])
+  event  String // export_csv|print|blocked_copy|delete_cash_report|login...
+  detail String?
+  ip     String?
+  at     DateTime @default(now())
+
+  @@index([userId])
+  @@index([event])
+}
