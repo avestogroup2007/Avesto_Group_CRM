@@ -26,6 +26,9 @@ const EnvSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  // Для кросс-доменной связки (фронт на github.io ↔ бэкенд на onrender.com)
+  // нужен SameSite=None (и обязательно Secure). Локально — strict.
+  COOKIE_SAMESITE: z.enum(["strict", "lax", "none"]).default("strict"),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
