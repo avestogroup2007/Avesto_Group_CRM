@@ -2575,6 +2575,9 @@ function SalesAnalytics({ s, me, branchScope }) {
   const [to, setTo] = useState(init.to);
   const fBranch = isMgr ? myBranch : (branchScope || 0);
   const pick = (p) => { setPreset(p); const r = rangeOf(p); if (r) { setFrom(r.from); setTo(r.to); } };
+  // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
+  const REPORTS = [["revenue", "Динамика выручки"], ["pay", "Оплаты"], ["dishes", "Блюда"], ["abc", "ABC"], ["insights", "Выводы"]];
+  const [tab, setTab] = useState("revenue");
 
   const inScope = (r, a, b) => r.date >= a && r.date <= b && (isMgr ? r.branchId === myBranch : (fBranch ? r.branchId === fBranch : true));
   const reports = (s.cashReports || []).filter((r) => inScope(r, from, to));
@@ -2663,8 +2666,22 @@ function SalesAnalytics({ s, me, branchScope }) {
         <KPI label={tr("Прошлый период")} value={fmtSum(prevRevenue)} sub={`${dm(prevFrom)} — ${dm(prevTo)}`} />
       </div>
 
+      {/* переключатель отчётов */}
+      <div className="rounded-2xl bg-white p-1.5 flex gap-1 overflow-x-auto" style={{ border: `1px solid ${C.border}` }}>
+        {REPORTS.map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} className="rounded-xl px-3.5 py-2 font-bold whitespace-nowrap shrink-0" style={{ fontSize: 13.5, background: tab === k ? C.brandA : "transparent", color: tab === k ? "#fff" : C.sub }}>
+            {tr(l)}
+          </button>
+        ))}
+      </div>
+
+      {/* пустое состояние активной вкладки */}
+      {((tab === "revenue" && !series.length) || (tab === "pay" && !payRows.length) || (tab === "dishes" && !products.length) || (tab === "insights" && !insights.length)) && (
+        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}`, fontSize: 13, color: C.faint }}>{tr("Нет данных за выбранный период")}</div>
+      )}
+
       {/* динамика выручки */}
-      {series.length > 0 && (
+      {tab === "revenue" && series.length > 0 && (
         <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
           <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Динамика выручки")}</h3>
           <div style={{ width: "100%", height: 240 }}>
@@ -2684,7 +2701,7 @@ function SalesAnalytics({ s, me, branchScope }) {
       )}
 
       {/* выручка по типам оплат */}
-      {payRows.length > 0 && (
+      {tab === "pay" && payRows.length > 0 && (
         <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
           <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Выручка по типам оплат")}</h3>
           <div className="space-y-2.5">
@@ -2707,6 +2724,7 @@ function SalesAnalytics({ s, me, branchScope }) {
       )}
 
       {/* ABC-анализ */}
+      {tab === "abc" && (
       <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
           <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("ABC-анализ товаров")}</h3>
@@ -2762,9 +2780,10 @@ function SalesAnalytics({ s, me, branchScope }) {
           ); })}
         </div>
       </div>
+      )}
 
       {/* топ и аутсайдеры */}
-      {products.length > 0 && (
+      {tab === "dishes" && products.length > 0 && (
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
           <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
             <h3 className="font-bold mb-2" style={{ color: C.ok, fontSize: 15 }}>▲ {tr("Лучше всего продаются")}</h3>
@@ -2788,7 +2807,7 @@ function SalesAnalytics({ s, me, branchScope }) {
       )}
 
       {/* рекомендации */}
-      {insights.length > 0 && (
+      {tab === "insights" && insights.length > 0 && (
         <div className="rounded-2xl p-4 sm:p-5" style={{ background: "linear-gradient(135deg, #EFF4FF, #F5F3FF)", border: `1px solid ${C.border}` }}>
           <div className="flex items-center gap-2 mb-2"><Bot size={18} color={C.violet} /><h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("Выводы и рекомендации")}</h3></div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
