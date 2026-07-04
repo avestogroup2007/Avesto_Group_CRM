@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
+import { apiPost } from "./api.js";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -230,12 +231,14 @@ const COMPANIES = [
   { id: 1, name: "ООО «Take Eat»", inn: "7701234567" },
   { id: 2, name: "ИП Ахмедов", inn: "770987654321" },
 ];
+// iikoId — organizationId точки в iiko (из /api/iiko/organizations),
+// нужен для запросов реальных продаж по конкретному филиалу.
 const BRANCHES = [
-  { id: 1, companyId: 1, name: "Микрорайон" },
-  { id: 2, companyId: 1, name: "Узбекистанская" },
-  { id: 3, companyId: 1, name: "Аэропорт" },
-  { id: 4, companyId: 2, name: "Цех «Навруз»" },
-  { id: 5, companyId: 1, name: "Магазин «Навруз»" },
+  { id: 1, companyId: 1, name: "Микрорайон", iikoId: "24ef3d24-508c-4f7c-9cae-873ba69af661" },
+  { id: 2, companyId: 1, name: "Узбекистанская", iikoId: "79619c8d-5b80-4266-b0e7-375b1e20ee5f" },
+  { id: 3, companyId: 1, name: "Аэропорт", iikoId: "d797897a-083f-4115-ab45-584ca68c1428" },
+  { id: 4, companyId: 2, name: "Цех «Навруз»", iikoId: "06f9a794-1e44-4b7b-ae53-7d8cb9874e58" },
+  { id: 5, companyId: 1, name: "Магазин «Навруз»", iikoId: "ff1f4e76-64e6-4ee1-b8a7-077cb4807ae9" },
 ];
 // Месячные бюджетные лимиты по филиалам (Этап улучшений: контроль перерасхода)
 const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000, 5: 300000 };
@@ -2552,6 +2555,60 @@ function dayChecks(dateStr, branchId, revenue) {
   return Math.max(1, Math.round(revenue / avg));
 }
 
+// Живые продажи из iiko (OLAP) за период [from,to], опц. по точке (iikoId).
+// status: loading | ok | empty | off (iiko не настроен) | error.
+function useIikoSales({ from, to, iikoId }) {
+  const [state, setState] = useState({ status: "loading" });
+  useEffect(() => {
+    let alive = true;
+    setState({ status: "loading" });
+    apiPost("/api/iiko/olap", {
+      report: "sales",
+      from,
+      to,
+      organizationId: iikoId || undefined,
+    })
+      .then((res) => {
+        if (!alive) return;
+        const rows = Array.isArray(res?.data)
+          ? res.data
+          : Array.isArray(res)
+            ? res
+            : [];
+        const num = (v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : 0;
+        };
+        const rev = (r) =>
+          num(r["DishDiscountSumInt"] ?? r["DishSumInt"] ?? r["DishSum"]);
+        const dayMap = {};
+        rows.forEach((r) => {
+          const d = r["OpenDate.Typed"] || r["OpenDate"] || r["Date"];
+          if (!d) return;
+          const key = String(d).slice(0, 10);
+          if (!dayMap[key]) dayMap[key] = { revenue: 0, qty: 0 };
+          dayMap[key].revenue += rev(r);
+          dayMap[key].qty += num(r["DishAmountInt"]);
+        });
+        const days = Object.keys(dayMap)
+          .sort()
+          .map((d) => ({ date: d, revenue: dayMap[d].revenue, qty: dayMap[d].qty }));
+        const total = days.reduce((a, d) => a + d.revenue, 0);
+        setState({ status: days.length ? "ok" : "empty", days, total });
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = (e && e.message) || "";
+        if (/configured|не настро/i.test(msg)) setState({ status: "off" });
+        else setState({ status: "error", error: msg });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [from, to, iikoId]);
+  return state;
+}
+
 function SalesAnalytics({ s, me, branchScope }) {
   const branches = s.branches || [];
   const isMgr = me.role === "manager";
@@ -2581,6 +2638,10 @@ function SalesAnalytics({ s, me, branchScope }) {
   const [from, setFrom] = useState(init.from);
   const [to, setTo] = useState(init.to);
   const fBranch = isMgr ? myBranch : (branchScope || 0);
+  // Живые продажи из iiko: по выбранному филиалу (его iikoId) или по всем точкам.
+  const selBranchObj = branchById(fBranch || 0);
+  const selIikoId = fBranch && selBranchObj ? selBranchObj.iikoId : null;
+  const live = useIikoSales({ from, to, iikoId: selIikoId });
   const pick = (p) => { setPreset(p); const r = rangeOf(p); if (r) { setFrom(r.from); setTo(r.to); } };
   // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
   const REPORTS = [["revenue", "Динамика выручки"], ["pay", "Оплаты"], ["dishes", "Блюда"], ["abc", "ABC"], ["insights", "Выводы"]];
@@ -2612,6 +2673,13 @@ function SalesAnalytics({ s, me, branchScope }) {
   const dayMap = {};
   reports.forEach((r) => { dayMap[r.date] = (dayMap[r.date] || 0) + cashCalc(r).total; });
   const series = Object.keys(dayMap).sort().map((d) => ({ label: d.slice(8) + "." + d.slice(5, 7), day: d, revenue: dayMap[d] }));
+
+  // Если iiko отдал живые продажи — показываем их вместо демо-данных.
+  const liveOn = live.status === "ok";
+  const displayRevenue = liveOn ? live.total : revenue;
+  const displaySeries = liveOn
+    ? live.days.map((d) => ({ label: d.date.slice(8) + "." + d.date.slice(5, 7), day: d.date, revenue: d.revenue }))
+    : series;
 
   // товары + ABC
   const pm = {};
@@ -2666,11 +2734,16 @@ function SalesAnalytics({ s, me, branchScope }) {
           <NiceDate label={tr("по")} value={to} onChange={(v) => { setTo(v); setPreset("custom"); }} width={134} />
         </div>
         {isMgr && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>{tr("Ваш филиал")}: <b style={{ color: C.sub }}>{branchById(myBranch)?.name}</b></div>}
+        {/* статус живых данных iiko */}
+        {live.status === "loading" && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>Загрузка данных из iiko…</div>}
+        {live.status === "ok" && <div className="mt-2" style={{ fontSize: 12, color: C.ok, fontWeight: 700 }}>● Данные из iiko{selIikoId ? ` · ${selBranchObj?.name}` : " · все точки"}</div>}
+        {live.status === "empty" && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>iiko: продаж за период нет — показаны демо-данные.</div>}
+        {live.status === "error" && <div className="mt-2" style={{ fontSize: 12, color: C.warn }}>iiko недоступен ({live.error}) — показаны демо-данные.</div>}
       </div>
 
       {/* KPI */}
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-        <KPI label={tr("Выручка за период")} value={fmtSum(revenue)} sub={gr.s} tone={gr.t} />
+        <KPI label={tr("Выручка за период")} value={fmtSum(displayRevenue)} sub={liveOn ? "● данные из iiko" : gr.s} tone={liveOn ? "up" : gr.t} />
         <KPI label={tr("Средний чек")} value={fmtSum(avgCheck)} sub={agr.s} tone={agr.t} />
         <KPI label={tr("Количество чеков")} value={checks.toLocaleString("ru-RU")} sub={prevChecks ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}` : null} tone={checks - prevChecks >= 0 ? "up" : "down"} />
         <KPI label={tr("Прошлый период")} value={fmtSum(prevRevenue)} sub={`${dm(prevFrom)} — ${dm(prevTo)}`} />
@@ -2686,23 +2759,26 @@ function SalesAnalytics({ s, me, branchScope }) {
       </div>
 
       {/* пустое состояние активной вкладки */}
-      {((tab === "revenue" && !series.length) || (tab === "pay" && !payRows.length) || (tab === "dishes" && !products.length) || (tab === "insights" && !insights.length)) && (
+      {((tab === "revenue" && !displaySeries.length) || (tab === "pay" && !payRows.length) || (tab === "dishes" && !products.length) || (tab === "insights" && !insights.length)) && (
         <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}`, fontSize: 13, color: C.faint }}>{tr("Нет данных за выбранный период")}</div>
       )}
 
       {/* динамика выручки */}
-      {tab === "revenue" && series.length > 0 && (
+      {tab === "revenue" && displaySeries.length > 0 && (
         <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Динамика выручки")}</h3>
+          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>
+            {tr("Динамика выручки")}
+            {liveOn && <span style={{ fontSize: 12, color: C.ok, fontWeight: 700, marginLeft: 8 }}>● iiko</span>}
+          </h3>
           <div style={{ width: "100%", height: 240 }}>
             <ResponsiveContainer>
-              <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <BarChart data={displaySeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.line} vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} tickLine={false} axisLine={{ stroke: C.line }} />
                 <YAxis tick={{ fontSize: 11, fill: C.faint }} tickLine={false} axisLine={false} width={54} tickFormatter={(v) => (v / 1000000).toFixed(1) + "M"} />
                 <Tooltip formatter={(v) => fmtSum(v)} labelStyle={{ color: C.ink }} contentStyle={{ borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 12 }} />
                 <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                  {series.map((e, i) => <Cell key={i} fill={C.brandA} />)}
+                  {displaySeries.map((e, i) => <Cell key={i} fill={C.brandA} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

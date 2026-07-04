@@ -56,13 +56,21 @@ r.post(
 r.post(
   "/olap",
   handleIiko(async (req, res) => {
-    const { report, from, to, filters } = req.body || {};
+    const { report, from, to, filters, organizationId } = req.body || {};
     const cfg = REPORT_MAP[report];
     if (!cfg) return res.status(400).json({ error: "Неизвестный отчёт" });
     if (!from || !to) {
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
-    res.json(await salesOlap({ from, to, groupBy: cfg.groupBy, filters }));
+    res.json(
+      await salesOlap({
+        from,
+        to,
+        groupBy: cfg.groupBy,
+        filters,
+        organizationId,
+      })
+    );
   })
 );
 
