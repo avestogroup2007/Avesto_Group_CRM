@@ -29,14 +29,13 @@ const EnvSchema = z.object({
   // Для кросс-доменной связки (фронт на github.io ↔ бэкенд на onrender.com)
   // нужен SameSite=None (и обязательно Secure). Локально — strict.
   COOKIE_SAMESITE: z.enum(["strict", "lax", "none"]).default("strict"),
-  // iiko (iikoWeb Public API). api_key секретный — задаётся ТОЛЬКО в
-  // окружении хостинга. Если не задан, iiko-эндпоинты вернут 503
-  // «не настроено» (данные не текут). IIKO_API_LOGIN = api_key.
-  IIKO_API_LOGIN: z.string().min(1).optional(),
-  // Необязательные поля /auth (app_id + client_secret).
-  IIKO_API_ID: z.string().min(1).optional(),
-  IIKO_CLIENT_SECRET: z.string().min(1).optional(),
-  IIKO_BASE_URL: z.string().url().default("https://public-api.iikoweb.ru"),
+  // iiko (iikoCloud Transport API). Секреты задаются ТОЛЬКО в окружении
+  // хостинга. Если apiLogin не задан, iiko-эндпоинты вернут 503 «не настроено».
+  // Авторизация /api/v2/access_token: apiLogin + appId + clientSecret.
+  IIKO_API_LOGIN: z.string().min(1).optional(), // apiLogin
+  IIKO_API_ID: z.string().min(1).optional(), // appId
+  IIKO_CLIENT_SECRET: z.string().min(1).optional(), // clientSecret
+  IIKO_BASE_URL: z.string().url().default("https://api-ru.iiko.services"),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
