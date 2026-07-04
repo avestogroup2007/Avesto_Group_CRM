@@ -230,12 +230,14 @@ const COMPANIES = [
   { id: 1, name: "ООО «Take Eat»", inn: "7701234567" },
   { id: 2, name: "ИП Ахмедов", inn: "770987654321" },
 ];
+// iikoId — organizationId точки в iiko (из /api/iiko/organizations),
+// нужен для запросов реальных продаж по конкретному филиалу.
 const BRANCHES = [
-  { id: 1, companyId: 1, name: "Микрорайон" },
-  { id: 2, companyId: 1, name: "Узбекистанская" },
-  { id: 3, companyId: 1, name: "Аэропорт" },
-  { id: 4, companyId: 2, name: "Цех «Навруз»" },
-  { id: 5, companyId: 1, name: "Магазин «Навруз»" },
+  { id: 1, companyId: 1, name: "Микрорайон", iikoId: "24ef3d24-508c-4f7c-9cae-873ba69af661" },
+  { id: 2, companyId: 1, name: "Узбекистанская", iikoId: "79619c8d-5b80-4266-b0e7-375b1e20ee5f" },
+  { id: 3, companyId: 1, name: "Аэропорт", iikoId: "d797897a-083f-4115-ab45-584ca68c1428" },
+  { id: 4, companyId: 2, name: "Цех «Навруз»", iikoId: "06f9a794-1e44-4b7b-ae53-7d8cb9874e58" },
+  { id: 5, companyId: 1, name: "Магазин «Навруз»", iikoId: "ff1f4e76-64e6-4ee1-b8a7-077cb4807ae9" },
 ];
 // Месячные бюджетные лимиты по филиалам (Этап улучшений: контроль перерасхода)
 const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000, 5: 300000 };
