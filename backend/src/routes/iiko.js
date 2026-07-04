@@ -63,7 +63,13 @@ r.post(
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
     res.json(
-      await salesOlap({ from, to, groupBy: cfg.groupBy, filters, organizationId })
+      await salesOlap({
+        from,
+        to,
+        groupBy: cfg.groupBy,
+        filters,
+        organizationId,
+      })
     );
   })
 );

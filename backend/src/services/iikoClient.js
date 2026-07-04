@@ -73,7 +73,13 @@ export async function organizations() {
 // OLAP-отчёт продаж. organizationId (если задан) фильтрует по точке через
 // измерение DepartmentId. Возвращаем выручку (DishDiscountSumInt — сумма со
 // скидкой = фактическая выручка), сумму без скидки и количество.
-export async function salesOlap({ from, to, groupBy, filters, organizationId }) {
+export async function salesOlap({
+  from,
+  to,
+  groupBy,
+  filters,
+  organizationId,
+}) {
   const token = await getToken();
   const mergedFilters = {
     "OpenDate.Typed": {
