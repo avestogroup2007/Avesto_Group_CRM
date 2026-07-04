@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { ShieldCheck, LogIn, Loader2 } from "lucide-react";
+import { LogIn, Loader2 } from "lucide-react";
 import { login } from "./api.js";
+import Logo from "./Logo.jsx";
 
-const BRAND_A = "#2563EB";
-const BRAND_B = "#06B6D4";
-const INK = "#0F172A";
-const SUB = "#475569";
-const BORDER = "#E5EAF2";
+const BRAND_A = "#7B2D1F"; // бордовый
+const INK = "#1B1512";
+const SUB = "#5E5049";
+const BORDER = "#E7DFD4";
 
 const FONT =
   "'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -46,19 +46,14 @@ export default function Login({ onSuccess }) {
   return (
     <div
       className="min-h-dvh flex items-center justify-center p-4"
-      style={{ fontFamily: FONT, background: "#F4F6FB" }}
+      style={{ fontFamily: FONT, background: "#F7F4EF" }}
     >
       <div
         className="w-full max-w-sm rounded-2xl bg-white p-6 sm:p-7"
         style={{ border: `1px solid ${BORDER}`, boxShadow: "0 10px 40px rgba(15,23,42,.08)" }}
       >
         <div className="flex items-center gap-3 mb-5">
-          <div
-            className="rounded-xl flex items-center justify-center shrink-0"
-            style={{ width: 40, height: 40, background: `linear-gradient(135deg, ${BRAND_A}, ${BRAND_B})` }}
-          >
-            <ShieldCheck size={22} color="#fff" />
-          </div>
+          <Logo size={44} radius={11} />
           <div>
             <div className="font-extrabold" style={{ color: INK, fontSize: 17, lineHeight: 1.2 }}>
               Avesto Group
@@ -126,7 +121,7 @@ export default function Login({ onSuccess }) {
 
         <div
           className="mt-5 rounded-xl px-3 py-2.5"
-          style={{ background: "#F1F5FD", fontSize: 12, color: SUB, lineHeight: 1.5 }}
+          style={{ background: "#F6EFE1", fontSize: 12, color: SUB, lineHeight: 1.5 }}
         >
           Демо-учётки: <b>director</b>, <b>finance</b>, <b>manager</b>, <b>accountant</b>,{" "}
           <b>sysadmin</b>, <b>staff</b> — пароль <b>changeme123</b>.
