@@ -113,12 +113,13 @@ async function runOlap(key, { from, to, departments, groupByRowFields }) {
   return Array.isArray(json.data) ? json.data : [];
 }
 
-// Полный отчёт продаж за период (одна сессия iiko, три OLAP-среза):
-//  - byDay:  по дню и филиалу (выручка/график/KPI);
-//  - byPay:  по типам оплат (вкладка «Оплаты»);
-//  - byDish: по блюдам (вкладки «Блюда»/«ABC»).
-// byPay/byDish best-effort: если конкретный срез не удался — вернём пустой,
-// но выручка по дням (главное) не пострадает.
+// Полный отчёт продаж за период (одна сессия iiko, несколько OLAP-срезов):
+//  - byDay:   по дню и филиалу (выручка/график/KPI);
+//  - byPay:   по типам оплат (вкладка «Оплаты»);
+//  - byDish:  по блюдам (вкладки «Блюда»/«ABC»);
+//  - byGroup: по группам блюд 1-го уровня (ABC по группам).
+// Все, кроме byDay, best-effort: если конкретный срез не удался — вернём
+// пустой, но выручка по дням (главное) не пострадает.
 export async function salesReport({ from, to, departments }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await auth();
@@ -136,7 +137,11 @@ export async function salesReport({ from, to, departments }) {
       ...opts,
       groupByRowFields: ["DishName"],
     }).catch(() => []);
-    return { byDay, byPay, byDish };
+    const byGroup = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["DishGroup.TopParent"],
+    }).catch(() => []);
+    return { byDay, byPay, byDish, byGroup };
   } finally {
     await logout(key);
   }
