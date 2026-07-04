@@ -2949,7 +2949,7 @@ function MoreSheet({ open, onClose, items, view, setView }) {
 function TopBar({ me, shift, dispatch, onToggleShift }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="topbar-h bg-white px-4 md:px-6 py-2.5 flex flex-wrap items-center gap-3 sticky top-0" style={{ minHeight: 65, borderBottom: `1px solid ${C.border}`, zIndex: 20 }}>
+    <header className="topbar-h bg-white px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0" style={{ minHeight: 65, borderBottom: `1px solid ${C.border}`, zIndex: 20 }}>
       <button onClick={onToggleShift}
         className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 font-bold transition"
         style={{ ...(shift.open
