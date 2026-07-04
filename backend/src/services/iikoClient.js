@@ -70,25 +70,34 @@ export async function organizations() {
   );
 }
 
-// OLAP-отчёт продаж.
-export async function salesOlap({ from, to, groupBy, filters }) {
+// OLAP-отчёт продаж. organizationId (если задан) фильтрует по точке через
+// измерение DepartmentId. Возвращаем выручку (DishDiscountSumInt — сумма со
+// скидкой = фактическая выручка), сумму без скидки и количество.
+export async function salesOlap({ from, to, groupBy, filters, organizationId }) {
   const token = await getToken();
+  const mergedFilters = {
+    "OpenDate.Typed": {
+      filterType: "DateRange",
+      periodType: "CUSTOM",
+      from,
+      to,
+    },
+    ...(filters || {}),
+  };
+  if (organizationId) {
+    mergedFilters.DepartmentId = {
+      filterType: "IncludeValues",
+      values: [organizationId],
+    };
+  }
   return iikoFetch(
     "/api/1/reports/olap",
     {
       reportType: "SALES",
       buildSummary: true,
       groupByRowFields: groupBy,
-      aggregateFields: ["DishAmountInt", "DishSumInt"],
-      filters: {
-        "OpenDate.Typed": {
-          filterType: "DateRange",
-          periodType: "CUSTOM",
-          from,
-          to,
-        },
-        ...(filters || {}),
-      },
+      aggregateFields: ["DishDiscountSumInt", "DishSumInt", "DishAmountInt"],
+      filters: mergedFilters,
     },
     token
   );
