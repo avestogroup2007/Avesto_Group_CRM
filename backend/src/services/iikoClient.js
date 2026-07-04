@@ -47,7 +47,6 @@ async function iikoFetch(path, body, token) {
 async function getToken() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
-
   const payload = { api_key: env.IIKO_API_LOGIN };
   if (env.IIKO_API_ID) payload.app_id = env.IIKO_API_ID;
   if (env.IIKO_CLIENT_SECRET) payload.client_secret = env.IIKO_CLIENT_SECRET;
