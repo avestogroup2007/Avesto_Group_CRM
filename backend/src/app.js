@@ -10,6 +10,7 @@ import pinoHttp from "pino-http";
 import { env } from "./env.js";
 import { log } from "./logger.js";
 import authRoutes from "./auth/routes.js";
+import iikoRoutes from "./routes/iiko.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -47,11 +48,11 @@ app.get("/api/health", (req, res) => res.json({ ok: true, time: Date.now() }));
 // Маршруты.
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth", authRoutes);
+app.use("/api/iiko", iikoRoutes);
 
-// Здесь позже (Этап 2–3) подключим:
+// Здесь позже (Этап 2) подключим:
 // app.use("/api/tasks", taskRoutes);
 // app.use("/api/cash", cashRoutes);
-// app.use("/api/iiko", iikoRoutes);
 
 // Обработка 404 и ошибок — всегда последними.
 app.use(notFound);

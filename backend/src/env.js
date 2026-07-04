@@ -29,6 +29,10 @@ const EnvSchema = z.object({
   // Для кросс-доменной связки (фронт на github.io ↔ бэкенд на onrender.com)
   // нужен SameSite=None (и обязательно Secure). Локально — strict.
   COOKIE_SAMESITE: z.enum(["strict", "lax", "none"]).default("strict"),
+  // iiko (Этап 3). apiLogin секретный — задаётся ТОЛЬКО в окружении хостинга.
+  // Если не задан, iiko-эндпоинты вернут 503 «не настроено» (данные не текут).
+  IIKO_API_LOGIN: z.string().min(1).optional(),
+  IIKO_BASE_URL: z.string().url().default("https://api-ru.iiko.services"),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
