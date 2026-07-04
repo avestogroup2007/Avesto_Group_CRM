@@ -33,9 +33,9 @@ export default function IikoPanel() {
     setBusy(true);
     setOrdersErr("");
     try {
-      const data = await apiPost("/api/iiko/stores", {});
+      const data = await apiPost("/api/iiko/organizations", {});
       const list =
-        data.stores || data.organizations || data.data || (Array.isArray(data) ? data : []);
+        data.organizations || data.data || (Array.isArray(data) ? data : []);
       setOrgs(list);
     } catch (e) {
       setOrdersErr(e.message || "Не удалось получить точки iiko");
@@ -114,8 +114,7 @@ export default function IikoPanel() {
       {orgs && (
         <div className="mt-3">
           <div style={{ fontSize: 12, color: SUB, fontWeight: 700, marginBottom: 6 }}>
-            Точки iiko ({orgs.length}) — <b>department_id</b> нужен для отчётов
-            продаж, <b>id</b> — для привязки к филиалам:
+            Точки iiko ({orgs.length}) — их <b>id</b> нужны для привязки к филиалам:
           </div>
           <div className="space-y-1.5">
             {orgs.length === 0 && (
@@ -123,20 +122,15 @@ export default function IikoPanel() {
             )}
             {orgs.map((o) => (
               <div
-                key={o.id ?? o.department_id ?? o.store_name}
+                key={o.id}
                 className="flex items-center flex-wrap gap-x-3 gap-y-0.5 rounded-xl px-3 py-2"
                 style={{ background: "#FBF8F2", border: `1px solid ${BORDER}` }}
               >
                 <span style={{ fontSize: 13.5, color: INK, fontWeight: 700 }}>
-                  {o.store_name || o.name || "(без названия)"}
+                  {o.name || "(без названия)"}
                 </span>
-                {o.department_id && (
-                  <span style={{ fontSize: 11.5, color: MAROON, fontFamily: "monospace" }}>
-                    dep: {o.department_id}
-                  </span>
-                )}
                 <span style={{ fontSize: 11.5, color: SUB, fontFamily: "monospace" }}>
-                  id: {o.id}
+                  {o.id}
                 </span>
               </div>
             ))}

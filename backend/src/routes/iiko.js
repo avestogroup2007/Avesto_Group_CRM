@@ -1,22 +1,29 @@
-// Прокси-маршруты iiko (iikoWeb Public API): фронтенд обращается сюда, а не к
-// iiko напрямую — секретный api_key остаётся на сервере. Все маршруты требуют
-// входа.
+// Прокси-маршруты iiko: фронтенд обращается сюда, а не к iiko напрямую —
+// секретный apiLogin остаётся на сервере. Все маршруты требуют входа.
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import {
   iikoConfigured,
   IikoNotConfiguredError,
-  stores,
-  salesDocuments,
-  users,
-  products,
+  organizations,
+  salesOlap,
+  loyaltyCustomers,
 } from "../services/iikoClient.js";
 
 const r = Router();
 r.use(requireAuth);
 
-// Превращает «iiko не настроен» в 503, остальное — 502 с реальной причиной.
+// Маппинг наших отчётов на параметры OLAP iiko.
+const REPORT_MAP = {
+  sales: { groupBy: ["OpenDate.Typed"] }, // выручка по дням
+  dishes: { groupBy: ["DishName", "DishGroup"] }, // продажи блюд
+  abc: { groupBy: ["DishName", "DishGroup"] }, // ABC (считаем на сервере)
+  checks: { groupBy: ["HourOpen"] }, // по часам
+  pay: { groupBy: ["PayTypes"] }, // типы оплат
+};
+
+// Превращает «iiko не настроен» в 503, остальное — дальше в errorHandler.
 function handleIiko(fn) {
   return asyncHandler(async (req, res) => {
     try {
@@ -26,7 +33,7 @@ function handleIiko(fn) {
         return res.status(503).json({ error: e.message, configured: false });
       }
       // Показываем реальную причину от iiko (эндпоинт под requireAuth) —
-      // помогает при настройке (неверный api_key, не тот регион и т.п.).
+      // помогает при настройке (неверный apiLogin, не тот регион и т.п.).
       return res
         .status(502)
         .json({ error: e.message || "Ошибка запроса к iiko" });
@@ -37,42 +44,37 @@ function handleIiko(fn) {
 // Настроена ли интеграция — фронт может показать demo/live соответственно.
 r.get("/status", (req, res) => res.json({ configured: iikoConfigured() }));
 
-// Список ресторанов (точек) iiko — для сопоставления филиалов.
-// Совместимость: старый путь /organizations тоже отдаёт точки.
-async function sendStores(req, res) {
-  res.json(await stores());
-}
-r.post("/stores", handleIiko(sendStores));
-r.post("/organizations", handleIiko(sendStores));
-
-// Список пользователей iiko.
+// Список организаций (точек) iiko — для настройки сопоставления филиалов.
 r.post(
-  "/users",
+  "/organizations",
   handleIiko(async (req, res) => {
-    res.json(await users());
+    res.json(await organizations());
   })
 );
 
-// Список продуктов (номенклатура).
+// OLAP-отчёт продаж по одному из наших ключей отчётов.
 r.post(
-  "/products",
+  "/olap",
   handleIiko(async (req, res) => {
-    res.json(await products());
-  })
-);
-
-// Экспорт актов реализации (продаж) за период по департаменту точки.
-r.post(
-  "/sales",
-  handleIiko(async (req, res) => {
-    const { departmentId, from, to } = req.body || {};
-    if (!departmentId) {
-      return res.status(400).json({ error: "Нужен departmentId" });
-    }
+    const { report, from, to, filters } = req.body || {};
+    const cfg = REPORT_MAP[report];
+    if (!cfg) return res.status(400).json({ error: "Неизвестный отчёт" });
     if (!from || !to) {
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
-    res.json(await salesDocuments({ departmentId, from, to }));
+    res.json(await salesOlap({ from, to, groupBy: cfg.groupBy, filters }));
+  })
+);
+
+// Клиенты программы лояльности.
+r.post(
+  "/customers",
+  handleIiko(async (req, res) => {
+    const { organizationId } = req.body || {};
+    if (!organizationId) {
+      return res.status(400).json({ error: "Нужен organizationId" });
+    }
+    res.json(await loyaltyCustomers({ organizationId }));
   })
 );
 
