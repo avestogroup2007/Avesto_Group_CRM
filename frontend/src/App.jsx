@@ -2565,21 +2565,21 @@ function useIikoSales({ from, to, department }) {
     apiPost("/api/iiko/olap", { from, to, department: department || undefined })
       .then((res) => {
         if (!alive) return;
-        const rows = Array.isArray(res?.data)
-          ? res.data
-          : Array.isArray(res)
-            ? res
-            : [];
+        const arr = (v) => (Array.isArray(v) ? v : []);
+        const byDay = arr(res?.byDay);
+        const byPay = arr(res?.byPay);
+        const byDish = arr(res?.byDish);
         const num = (v) => {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
         };
         // Выручка со скидкой (фактически оплачено); запасной — без скидки.
         const rev = (r) => num(r["DishDiscountSumInt"] ?? r["DishSumInt"]);
+        // По дням.
         const dayMap = {};
-        rows.forEach((r) => {
-          // OpenDate в iikoServer приходит как "2014.01.01" — приводим к ISO.
-          const raw = r["OpenDate"] || r["OpenDate.Typed"] || r["Date"] || "";
+        byDay.forEach((r) => {
+          // OpenDate.Typed приходит как "2014.01.01" — приводим к ISO.
+          const raw = r["OpenDate.Typed"] || r["OpenDate"] || r["Date"] || "";
           const key = String(raw).slice(0, 10).replace(/\./g, "-");
           if (!key) return;
           if (!dayMap[key]) dayMap[key] = { revenue: 0, qty: 0 };
@@ -2590,7 +2590,32 @@ function useIikoSales({ from, to, department }) {
           .sort()
           .map((d) => ({ date: d, revenue: dayMap[d].revenue, qty: dayMap[d].qty }));
         const total = days.reduce((a, d) => a + d.revenue, 0);
-        setState({ status: days.length ? "ok" : "empty", days, total });
+        // По типам оплат.
+        const payMap = {};
+        byPay.forEach((r) => {
+          const name = r["PayTypes"] || "—";
+          payMap[name] = (payMap[name] || 0) + rev(r);
+        });
+        const pay = Object.entries(payMap)
+          .map(([name, value]) => ({ name, value }))
+          .filter((p) => p.value > 0)
+          .sort((a, b) => b.value - a.value);
+        // По блюдам.
+        const dishMap = {};
+        byDish.forEach((r) => {
+          const name = r["DishName"] || "—";
+          if (!dishMap[name]) dishMap[name] = { name, qty: 0, sum: 0 };
+          dishMap[name].sum += rev(r);
+          dishMap[name].qty += num(r["DishAmountInt"]);
+        });
+        const products = Object.values(dishMap).sort((a, b) => b.sum - a.sum);
+        setState({
+          status: days.length ? "ok" : "empty",
+          days,
+          total,
+          pay,
+          products,
+        });
       })
       .catch((e) => {
         if (!alive) return;
@@ -2638,6 +2663,7 @@ function SalesAnalytics({ s, me, branchScope }) {
   const selBranchObj = branchById(fBranch || 0);
   const selDept = fBranch && selBranchObj ? selBranchObj.iikoDept : null;
   const live = useIikoSales({ from, to, department: selDept });
+  const liveOn = live.status === "ok";
   const pick = (p) => { setPreset(p); const r = rangeOf(p); if (r) { setFrom(r.from); setTo(r.to); } };
   // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
   const REPORTS = [["revenue", "Динамика выручки"], ["pay", "Оплаты"], ["dishes", "Блюда"], ["abc", "ABC"], ["insights", "Выводы"]];
@@ -2663,7 +2689,15 @@ function SalesAnalytics({ s, me, branchScope }) {
     o.click += r.click || 0; o.payme += r.payme || 0; o.uzum += r.uzumTezkor || 0; o.yandex += r.yandex || 0; o.transfer += r.transfer || 0;
     return o;
   }, { cash: 0, humo: 0, uzcard: 0, click: 0, payme: 0, uzum: 0, yandex: 0, transfer: 0 });
-  const payRows = [["Наличные", pay.cash, C.brandA], ["Humo", pay.humo, "#7C3AED"], ["Uzcard", pay.uzcard, C.violet], ["Click", pay.click, C.brandB], ["Payme", pay.payme, "#0EA5E9"], ["Uzum Tezkor", pay.uzum, C.ok], ["Yandex Еда", pay.yandex, "#F59E0B"], ["Перечисление", pay.transfer, C.warn]].filter((r) => r[1] > 0).sort((a, b) => b[1] - a[1]);
+  // Цвет для типа оплаты: по известным названиям, иначе — из палитры по кругу.
+  const PAY_COLORS = { "налич": C.brandA, "humo": "#7C3AED", "uzcard": C.violet, "click": C.brandB, "payme": "#0EA5E9", "uzum": C.ok, "yandex": "#F59E0B", "перечисл": C.warn, "карт": C.violet };
+  const PAY_FALLBACK = [C.brandA, C.brandB, C.violet, C.ok, C.warn, "#0EA5E9", "#7C3AED", "#F59E0B", C.faint];
+  const payColor = (name, i) => { const k = String(name).toLowerCase(); for (const key in PAY_COLORS) if (k.includes(key)) return PAY_COLORS[key]; return PAY_FALLBACK[i % PAY_FALLBACK.length]; };
+  const demoPayRows = [["Наличные", pay.cash, C.brandA], ["Humo", pay.humo, "#7C3AED"], ["Uzcard", pay.uzcard, C.violet], ["Click", pay.click, C.brandB], ["Payme", pay.payme, "#0EA5E9"], ["Uzum Tezkor", pay.uzum, C.ok], ["Yandex Еда", pay.yandex, "#F59E0B"], ["Перечисление", pay.transfer, C.warn]].filter((r) => r[1] > 0).sort((a, b) => b[1] - a[1]);
+  // Живые оплаты из iiko (если есть) — иначе демо.
+  const payRows = liveOn && live.pay && live.pay.length
+    ? live.pay.map((p, i) => [p.name, p.value, payColor(p.name, i)])
+    : demoPayRows;
 
   // динамика по дням
   const dayMap = {};
@@ -2671,7 +2705,6 @@ function SalesAnalytics({ s, me, branchScope }) {
   const series = Object.keys(dayMap).sort().map((d) => ({ label: d.slice(8) + "." + d.slice(5, 7), day: d, revenue: dayMap[d] }));
 
   // Если iiko отдал живые продажи — показываем их вместо демо-данных.
-  const liveOn = live.status === "ok";
   const displayRevenue = liveOn ? live.total : revenue;
   const displaySeries = liveOn
     ? live.days.map((d) => ({ label: d.date.slice(8) + "." + d.date.slice(5, 7), day: d.date, revenue: d.revenue }))
@@ -2683,7 +2716,11 @@ function SalesAnalytics({ s, me, branchScope }) {
     if (!pm[ps.id]) pm[ps.id] = { name: ps.name, cat: ps.cat, qty: 0, sum: 0 };
     pm[ps.id].qty += ps.qty; pm[ps.id].sum += ps.sum;
   }));
-  const products = Object.values(pm).sort((a, b) => b.sum - a.sum);
+  const demoProducts = Object.values(pm).sort((a, b) => b.sum - a.sum);
+  // Живые блюда из iiko (если есть) — иначе демо.
+  const products = liveOn && live.products && live.products.length
+    ? live.products.map((p) => ({ name: p.name, cat: "", qty: p.qty, sum: p.sum }))
+    : demoProducts;
   const prodTotal = products.reduce((a, p) => a + p.sum, 0) || 1;
   let cum = 0;
   products.forEach((p) => { p.share = p.sum / prodTotal; cum += p.share; p.cum = cum; p.abc = cum <= 0.8 ? "A" : cum <= 0.95 ? "B" : "C"; });
