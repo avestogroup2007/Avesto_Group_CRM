@@ -190,13 +190,16 @@ function fmtDur(ms) {
   const d = Math.floor(h / 24), hh = h % 24;
   return hh ? `${d} дн ${hh} ч` : `${d} дн`;
 }
-function fmtMoney(n) { return (n || 0).toLocaleString("ru-RU") + " ₽"; }
+// Часовой пояс Узбекистана — даты/время считаем и показываем по Ташкенту.
+const TZ = "Asia/Tashkent";
+function fmtMoney(n) { return (n || 0).toLocaleString("ru-RU") + " сум"; }
 // длительность рабочего времени: без «дней» (смена/сессия), для сводных карточек — только часы
 const fmtWork = (ms) => { const m = Math.max(0, Math.round(ms / M)); const h = Math.floor(m / 60), mm = m % 60; return h ? (mm ? `${h} ч ${mm} мин` : `${h} ч`) : `${mm} мин`; };
 const fmtWorkH = (ms) => `${Math.round(Math.max(0, ms) / H)} ч`;
 const fmtSum = (n) => (Math.round(n || 0)).toLocaleString("ru-RU") + " сум";
 function fmtDateTime(ms) {
   return new Date(ms).toLocaleString("ru-RU", {
+    timeZone: TZ,
     day: "2-digit", month: "2-digit", year: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
@@ -485,7 +488,7 @@ function aiParse(text) {
   if (/(срочно|критич|горит|авари|прорыв|сейчас|немедленно|очеред|заканчива)/.test(s)) pr = "Критический";
   else if (/(сегодня|быстро|важно|высок)/.test(s)) pr = "Высокий";
   let amount = null;
-  const mt = s.replace(/\s/g, "").match(/(\d{4,})(руб|р|₽)/);
+  const mt = s.replace(/\s/g, "").match(/(\d{4,})(сум|so['’]?m|som|руб|р|₽)/i);
   if (mt) amount = parseInt(mt[1], 10);
   const slaH = slaFor(pr);
   return { branchId, cat, pr, amount, slaH };
@@ -1699,7 +1702,7 @@ function ArchiveView({ tasks, onOpen }) {
           <div className="flex-1 min-w-0">
             <div className="font-semibold" style={{ color: C.ink, fontSize: 14.5, overflowWrap: "break-word" }}>{t.title}</div>
             <div className="truncate" style={{ fontSize: 12.5, color: C.sub, marginTop: 1 }}>{branchById(t.branchId)?.name} • {t.cat}{t.amount ? ` • ${fmtMoney(t.amount)}` : ""}</div>
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{new Date(t.createdAt).toLocaleDateString("ru-RU")}</div>
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{new Date(t.createdAt).toLocaleDateString("ru-RU", { timeZone: TZ })}</div>
           </div>
         </button>
       ))}
@@ -1858,7 +1861,7 @@ function TimesheetView({ s, me, now, branchScope }) {
               <div key={x.id} className="flex items-center gap-2 flex-wrap py-1.5" style={{ borderBottom: `1px solid ${C.line}` }}>
                 <div className="shrink-0"><Avatar id={x.userId} size={24} /></div>
                 <span className="min-w-0 truncate" style={{ fontSize: 13, color: C.ink, fontWeight: 600, flex: "1 1 120px" }}>{u?.name}</span>
-                <span style={{ fontSize: 12, color: C.sub, whiteSpace: "nowrap" }}>{fmtDateTime(x.start)} → {new Date(x.end).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
+                <span style={{ fontSize: 12, color: C.sub, whiteSpace: "nowrap" }}>{fmtDateTime(x.start)} → {new Date(x.end).toLocaleTimeString("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })}</span>
                 <span className="rounded-full font-semibold shrink-0" style={{ fontSize: 12, padding: "2px 9px", background: C.line, color: C.ink, whiteSpace: "nowrap" }}>{fmtWork(x.durationMs)}</span>
               </div>
             );
@@ -1876,8 +1879,9 @@ const cashCalc = (r) => {
   const total = cash + acq + (r.transfer || 0);
   return { cash, acq, total, diff: total - (r.iiko || 0) };
 };
-const ymNow = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
-const ymdNow = () => { const d = new Date(); return `${ymNow()}-${String(d.getDate()).padStart(2, "0")}`; };
+// «Сегодня» по Ташкенту (UTC+5) — не зависит от часового пояса устройства.
+const ymdNow = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
+const ymNow = () => ymdNow().slice(0, 7);
 // ВАЖНО: поле объявлено на уровне модуля (не внутри CashRegisterView),
 // иначе React пересоздаёт input на каждый символ и он теряет фокус.
 // сжатие фото чека/товара до ~900px jpeg (для хранения в прототипе)
@@ -2074,7 +2078,7 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
   const pastDeadline = Date.now() > dl;
   const isConfirmed = !!existing && existing.status === "confirmed";
   const editable = !isConfirmed && (isController || (isMgr && !pastDeadline));
-  const dlStr = new Date(dl).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const dlStr = new Date(dl).toLocaleString("ru-RU", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const setNum = (k, v) => { if (!editable) return; setForm((f) => ({ ...f, [k]: Math.max(0, parseInt(String(v).replace(/[^\d]/g, "") || "0", 10)) })); };
   const live = cashCalc(form);
 
@@ -3338,7 +3342,7 @@ function AdminBranches({ s, dispatch, notify }) {
                   <span style={{ fontSize: 12.5, color: C.faint }}>Бюджет/мес:</span>
                   <input type="number" value={s.budgets[b.id] || 0} onChange={(e) => dispatch({ type: "SET_BUDGET", branchId: b.id, value: +e.target.value || 0 })}
                     className="rounded-lg px-2 py-1.5 focus:outline-none" style={{ border: `1px solid ${C.border}`, fontSize: 13.5, color: C.ink, width: 130 }} />
-                  <span style={{ fontSize: 13, color: C.sub }}>₽</span>
+                  <span style={{ fontSize: 13, color: C.sub }}>сум</span>
                 </div>
               ))}
             </div>
@@ -3350,7 +3354,7 @@ function AdminBranches({ s, dispatch, notify }) {
           <div className="space-y-3">
             <Field label="Юр. лицо"><Select value={bc} onChange={setBc} options={s.companies.map((c) => ({ value: c.id, label: c.name }))} /></Field>
             <AdInput label="Название филиала" value={bn} onChange={setBn} placeholder="Запад" />
-            <AdInput label="Месячный бюджет, ₽" type="number" value={bb} onChange={setBb} />
+            <AdInput label="Месячный бюджет, сум" type="number" value={bb} onChange={setBb} />
             <button onClick={addBranch} className="rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>Добавить филиал</button>
           </div>
         </AdCard>
@@ -3699,7 +3703,7 @@ function RouteCreate({ me, s, dispatch, notify }) {
         <Field label="Филиал"><Select value={branch} onChange={setBranch} options={s.branches.map((b) => ({ value: b.id, label: b.name }))} /></Field>
         <Field label="Поставщик"><input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="ООО «Поставщик»" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
         <Field label="Что приняли"><input value={goods} onChange={(e) => setGoods(e.target.value)} placeholder="Продукты, упаковка…" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
-        <Field label="Сумма к оплате, ₽"><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
+        <Field label="Сумма к оплате, сум"><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
       </div>
 
       <div className="mt-4 rounded-xl p-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>

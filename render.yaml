@@ -34,6 +34,9 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
+      # Часовой пояс Узбекистана — серверные даты/время по Ташкенту (UTC+5).
+      - key: TZ
+        value: Asia/Tashkent
       # Продакшен по HTTPS — cookie только Secure.
       - key: COOKIE_SECURE
         value: "true"
