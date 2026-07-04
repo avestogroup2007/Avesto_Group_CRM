@@ -11,6 +11,7 @@ import { env } from "./env.js";
 import { log } from "./logger.js";
 import authRoutes from "./auth/routes.js";
 import iikoRoutes from "./routes/iiko.js";
+import taskRoutes from "./routes/tasks.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -49,9 +50,9 @@ app.get("/api/health", (req, res) => res.json({ ok: true, time: Date.now() }));
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/iiko", iikoRoutes);
+app.use("/api/tasks", taskRoutes);
 
-// Здесь позже (Этап 2) подключим:
-// app.use("/api/tasks", taskRoutes);
+// Здесь позже подключим:
 // app.use("/api/cash", cashRoutes);
 
 // Обработка 404 и ошибок — всегда последними.
