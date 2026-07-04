@@ -2868,16 +2868,16 @@ function Sidebar({ view, setView, role }) {
   const items = NAV.filter((n) => navAllowed(n, role));
   return (
     <aside className="hidden md:flex flex-col" style={{ position: "fixed", left: 0, top: 0, width: 250, height: "100vh", overflowY: "auto", borderRight: `1px solid ${C.border}`, background: "#fff", zIndex: 40 }}>
-      <div className="px-5 flex items-center gap-2.5 shrink-0" style={{ height: 65, borderBottom: `1px solid ${C.border}` }}>
-        <div className="rounded-xl flex items-center justify-center shrink-0" style={{ width: 34, height: 34, background: `linear-gradient(135deg, ${C.brandA}, ${C.brandB})` }}>
+      <div className="shrink-0 flex items-center gap-3" style={{ height: 65, paddingLeft: 16, paddingRight: 16, borderBottom: `1px solid ${C.border}` }}>
+        <div className="rounded-xl flex items-center justify-center shrink-0" style={{ width: 36, height: 36, background: `linear-gradient(135deg, ${C.brandA}, ${C.brandB})` }}>
           <ShieldCheck size={20} color="#fff" />
         </div>
-        <div className="min-w-0">
-          <div className="font-extrabold leading-tight truncate" style={{ color: C.ink, fontSize: 16 }}>Avesto Group</div>
-          <div className="truncate" style={{ fontSize: 11.5, color: C.faint }}>CRM System</div>
+        <div className="min-w-0 flex flex-col justify-center">
+          <div className="font-extrabold truncate" style={{ color: C.ink, fontSize: 15.5, lineHeight: 1.25 }}>Avesto Group</div>
+          <div className="truncate" style={{ fontSize: 11, color: C.faint, lineHeight: 1.25 }}>CRM System</div>
         </div>
       </div>
-      <nav className="p-3 flex flex-col gap-1">
+      <nav className="flex flex-col gap-1" style={{ padding: 12 }}>
         {items.map((n) => {
           const active = view === n.key;
           return (
@@ -2889,7 +2889,7 @@ function Sidebar({ view, setView, role }) {
           );
         })}
       </nav>
-      <div className="mt-auto p-4" style={{ fontSize: 11.5, color: C.faint }}>
+      <div className="mt-auto" style={{ padding: "16px 16px 16px 24px", fontSize: 11.5, color: C.faint, lineHeight: 1.5 }}>
         Стандарт доступности: крупный шрифт, текстовые подписи, цветовое кодирование фаз.
       </div>
     </aside>
