@@ -6,7 +6,7 @@ import { asyncHandler } from "../util/asyncHandler.js";
 import {
   iikoConfigured,
   IikoNotConfiguredError,
-  salesByDay,
+  salesReport,
 } from "../services/iikoServer.js";
 
 const r = Router();
@@ -33,8 +33,9 @@ function handleIiko(fn) {
 // Настроена ли интеграция — фронт покажет demo/live соответственно.
 r.get("/status", (req, res) => res.json({ configured: iikoConfigured() }));
 
-// OLAP-отчёт продаж за период (по дню и филиалу). Тело:
+// OLAP-отчёт продаж за период. Тело:
 // { from: "YYYY-MM-DD", to: "YYYY-MM-DD", department?: "Имя филиала" }.
+// Возвращает { byDay, byPay, byDish } для вкладок аналитики.
 r.post(
   "/olap",
   handleIiko(async (req, res) => {
@@ -43,7 +44,7 @@ r.post(
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
     const departments = department ? [department] : undefined;
-    res.json(await salesByDay({ from, to, departments }));
+    res.json(await salesReport({ from, to, departments }));
   })
 );
 

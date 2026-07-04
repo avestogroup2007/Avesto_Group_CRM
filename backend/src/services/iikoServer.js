@@ -1,7 +1,7 @@
 // Клиент iikoServer API (iiko RMS / iikoOffice), адрес вида
 // https://host:port/resto/api. Логин/пароль пользователя iikoOffice задаются
 // ТОЛЬКО в окружении хостинга и НИКОГДА не уходят клиенту.
-// Поток: auth (login + SHA1(pass)) -> получаем token -> запрос OLAP v2 с
+// Поток: auth (login + SHA1(pass)) -> получаем token -> запросы OLAP v2 с
 // ?key=token -> logout (сессия одна, обязательно закрываем).
 // Ограничения iikoServer: запросы последовательно, период <= 1 месяца,
 // buildSummary=false, <= 7 полей группировки.
@@ -30,7 +30,7 @@ function sha1(s) {
 }
 
 // Авторизация: возвращает токен (строка). Токен живёт недолго и одна сессия —
-// поэтому логинимся под каждый запрос и затем разлогиниваемся.
+// поэтому логинимся под запрос и затем разлогиниваемся.
 async function auth() {
   // Логин/пароль передаём в теле как application/x-www-form-urlencoded —
   // эндпоинт auth использует @FormParam и отклоняет query-параметры.
@@ -70,54 +70,73 @@ function nextDayStart(ymd) {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T00:00:00.000`;
 }
 
-// OLAP-отчёт продаж за период, сгруппированный по дню и торговому предприятию.
-// departments (необязательно) — массив имён Department для фильтра по филиалам.
-// Возвращает сырой ответ iiko: { data: [...], summary: [...] }.
-export async function salesByDay({ from, to, departments }) {
+// Один OLAP-запрос под открытой сессией (key). Возвращает массив data.
+async function runOlap(key, { from, to, departments, groupByRowFields }) {
+  const filters = {
+    // Этот сервер требует фильтр именно по «Учётному дню» (OpenDate.Typed).
+    "OpenDate.Typed": {
+      filterType: "DateRange",
+      periodType: "CUSTOM",
+      from: dayStart(from),
+      to: nextDayStart(to),
+    },
+    DeletedWithWriteoff: {
+      filterType: "ExcludeValues",
+      values: ["DELETED_WITH_WRITEOFF", "DELETED_WITHOUT_WRITEOFF"],
+    },
+    OrderDeleted: {
+      filterType: "IncludeValues",
+      values: ["NOT_DELETED"],
+    },
+  };
+  if (Array.isArray(departments) && departments.length) {
+    filters.Department = { filterType: "IncludeValues", values: departments };
+  }
+  const body = {
+    reportType: "SALES",
+    buildSummary: false,
+    groupByRowFields,
+    groupByColFields: [],
+    aggregateFields: ["DishSumInt", "DishDiscountSumInt", "DishAmountInt"],
+    filters,
+  };
+  const res = await fetch(`${BASE}/resto/api/v2/reports/olap?key=${key}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`iiko olap → ${res.status} ${text}`.trim());
+  }
+  const json = text ? JSON.parse(text) : {};
+  return Array.isArray(json.data) ? json.data : [];
+}
+
+// Полный отчёт продаж за период (одна сессия iiko, три OLAP-среза):
+//  - byDay:  по дню и филиалу (выручка/график/KPI);
+//  - byPay:  по типам оплат (вкладка «Оплаты»);
+//  - byDish: по блюдам (вкладки «Блюда»/«ABC»).
+// byPay/byDish best-effort: если конкретный срез не удался — вернём пустой,
+// но выручка по дням (главное) не пострадает.
+export async function salesReport({ from, to, departments }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await auth();
   try {
-    const filters = {
-      // Этот сервер требует фильтр именно по «Учётному дню» (OpenDate.Typed).
-      "OpenDate.Typed": {
-        filterType: "DateRange",
-        periodType: "CUSTOM",
-        from: dayStart(from),
-        to: nextDayStart(to),
-      },
-      DeletedWithWriteoff: {
-        filterType: "ExcludeValues",
-        values: ["DELETED_WITH_WRITEOFF", "DELETED_WITHOUT_WRITEOFF"],
-      },
-      OrderDeleted: {
-        filterType: "IncludeValues",
-        values: ["NOT_DELETED"],
-      },
-    };
-    if (Array.isArray(departments) && departments.length) {
-      filters.Department = {
-        filterType: "IncludeValues",
-        values: departments,
-      };
-    }
-    const body = {
-      reportType: "SALES",
-      buildSummary: false,
+    const opts = { from, to, departments };
+    const byDay = await runOlap(key, {
+      ...opts,
       groupByRowFields: ["OpenDate.Typed", "Department"],
-      groupByColFields: [],
-      aggregateFields: ["DishSumInt", "DishDiscountSumInt", "DishAmountInt"],
-      filters,
-    };
-    const res = await fetch(`${BASE}/resto/api/v2/reports/olap?key=${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
     });
-    const text = await res.text();
-    if (!res.ok) {
-      throw new Error(`iiko olap → ${res.status} ${text}`.trim());
-    }
-    return text ? JSON.parse(text) : { data: [] };
+    const byPay = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["PayTypes"],
+    }).catch(() => []);
+    const byDish = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["DishName"],
+    }).catch(() => []);
+    return { byDay, byPay, byDish };
   } finally {
     await logout(key);
   }
