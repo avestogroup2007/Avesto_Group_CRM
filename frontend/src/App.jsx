@@ -2569,7 +2569,7 @@ function useIikoSales({ from, to, department }) {
         const byDay = arr(res?.byDay);
         const byPay = arr(res?.byPay);
         const byDish = arr(res?.byDish);
-        const byGroup = arr(res?.byGroup);
+        const byGroups = arr(res?.byGroups);
         const num = (v) => {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
@@ -2610,23 +2610,29 @@ function useIikoSales({ from, to, department }) {
           dishMap[name].qty += num(r["DishAmountInt"]);
         });
         const products = Object.values(dishMap).sort((a, b) => b.sum - a.sum);
-        // По группам блюд 1-го уровня.
-        const groupMap = {};
-        byGroup.forEach((r) => {
-          const name =
-            r["DishGroup.TopParent"] || r["DishGroup"] || r["DishCategory"] || "—";
-          if (!groupMap[name]) groupMap[name] = { name, qty: 0, sum: 0 };
-          groupMap[name].sum += rev(r);
-          groupMap[name].qty += num(r["DishAmountInt"]);
-        });
-        const groups = Object.values(groupMap).sort((a, b) => b.sum - a.sum);
+        // Группы блюд по трём уровням (1/2/3) — агрегируем из одного среза.
+        const aggBy = (field) => {
+          const m = {};
+          byGroups.forEach((r) => {
+            const name = r[field] || "—";
+            if (!m[name]) m[name] = { name, qty: 0, sum: 0 };
+            m[name].sum += rev(r);
+            m[name].qty += num(r["DishAmountInt"]);
+          });
+          return Object.values(m).sort((a, b) => b.sum - a.sum);
+        };
+        const group1 = aggBy("DishGroup.TopParent");
+        const group2 = aggBy("DishGroup.SecondParent");
+        const group3 = aggBy("DishGroup.ThirdParent");
         setState({
           status: days.length ? "ok" : "empty",
           days,
           total,
           pay,
           products,
-          groups,
+          group1,
+          group2,
+          group3,
         });
       })
       .catch((e) => {
@@ -2744,9 +2750,13 @@ function SalesAnalytics({ s, me, branchScope }) {
   const top = abcProducts.slice(0, 5);
   const bottom = abcProducts.slice(-5).reverse();
   const abcColor = (g) => g === "A" ? { bg: "#E9F9EF", fg: C.ok } : g === "B" ? { bg: "#FEF3C7", fg: "#92400E" } : { bg: "#F1F5F9", fg: C.faint };
-  // ABC можно смотреть по блюдам или по группам блюд (если iiko отдал группы).
-  const groupsLive = liveOn && live.groups && live.groups.length ? live.groups : null;
-  const abcRows = abcMode === "group" && groupsLive ? withAbc(groupsLive) : abcProducts;
+  // ABC можно смотреть по блюдам или по группам блюд 1/2/3 (если iiko отдал их).
+  const groupLists = liveOn
+    ? { g1: live.group1, g2: live.group2, g3: live.group3 }
+    : {};
+  const hasGroups = ["g1", "g2", "g3"].some((k) => groupLists[k] && groupLists[k].length);
+  const abcSource = groupLists[abcMode];
+  const abcRows = abcSource && abcSource.length ? withAbc(abcSource) : abcProducts;
   const abcTotal = abcRows.reduce((a, p) => a + p.sum, 0) || 1;
   const abcCount = (g) => abcRows.filter((p) => p.abc === g).length;
   const abcSum = (g) => abcRows.filter((p) => p.abc === g).reduce((a, p) => a + p.sum, 0);
@@ -2870,11 +2880,11 @@ function SalesAnalytics({ s, me, branchScope }) {
           <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("ABC-анализ")}</h3>
           <span style={{ fontSize: 12, color: C.faint }}>{tr("A — основная выручка, C — аутсайдеры")}</span>
         </div>
-        {/* переключатель разреза ABC: по блюдам / по группам (если iiko отдал группы) */}
-        {groupsLive && (
-          <div className="inline-flex rounded-xl p-1 mb-3" style={{ border: `1px solid ${C.border}`, background: "#fff" }}>
-            {[["dish", "По блюдам"], ["group", "По группам"]].map(([k, l]) => (
-              <button key={k} onClick={() => setAbcMode(k)} className="rounded-lg px-3 py-1.5 font-bold" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
+        {/* переключатель разреза ABC: блюда / группы 1–3 (если iiko отдал группы) */}
+        {hasGroups && (
+          <div className="inline-flex rounded-xl p-1 mb-3 overflow-x-auto" style={{ border: `1px solid ${C.border}`, background: "#fff" }}>
+            {[["dish", "Блюда"], ["g1", "Группа 1"], ["g2", "Группа 2"], ["g3", "Группа 3"]].map(([k, l]) => (
+              <button key={k} onClick={() => setAbcMode(k)} className="rounded-lg px-3 py-1.5 font-bold whitespace-nowrap" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
                 {tr(l)}
               </button>
             ))}
@@ -2883,7 +2893,7 @@ function SalesAnalytics({ s, me, branchScope }) {
         <div className="flex flex-wrap gap-2 mb-3">
           {["A", "B", "C"].map((g) => { const c = abcColor(g); return (
             <div key={g} className="rounded-xl px-3 py-2" style={{ background: c.bg, minWidth: 128 }}>
-              <div style={{ fontSize: 12, color: c.fg, fontWeight: 800 }}>{tr("Группа")} {g} · {abcCount(g)} {abcMode === "group" ? tr("гр.") : tr("тов.")}</div>
+              <div style={{ fontSize: 12, color: c.fg, fontWeight: 800 }}>{tr("Группа")} {g} · {abcCount(g)} {abcMode !== "dish" ? tr("гр.") : tr("тов.")}</div>
               <div style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}>{fmtSum(abcSum(g))} · {((abcSum(g) / abcTotal) * 100).toFixed(0)}%</div>
             </div>
           ); })}
@@ -2892,7 +2902,7 @@ function SalesAnalytics({ s, me, branchScope }) {
           <div className="hidden md:block">
             <table className="w-full" style={{ borderCollapse: "collapse", fontSize: 13 }}>
               <thead><tr style={{ color: C.faint, textAlign: "right" }}>
-                <th className="py-2" style={{ textAlign: "left" }}>{abcMode === "group" ? tr("Группа") : tr("Товар")}</th>
+                <th className="py-2" style={{ textAlign: "left" }}>{abcMode !== "dish" ? tr("Группа") : tr("Товар")}</th>
                 <th style={{ textAlign: "left" }}>{tr("Категория")}</th>
                 <th>{tr("Кол-во")}</th><th>{tr("Выручка")}</th><th>{tr("Доля")}</th><th>{tr("Накопит.")}</th><th>ABC</th>
               </tr></thead>
