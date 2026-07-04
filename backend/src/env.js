@@ -29,13 +29,12 @@ const EnvSchema = z.object({
   // Для кросс-доменной связки (фронт на github.io ↔ бэкенд на onrender.com)
   // нужен SameSite=None (и обязательно Secure). Локально — strict.
   COOKIE_SAMESITE: z.enum(["strict", "lax", "none"]).default("strict"),
-  // iiko (iikoCloud Transport API). Секреты задаются ТОЛЬКО в окружении
-  // хостинга. Если apiLogin не задан, iiko-эндпоинты вернут 503 «не настроено».
-  // Авторизация /api/v2/access_token: apiLogin + appId + clientSecret.
-  IIKO_API_LOGIN: z.string().min(1).optional(), // apiLogin
-  IIKO_API_ID: z.string().min(1).optional(), // appId
-  IIKO_CLIENT_SECRET: z.string().min(1).optional(), // clientSecret
-  IIKO_BASE_URL: z.string().url().default("https://api-ru.iiko.services"),
+  // iiko (iikoServer / iikoOffice API). Секреты задаются ТОЛЬКО в окружении
+  // хостинга. Если не заданы, iiko-эндпоинты вернут 503 «не настроено».
+  // Авторизация: /resto/api/auth?login=..&pass=SHA1(пароль).
+  IIKO_SERVER_URL: z.string().url().optional(), // https://host:port
+  IIKO_SERVER_LOGIN: z.string().min(1).optional(), // логин пользователя iikoOffice
+  IIKO_SERVER_PASSWORD: z.string().min(1).optional(), // пароль (SHA1 считает сервер)
 });
 
 const parsed = EnvSchema.safeParse(process.env);
