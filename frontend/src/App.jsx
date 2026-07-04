@@ -2612,20 +2612,29 @@ function useIikoSales({ from, to, department }) {
           dishMap[name].qty += num(r["DishAmountInt"]);
         });
         const products = Object.values(dishMap).sort((a, b) => b.sum - a.sum);
-        // Группы блюд по трём уровням (1/2/3) — агрегируем из одного среза.
+        // Детальные строки групп (все три уровня + блюдо) — для агрегации по
+        // уровням и раскрытия группы до блюд (drill-down).
+        const groupRows = byGroups.map((r) => ({
+          g1: r["DishGroup.TopParent"] || "—",
+          g2: r["DishGroup.SecondParent"] || "—",
+          g3: r["DishGroup.ThirdParent"] || "—",
+          name: r["DishName"] || "—",
+          sum: rev(r),
+          qty: num(r["DishAmountInt"]),
+        }));
         const aggBy = (field) => {
           const m = {};
-          byGroups.forEach((r) => {
+          groupRows.forEach((r) => {
             const name = r[field] || "—";
             if (!m[name]) m[name] = { name, qty: 0, sum: 0 };
-            m[name].sum += rev(r);
-            m[name].qty += num(r["DishAmountInt"]);
+            m[name].sum += r.sum;
+            m[name].qty += r.qty;
           });
           return Object.values(m).sort((a, b) => b.sum - a.sum);
         };
-        const group1 = aggBy("DishGroup.TopParent");
-        const group2 = aggBy("DishGroup.SecondParent");
-        const group3 = aggBy("DishGroup.ThirdParent");
+        const group1 = aggBy("g1");
+        const group2 = aggBy("g2");
+        const group3 = aggBy("g3");
         setState({
           status: days.length ? "ok" : "empty",
           days,
@@ -2636,6 +2645,7 @@ function useIikoSales({ from, to, department }) {
           group1,
           group2,
           group3,
+          groupRows,
         });
       })
       .catch((e) => {
@@ -2689,7 +2699,8 @@ function SalesAnalytics({ s, me, branchScope }) {
   // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
   const REPORTS = [["revenue", "Динамика выручки"], ["pay", "Оплаты"], ["dishes", "Блюда"], ["abc", "ABC"], ["insights", "Выводы"]];
   const [tab, setTab] = useState("revenue");
-  const [abcMode, setAbcMode] = useState("dish"); // dish | group
+  const [abcMode, setAbcMode] = useState("dish"); // dish | g1 | g2 | g3
+  const [abcDrill, setAbcDrill] = useState(null); // раскрытая группа (имя)
 
   const inScope = (r, a, b) => r.date >= a && r.date <= b && (isMgr ? r.branchId === myBranch : (fBranch ? r.branchId === fBranch : true));
   const reports = (s.cashReports || []).filter((r) => inScope(r, from, to));
@@ -2765,8 +2776,27 @@ function SalesAnalytics({ s, me, branchScope }) {
     ? { g1: live.group1, g2: live.group2, g3: live.group3 }
     : {};
   const hasGroups = ["g1", "g2", "g3"].some((k) => groupLists[k] && groupLists[k].length);
-  const abcSource = groupLists[abcMode];
-  const abcRows = abcSource && abcSource.length ? withAbc(abcSource) : abcProducts;
+  const isGroupMode = abcMode !== "dish";
+  // Раскрытие группы (drill-down) до блюд внутри неё.
+  let abcSource;
+  if (!isGroupMode) {
+    abcSource = abcProducts;
+  } else if (abcDrill) {
+    const m = {};
+    (live.groupRows || [])
+      .filter((r) => r[abcMode] === abcDrill)
+      .forEach((r) => {
+        if (!m[r.name]) m[r.name] = { name: r.name, qty: 0, sum: 0 };
+        m[r.name].sum += r.sum;
+        m[r.name].qty += r.qty;
+      });
+    abcSource = Object.values(m).sort((a, b) => b.sum - a.sum);
+  } else {
+    abcSource = groupLists[abcMode] || [];
+  }
+  const abcRows = isGroupMode ? withAbc(abcSource) : abcProducts;
+  // В группах строки-группы кликабельны (раскрываются), блюда — нет.
+  const abcClickable = isGroupMode && !abcDrill;
   const abcTotal = abcRows.reduce((a, p) => a + p.sum, 0) || 1;
   const abcCount = (g) => abcRows.filter((p) => p.abc === g).length;
   const abcSum = (g) => abcRows.filter((p) => p.abc === g).reduce((a, p) => a + p.sum, 0);
@@ -2895,10 +2925,20 @@ function SalesAnalytics({ s, me, branchScope }) {
         {hasGroups && (
           <div className="inline-flex rounded-xl p-1 mb-3 overflow-x-auto" style={{ border: `1px solid ${C.border}`, background: "#fff" }}>
             {[["dish", "Блюда"], ["g1", "Группа 1"], ["g2", "Группа 2"], ["g3", "Группа 3"]].map(([k, l]) => (
-              <button key={k} onClick={() => setAbcMode(k)} className="rounded-lg px-3 py-1.5 font-bold whitespace-nowrap" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
+              <button key={k} onClick={() => { setAbcMode(k); setAbcDrill(null); }} className="rounded-lg px-3 py-1.5 font-bold whitespace-nowrap" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
                 {tr(l)}
               </button>
             ))}
+          </div>
+        )}
+        {/* хлебные крошки / раскрытая группа */}
+        {isGroupMode && !abcDrill && hasGroups && (
+          <div className="mb-2" style={{ fontSize: 12, color: C.faint }}>{tr("Нажмите на группу, чтобы раскрыть ABC блюд внутри неё")}</div>
+        )}
+        {isGroupMode && abcDrill && (
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
+            <button onClick={() => setAbcDrill(null)} className="rounded-lg px-3 py-1.5 font-bold" style={{ fontSize: 12.5, border: `1px solid ${C.border}`, color: C.sub, background: "#fff" }}>← {tr("К группам")}</button>
+            <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>{tr("Группа")}: {abcDrill}</span>
           </div>
         )}
         <div className="flex flex-wrap gap-2 mb-3">
@@ -2913,14 +2953,14 @@ function SalesAnalytics({ s, me, branchScope }) {
           <div className="hidden md:block">
             <table className="w-full" style={{ borderCollapse: "collapse", fontSize: 13 }}>
               <thead><tr style={{ color: C.faint, textAlign: "right" }}>
-                <th className="py-2" style={{ textAlign: "left" }}>{abcMode !== "dish" ? tr("Группа") : tr("Товар")}</th>
+                <th className="py-2" style={{ textAlign: "left" }}>{abcClickable ? tr("Группа") : tr("Товар")}</th>
                 <th style={{ textAlign: "left" }}>{tr("Категория")}</th>
                 <th>{tr("Кол-во")}</th><th>{tr("Выручка")}</th><th>{tr("Доля")}</th><th>{tr("Накопит.")}</th><th>ABC</th>
               </tr></thead>
               <tbody>
                 {abcRows.map((p, i) => { const c = abcColor(p.abc); return (
-                  <tr key={i} style={{ borderTop: `1px solid ${C.line}`, textAlign: "right" }}>
-                    <td className="py-2" style={{ textAlign: "left", color: C.ink, fontWeight: 600 }}>{p.name}</td>
+                  <tr key={i} onClick={() => abcClickable && setAbcDrill(p.name)} style={{ borderTop: `1px solid ${C.line}`, textAlign: "right", cursor: abcClickable ? "pointer" : "default" }}>
+                    <td className="py-2" style={{ textAlign: "left", color: abcClickable ? C.brandA : C.ink, fontWeight: 600 }}>{abcClickable ? "▸ " : ""}{p.name}</td>
                     <td style={{ textAlign: "left", color: C.sub }}>{p.cat || ""}</td>
                     <td style={{ color: C.sub, whiteSpace: "nowrap" }}>{p.qty}</td>
                     <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(p.sum)}</td>
@@ -2937,10 +2977,10 @@ function SalesAnalytics({ s, me, branchScope }) {
         {/* мобильные карточки */}
         <div className="md:hidden space-y-2">
           {abcRows.map((p, i) => { const c = abcColor(p.abc); return (
-            <div key={i} className="flex items-center gap-2 rounded-xl px-3 py-2.5 flex-wrap" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
+            <div key={i} onClick={() => abcClickable && setAbcDrill(p.name)} className="flex items-center gap-2 rounded-xl px-3 py-2.5 flex-wrap" style={{ background: "#FBFCFE", border: `1px solid ${C.border}`, cursor: abcClickable ? "pointer" : "default" }}>
               <span className="rounded-full font-bold shrink-0" style={{ fontSize: 11, padding: "2px 8px", background: c.bg, color: c.fg }}>{p.abc}</span>
               <div className="min-w-0" style={{ flex: "1 1 120px" }}>
-                <div className="truncate" style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}>{p.name}</div>
+                <div className="truncate" style={{ fontSize: 13.5, color: abcClickable ? C.brandA : C.ink, fontWeight: 700 }}>{abcClickable ? "▸ " : ""}{p.name}</div>
                 <div style={{ fontSize: 11.5, color: C.faint }}>{p.cat ? `${p.cat} · ` : ""}{p.qty} {tr("шт")}</div>
               </div>
               <div style={{ textAlign: "right" }}>
