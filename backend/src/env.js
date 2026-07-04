@@ -33,8 +33,8 @@ const EnvSchema = z.object({
   // окружении хостинга. Если не задан, iiko-эндпоинты вернут 503
   // «не настроено» (данные не текут). IIKO_API_LOGIN = api_key.
   IIKO_API_LOGIN: z.string().min(1).optional(),
-  // Необязательные поля /auth (обычно не нужны — хватает api_key).
-  IIKO_APP_ID: z.string().min(1).optional(),
+  // Необязательные поля /auth (app_id + client_secret).
+  IIKO_API_ID: z.string().min(1).optional(),
   IIKO_CLIENT_SECRET: z.string().min(1).optional(),
   IIKO_BASE_URL: z.string().url().default("https://public-api.iikoweb.ru"),
 });
