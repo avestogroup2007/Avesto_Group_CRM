@@ -142,13 +142,15 @@ export async function salesReport({ from, to, departments }) {
       ...opts,
       groupByRowFields: ["DishName"],
     }).catch(() => []);
-    // Все три уровня групп блюд одним запросом — для ABC по группам 1/2/3.
+    // Все три уровня групп + блюдо одним запросом — для ABC по группам 1/2/3
+    // и раскрытия группы до блюд внутри неё (drill-down).
     const byGroups = await runOlap(key, {
       ...opts,
       groupByRowFields: [
         "DishGroup.TopParent",
         "DishGroup.SecondParent",
         "DishGroup.ThirdParent",
+        "DishName",
       ],
     }).catch(() => []);
     return { byDay, byPay, byDish, byGroups };
