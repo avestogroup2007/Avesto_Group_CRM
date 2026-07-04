@@ -1,7 +1,7 @@
 {
-  "name": "procystem-backend",
+  "name": "avesto-group-crm-backend",
   "version": "0.1.0",
-  "description": "Бэкенд для ПроЦесс CRM/BPM — Этап 1 (каркас, БД, аутентификация и роли)",
+  "description": "Бэкенд Avesto Group CRM System — Этап 1 (каркас, БД, аутентификация и роли)",
   "type": "module",
   "engines": {
     "node": ">=20"
