@@ -32,6 +32,8 @@ const EnvSchema = z.object({
   // iiko (Этап 3). apiLogin секретный — задаётся ТОЛЬКО в окружении хостинга.
   // Если не задан, iiko-эндпоинты вернут 503 «не настроено» (данные не текут).
   IIKO_API_LOGIN: z.string().min(1).optional(),
+  // v2-эндпоинт требует пару: apiKey (IIKO_API_LOGIN) + clientSecret.
+  IIKO_CLIENT_SECRET: z.string().min(1).optional(),
   IIKO_BASE_URL: z.string().url().default("https://api-ru.iiko.services"),
 });
 
