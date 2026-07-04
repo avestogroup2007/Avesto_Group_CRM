@@ -2591,6 +2591,8 @@ function useIikoSales({ from, to, department }) {
           .sort()
           .map((d) => ({ date: d, revenue: dayMap[d].revenue, qty: dayMap[d].qty }));
         const total = days.reduce((a, d) => a + d.revenue, 0);
+        // Количество чеков — сумма уникальных заказов по всем строкам.
+        const checks = byDay.reduce((a, r) => a + num(r["UniqOrderId"]), 0);
         // По типам оплат.
         const payMap = {};
         byPay.forEach((r) => {
@@ -2628,6 +2630,7 @@ function useIikoSales({ from, to, department }) {
           status: days.length ? "ok" : "empty",
           days,
           total,
+          checks,
           pay,
           products,
           group1,
@@ -2717,6 +2720,7 @@ function SalesAnalytics({ s, me, branchScope }) {
   const payRows = liveOn && live.pay && live.pay.length
     ? live.pay.map((p, i) => [p.name, p.value, payColor(p.name, i)])
     : demoPayRows;
+  const payTotal = payRows.reduce((a, r) => a + r[1], 0) || 1;
 
   // динамика по дням
   const dayMap = {};
@@ -2725,6 +2729,12 @@ function SalesAnalytics({ s, me, branchScope }) {
 
   // Если iiko отдал живые продажи — показываем их вместо демо-данных.
   const displayRevenue = liveOn ? live.total : revenue;
+  const displayChecks = liveOn ? live.checks || 0 : checks;
+  const displayAvg = liveOn
+    ? displayChecks
+      ? Math.round(displayRevenue / displayChecks)
+      : 0
+    : avgCheck;
   const displaySeries = liveOn
     ? live.days.map((d) => ({ label: d.date.slice(8) + "." + d.date.slice(5, 7), day: d.date, revenue: d.revenue }))
     : series;
@@ -2763,14 +2773,15 @@ function SalesAnalytics({ s, me, branchScope }) {
 
   // рекомендации
   const insights = [];
-  if (growth != null) insights.push(growth >= 0
+  if (!liveOn && growth != null) insights.push(growth >= 0
     ? `Выручка выросла на ${growth.toFixed(1)}% к прошлому периоду — держим темп.`
     : `Выручка снизилась на ${Math.abs(growth).toFixed(1)}% — стоит усилить продвижение.`);
+  if (liveOn) insights.push(`Выручка за период: ${fmtSum(displayRevenue)}${displayChecks ? ` · ${displayChecks.toLocaleString("ru-RU")} чеков` : ""} (данные из iiko).`);
   if (top[0]) insights.push(`Лидер продаж: ${top[0].name} — ${fmtSum(top[0].sum)} (${(top[0].share * 100).toFixed(0)}% выручки).`);
   const cItems = abcProducts.filter((p) => p.abc === "C");
   if (cItems.length) insights.push(`Аутсайдеры (группа C): ${cItems.slice(0, 4).map((p) => p.name).join(", ")} — рассмотрите акции или замену в меню.`);
-  if (avgCheck) insights.push(`Средний чек ${fmtSum(avgCheck)}${avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`);
-  if (payRows[0]) insights.push(`Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / (revenue || 1)) * 100).toFixed(0)}% выручки.`);
+  if (displayAvg) insights.push(`Средний чек ${fmtSum(displayAvg)}${!liveOn && avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`);
+  if (payRows[0]) insights.push(`Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / payTotal) * 100).toFixed(0)}% оплат.`);
 
   const inpSt = { border: `1px solid ${C.border}`, fontSize: 13.5, background: "#fff", color: C.ink };
   const KPI = ({ label, value, sub, tone }) => (
@@ -2808,8 +2819,8 @@ function SalesAnalytics({ s, me, branchScope }) {
       {/* KPI */}
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
         <KPI label={tr("Выручка за период")} value={fmtSum(displayRevenue)} sub={liveOn ? "● данные из iiko" : gr.s} tone={liveOn ? "up" : gr.t} />
-        <KPI label={tr("Средний чек")} value={fmtSum(avgCheck)} sub={agr.s} tone={agr.t} />
-        <KPI label={tr("Количество чеков")} value={checks.toLocaleString("ru-RU")} sub={prevChecks ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}` : null} tone={checks - prevChecks >= 0 ? "up" : "down"} />
+        <KPI label={tr("Средний чек")} value={fmtSum(displayAvg)} sub={liveOn ? "● данные из iiko" : agr.s} tone={liveOn ? "up" : agr.t} />
+        <KPI label={tr("Количество чеков")} value={displayChecks.toLocaleString("ru-RU")} sub={liveOn ? "● данные из iiko" : (prevChecks ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}` : null)} tone={liveOn ? "up" : (checks - prevChecks >= 0 ? "up" : "down")} />
         <KPI label={tr("Прошлый период")} value={fmtSum(prevRevenue)} sub={`${dm(prevFrom)} — ${dm(prevTo)}`} />
       </div>
 
@@ -2856,7 +2867,7 @@ function SalesAnalytics({ s, me, branchScope }) {
           <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Выручка по типам оплат")}</h3>
           <div className="space-y-2.5">
             {payRows.map(([name, val, col]) => {
-              const share = revenue ? (val / revenue) * 100 : 0;
+              const share = (val / payTotal) * 100;
               return (
                 <div key={name}>
                   <div className="flex items-center justify-between gap-2" style={{ fontSize: 13 }}>

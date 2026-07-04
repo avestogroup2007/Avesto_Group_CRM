@@ -97,7 +97,12 @@ async function runOlap(key, { from, to, departments, groupByRowFields }) {
     buildSummary: false,
     groupByRowFields,
     groupByColFields: [],
-    aggregateFields: ["DishSumInt", "DishDiscountSumInt", "DishAmountInt"],
+    aggregateFields: [
+      "DishSumInt",
+      "DishDiscountSumInt",
+      "DishAmountInt",
+      "UniqOrderId",
+    ],
     filters,
   };
   const res = await fetch(`${BASE}/resto/api/v2/reports/olap?key=${key}`, {
