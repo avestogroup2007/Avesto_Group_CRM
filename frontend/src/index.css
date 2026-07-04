@@ -1,11 +1,72 @@
 @import "tailwindcss";
 
-html,
-body,
-#root {
-  height: 100%;
+/* ============================================================================
+   Слой доступности и взаимодействия (по скиллу ui-ux-pro-max).
+   Это глобальные, безопасные улучшения: они НЕ меняют внешний вид приложения
+   при обычной работе мышью, но делают его удобнее и доступнее для всего
+   персонала. Внедряется постепенно, не ломая существующий стандарт дизайна.
+   ============================================================================ */
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  /* Tailwind v4 по умолчанию НЕ ставит cursor:pointer на кнопки.
+     Возвращаем ожидаемое поведение для всех кликабельных элементов
+     (skill: Touch & Interaction → cursor-pointer). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /* Видимое кольцо фокуса для клавиатурной навигации
+     (skill: Accessibility → focus-states, keyboard-nav).
+     :focus-visible срабатывает только при навигации с клавиатуры —
+     для указателя мыши невидимо, поэтому привычный вид не меняется. */
+  :focus-visible {
+    outline: 2px solid #2563eb; /* brand ring */
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Убираем двойной фокус там, где :focus-visible уже даёт кольцо. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Уважать системную настройку «уменьшить движение»
+     (skill: Accessibility → reduced-motion). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-body {
-  margin: 0;
+/* Утилита для табличных цифр — ровные колонки сумм, цен и таймеров
+   (skill: Typography → number-tabular). Применяется точечно: class="tnum". */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
