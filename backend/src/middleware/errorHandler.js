@@ -7,7 +7,7 @@ export function notFound(req, res) {
   res.status(404).json({ error: "Маршрут не найден" });
 }
 
-// eslint-disable-next-line no-unused-vars — Express распознаёт обработчик ошибок по 4 аргументам
+// Express распознаёт обработчик ошибок именно по 4 аргументам (err, req, res, next).
 export function errorHandler(err, req, res, next) {
   log.error({ err, path: req.path }, "Необработанная ошибка");
   if (res.headersSent) return next(err);

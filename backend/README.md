@@ -23,7 +23,7 @@
 - Запись входа в журнал безопасности (`AuditLog`).
 - Проверка живости: `GET /api/health`.
 
-Маршруты задач, касс и iiko (`app.use(...)` в `src/index.js`) подключаются на
+Маршруты задач, касс и iiko (`app.use(...)` в `src/app.js`) подключаются на
 следующих этапах — заготовки помечены комментариями.
 
 ## Запуск локально
@@ -59,14 +59,14 @@ npm start
 Пароль у всех один: `changeme123` (переопределяется переменной `SEED_PASSWORD`).
 **Смените их перед продакшеном.**
 
-| Логин        | Роль        |
-| ------------ | ----------- |
-| `director`   | director    |
-| `finance`    | finance     |
+| Логин        | Роль                                       |
+| ------------ | ------------------------------------------ |
+| `director`   | director                                   |
+| `finance`    | finance                                    |
 | `manager`    | manager (привязан к филиалу «Центральный») |
-| `accountant` | accountant  |
-| `sysadmin`   | sysadmin    |
-| `staff`      | staff       |
+| `accountant` | accountant                                 |
+| `sysadmin`   | sysadmin                                   |
+| `staff`      | staff                                      |
 
 ## Быстрая проверка входа через curl
 
@@ -82,6 +82,19 @@ curl -s -b cookies.txt http://localhost:3000/api/auth/me
 # Без cookie — 401
 curl -s http://localhost:3000/api/auth/me
 ```
+
+## Проверки качества (запускаются в CI на каждый PR)
+
+```bash
+npm run lint          # ESLint — чистота кода
+npm run format:check  # Prettier — единый стиль (npm run format всё поправит)
+npm test              # интеграционные тесты (node --test): поднимают сервер и БД
+```
+
+CI (`.github/workflows/ci.yml`) на каждый pull request и push в `main` поднимает
+PostgreSQL 16, ставит зависимости, прогоняет линт, проверку формата, применяет
+миграции, наполняет демо-данными и запускает тесты. Красный CI = что-то
+сломалось, и это видно до слияния.
 
 ## Переменные окружения
 
@@ -100,7 +113,8 @@ backend/
 │   ├── schema.prisma     # схема БД (все таблицы)
 │   └── seed.js           # демо-данные
 ├── src/
-│   ├── index.js          # точка входа сервера
+│   ├── index.js          # точка входа: запуск сервера
+│   ├── app.js            # сборка Express-приложения (без listen)
 │   ├── env.js            # валидация .env через Zod
 │   ├── db.js             # клиент Prisma
 │   ├── logger.js         # Pino
@@ -112,6 +126,12 @@ backend/
 │   │   └── errorHandler.js  # 404 и ошибки
 │   └── util/
 │       └── asyncHandler.js
+├── test/
+│   └── auth.test.js      # интеграционные тесты
+├── eslint.config.js
+├── .prettierrc.json
 ├── .env.example
 └── package.json
 ```
+
+CI-конфигурация — в `.github/workflows/ci.yml` (в корне репозитория).
