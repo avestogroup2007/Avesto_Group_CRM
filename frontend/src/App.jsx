@@ -1,13 +1,54 @@
 import React, { useState, useEffect, useMemo, useReducer } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip, CartesianGrid,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  CartesianGrid,
 } from "recharts";
 import {
-  Inbox, PlusCircle, BarChart3, Building2, Settings, Archive, Clock, Paperclip,
-  MessageSquare, Star, X, CheckCircle2, RotateCcw, Play, Send, Bot, ChevronRight, ChevronDown,
-  Filter, Download, Printer, ShieldCheck, AlertTriangle, Users, Power, Sparkles,
-  Info, Award, Mic, AlertCircle, Camera, ListChecks, Server, Lock, Activity,
-  TrendingUp, Wallet, Menu, CalendarDays,
+  Inbox,
+  PlusCircle,
+  BarChart3,
+  Building2,
+  Settings,
+  Archive,
+  Clock,
+  Paperclip,
+  MessageSquare,
+  Star,
+  X,
+  CheckCircle2,
+  RotateCcw,
+  Play,
+  Send,
+  Bot,
+  ChevronRight,
+  ChevronDown,
+  Filter,
+  Download,
+  Printer,
+  ShieldCheck,
+  AlertTriangle,
+  Users,
+  Power,
+  Sparkles,
+  Info,
+  Award,
+  Mic,
+  AlertCircle,
+  Camera,
+  ListChecks,
+  Server,
+  Lock,
+  Activity,
+  TrendingUp,
+  Wallet,
+  Menu,
+  CalendarDays,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
@@ -25,19 +66,28 @@ const FONT =
 
 // Дизайн-токены: высокий контраст, доступность для всех поколений (Этап 3)
 const C = {
-  bg: "#F7F4EF", surface: "#FFFFFF", ink: "#1B1512", sub: "#5E5049", faint: "#A2938B",
-  border: "#E7DFD4", line: "#F1EBE2",
-  brandA: "#7B2D1F", brandB: "#C8892E", violet: "#7C3AED",
-  ok: "#16A34A", warn: "#D97706", bad: "#DC2626",
+  bg: "#F7F4EF",
+  surface: "#FFFFFF",
+  ink: "#1B1512",
+  sub: "#5E5049",
+  faint: "#A2938B",
+  border: "#E7DFD4",
+  line: "#F1EBE2",
+  brandA: "#7B2D1F",
+  brandB: "#C8892E",
+  violet: "#7C3AED",
+  ok: "#16A34A",
+  warn: "#D97706",
+  bad: "#DC2626",
 };
 
 // 5 фаз жизненного цикла заявки — каждая со своим цветом
 const PHASES = [
-  { n: 1, label: "Отправлено",  color: "#2563EB", soft: "#EFF4FF" },
+  { n: 1, label: "Отправлено", color: "#2563EB", soft: "#EFF4FF" },
   { n: 2, label: "Просмотрено", color: "#7C3AED", soft: "#F5F0FE" },
-  { n: 3, label: "В работе",    color: "#EA580C", soft: "#FFF2E8" },
+  { n: 3, label: "В работе", color: "#EA580C", soft: "#FFF2E8" },
   { n: 4, label: "На проверке", color: "#DB2777", soft: "#FCEEF5" },
-  { n: 5, label: "Завершено",   color: "#16A34A", soft: "#E9F9EF" },
+  { n: 5, label: "Завершено", color: "#16A34A", soft: "#E9F9EF" },
 ];
 
 const ACTION_LABEL = {
@@ -51,177 +101,380 @@ const ACTION_LABEL = {
   step: "Выполнил(а) шаг",
 };
 
-const M = 60_000, H = 3_600_000, D = 86_400_000;
+const M = 60_000,
+  H = 3_600_000,
+  D = 86_400_000;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const STORAGE_KEY = "avesto.crm.v9"; // бренд + реальные филиалы — старые локальные данные игнорируются
 
 /* ============================ ДВУЯЗЫЧНОСТЬ (RU / UZ) ======================== */
 let LANG = "ru";
-function syncLang(s) { LANG = (s && s.settings && s.settings.lang) || "ru"; }
+function syncLang(s) {
+  LANG = (s && s.settings && s.settings.lang) || "ru";
+}
 const UZ = {
   // навигация / заголовки
-  "Входящие": "Kiruvchi", "Создать заявку": "Ariza yaratish", "Мои достижения": "Yutuqlarim",
-  "Архив задач": "Vazifalar arxivi", "Аналитика": "Tahlil", "Оргструктура": "Tashkiliy tuzilma",
-  "О системе": "Tizim haqida", "Админ-панель": "Admin panel",
-  "Входящие задачи": "Kiruvchi vazifalar", "Аналитика — кабина директора": "Tahlil — direktor kabinasi",
+  Входящие: "Kiruvchi",
+  "Создать заявку": "Ariza yaratish",
+  "Мои достижения": "Yutuqlarim",
+  "Архив задач": "Vazifalar arxivi",
+  Аналитика: "Tahlil",
+  Оргструктура: "Tashkiliy tuzilma",
+  "О системе": "Tizim haqida",
+  "Админ-панель": "Admin panel",
+  "Входящие задачи": "Kiruvchi vazifalar",
+  "Аналитика — кабина директора": "Tahlil — direktor kabinasi",
   "Оргструктура и филиалы": "Tuzilma va filiallar",
-  "Создать": "Yaratish", "Кабинет": "Kabinet", "Архив": "Arxiv", "Структура": "Tuzilma", "Админка": "Admin", "Ещё": "Yana",
+  Создать: "Yaratish",
+  Кабинет: "Kabinet",
+  Архив: "Arxiv",
+  Структура: "Tuzilma",
+  Админка: "Admin",
+  Ещё: "Yana",
   // фазы
-  "Отправлено": "Yuborilgan", "Просмотрено": "Ko‘rilgan", "В работе": "Ishda", "На проверке": "Tekshiruvda", "Завершено": "Yakunlangan",
+  Отправлено: "Yuborilgan",
+  Просмотрено: "Ko‘rilgan",
+  "В работе": "Ishda",
+  "На проверке": "Tekshiruvda",
+  Завершено: "Yakunlangan",
   // роли
-  "Руководство": "Rahbariyat", "Финансист": "Moliyachi", "Управляющий": "Boshqaruvchi", "Бухгалтер": "Buxgalter", "Сист. администратор": "Tizim admini", "Сотрудник": "Xodim",
+  Руководство: "Rahbariyat",
+  Финансист: "Moliyachi",
+  Управляющий: "Boshqaruvchi",
+  Бухгалтер: "Buxgalter",
+  "Сист. администратор": "Tizim admini",
+  Сотрудник: "Xodim",
   // приоритеты
-  "Критический": "Kritik", "Высокий": "Yuqori", "Обычный": "Oddiy",
+  Критический: "Kritik",
+  Высокий: "Yuqori",
+  Обычный: "Oddiy",
   // смена / профиль
-  "Смена открыта": "Smena ochiq", "Открыть смену": "Smenani ochish", "Закрыть смену": "Smenani yopish",
+  "Смена открыта": "Smena ochiq",
+  "Открыть смену": "Smenani ochish",
+  "Закрыть смену": "Smenani yopish",
   "Войти как (демо ролей):": "Sifatida kirish (demo):",
   // доска / карточки
-  "Нет задач": "Vazifalar yo‘q", "активных": "faol",
-  "Исполнитель:": "Ijrochi:", "Контролёр:": "Nazoratchi:",
-  "Исполнитель — кто делает": "Ijrochi — kim bajaradi", "Контролёр — кто следит": "Nazoratchi — kim kuzatadi",
+  "Нет задач": "Vazifalar yo‘q",
+  активных: "faol",
+  "Исполнитель:": "Ijrochi:",
+  "Контролёр:": "Nazoratchi:",
+  "Исполнитель — кто делает": "Ijrochi — kim bajaradi",
+  "Контролёр — кто следит": "Nazoratchi — kim kuzatadi",
   // создание
-  "Простая заявка": "Oddiy ariza", "По шаблону": "Shablon bo‘yicha", "Что случилось?": "Nima bo‘ldi?",
-  "Распознать (ИИ)": "Aniqlash (AI)", "Сказать задачу": "Vazifani aytish",
-  "Опишите простыми словами — система сама определит филиал, категорию, срочность и назначит ответственных.": "Oddiy so‘zlar bilan yozing — tizim filial, turkum va shoshilinchlikni aniqlaydi va mas’ullarni tayinlaydi.",
-  "Запустить процесс": "Jarayonni boshlash", "Запустить процесс по шаблону": "Shablon bo‘yicha jarayonni boshlash",
+  "Простая заявка": "Oddiy ariza",
+  "По шаблону": "Shablon bo‘yicha",
+  "Что случилось?": "Nima bo‘ldi?",
+  "Распознать (ИИ)": "Aniqlash (AI)",
+  "Сказать задачу": "Vazifani aytish",
+  "Опишите простыми словами — система сама определит филиал, категорию, срочность и назначит ответственных.":
+    "Oddiy so‘zlar bilan yozing — tizim filial, turkum va shoshilinchlikni aniqlaydi va mas’ullarni tayinlaydi.",
+  "Запустить процесс": "Jarayonni boshlash",
+  "Запустить процесс по шаблону": "Shablon bo‘yicha jarayonni boshlash",
   // меню разделов
   "Все разделы": "Barcha bo‘limlar",
-  "Рабочий прототип. Откройте задачу, где вы исполнитель или контролёр — фаза «Отправлено» сама станет «Просмотрено» (защита «я не видел»). Кнопки действий зависят от роли и открытой смены — переключайте роль через профиль справа вверху.": "Ishchi prototip. O‘zingiz ijrochi yoki nazoratchi bo‘lgan vazifani oching — «Yuborilgan» bosqichi avtomatik «Ko‘rilgan» bo‘ladi («ko‘rmadim» himoyasi). Tugmalar rol va ochiq smenaga bog‘liq — rolni yuqori o‘ngdagi profil orqali almashtiring.",
+  "Рабочий прототип. Откройте задачу, где вы исполнитель или контролёр — фаза «Отправлено» сама станет «Просмотрено» (защита «я не видел»). Кнопки действий зависят от роли и открытой смены — переключайте роль через профиль справа вверху.":
+    "Ishchi prototip. O‘zingiz ijrochi yoki nazoratchi bo‘lgan vazifani oching — «Yuborilgan» bosqichi avtomatik «Ko‘rilgan» bo‘ladi («ko‘rmadim» himoyasi). Tugmalar rol va ochiq smenaga bog‘liq — rolni yuqori o‘ngdagi profil orqali almashtiring.",
   // вкладки админки
-  "Сотрудники": "Xodimlar", "Должности": "Lavozimlar", "Филиалы и бюджеты": "Filiallar va byudjet",
-  "Отделы и доступ": "Bo‘limlar va ruxsat", "Маршруты": "Marshrutlar", "SLA-нормативы": "SLA me’yorlari",
-  "Регламенты": "Reglamentlar", "Система": "Tizim",
-  "Добавить сотрудника": "Xodim qo‘shish", "Добавить": "Qo‘shish",
+  Сотрудники: "Xodimlar",
+  Должности: "Lavozimlar",
+  "Филиалы и бюджеты": "Filiallar va byudjet",
+  "Отделы и доступ": "Bo‘limlar va ruxsat",
+  Маршруты: "Marshrutlar",
+  "SLA-нормативы": "SLA me’yorlari",
+  Регламенты: "Reglamentlar",
+  Система: "Tizim",
+  "Добавить сотрудника": "Xodim qo‘shish",
+  Добавить: "Qo‘shish",
   // учёт времени
-  "Учёт времени": "Vaqt hisobi", "Учёт рабочего времени": "Ish vaqti hisobi", "Время": "Vaqt",
-  "Моё рабочее время": "Mening ish vaqtim", "Сегодня": "Bugun", "За неделю": "Hafta uchun",
-  "На смене": "Smenada", "Не на смене": "Smenada emas", "На смене сейчас": "Hozir smenada",
-  "Часов за сегодня": "Bugungi soatlar", "Часов за неделю": "Haftalik soatlar",
-  "Последние смены": "Oxirgi smenalar", "Пока нет закрытых смен": "Hozircha yopilgan smenalar yo‘q",
+  "Учёт времени": "Vaqt hisobi",
+  "Учёт рабочего времени": "Ish vaqti hisobi",
+  Время: "Vaqt",
+  "Моё рабочее время": "Mening ish vaqtim",
+  Сегодня: "Bugun",
+  "За неделю": "Hafta uchun",
+  "На смене": "Smenada",
+  "Не на смене": "Smenada emas",
+  "На смене сейчас": "Hozir smenada",
+  "Часов за сегодня": "Bugungi soatlar",
+  "Часов за неделю": "Haftalik soatlar",
+  "Последние смены": "Oxirgi smenalar",
+  "Пока нет закрытых смен": "Hozircha yopilgan smenalar yo‘q",
   // кассы
-  "Кассы": "Kassalar", "Кассы филиалов": "Filiallar kassalari", "Месяц": "Oy", "Все филиалы": "Barcha filiallar",
-  "Выручка за месяц": "Oylik tushum", "Наличные": "Naqd pul", "Эквайринг (в банк)": "Ekvayring (bankka)", "Расходы": "Xarajatlar",
-  "Отчёт по кассе за день": "Kunlik kassa hisoboti", "уже есть — сохранение обновит": "allaqachon bor — saqlash yangilaydi",
-  "Дата": "Sana", "Фискальная выручка": "Fiskal tushum", "Нефискальная сумма": "Nofiskal summa",
-  "Карты и онлайн": "Kartalar va onlayn", "Перечисление и прочее": "O‘tkazma va boshqalar",
-  "Перечисление": "O‘tkazma", "Чеков перечислением": "O‘tkazma cheklari soni", "Долг": "Qarz", "Без оплат": "To‘lovsiz",
-  "Расходы за день": "Kunlik xarajatlar", "Сумма по iiko": "iiko bo‘yicha summa",
-  "Наличными всего": "Jami naqd", "Итого выручка": "Jami tushum", "Разница с iiko": "iiko bilan farq",
-  "Сохранить отчёт по кассе": "Kassa hisobotini saqlash", "Отчёты за месяц": "Oylik hisobotlar",
+  Кассы: "Kassalar",
+  "Кассы филиалов": "Filiallar kassalari",
+  Месяц: "Oy",
+  "Все филиалы": "Barcha filiallar",
+  "Выручка за месяц": "Oylik tushum",
+  Наличные: "Naqd pul",
+  "Эквайринг (в банк)": "Ekvayring (bankka)",
+  Расходы: "Xarajatlar",
+  "Отчёт по кассе за день": "Kunlik kassa hisoboti",
+  "уже есть — сохранение обновит": "allaqachon bor — saqlash yangilaydi",
+  Дата: "Sana",
+  "Фискальная выручка": "Fiskal tushum",
+  "Нефискальная сумма": "Nofiskal summa",
+  "Карты и онлайн": "Kartalar va onlayn",
+  "Перечисление и прочее": "O‘tkazma va boshqalar",
+  Перечисление: "O‘tkazma",
+  "Чеков перечислением": "O‘tkazma cheklari soni",
+  Долг: "Qarz",
+  "Без оплат": "To‘lovsiz",
+  "Расходы за день": "Kunlik xarajatlar",
+  "Сумма по iiko": "iiko bo‘yicha summa",
+  "Наличными всего": "Jami naqd",
+  "Итого выручка": "Jami tushum",
+  "Разница с iiko": "iiko bilan farq",
+  "Сохранить отчёт по кассе": "Kassa hisobotini saqlash",
+  "Отчёты за месяц": "Oylik hisobotlar",
   "Нет отчётов за выбранный период": "Tanlangan davr uchun hisobot yo‘q",
-  "Выручка": "Tushum", "Эквайринг": "Ekvayring", "Перечисл.": "O‘tkazma", "Разница": "Farq",
-  "Выберите филиал": "Filialni tanlang", "Отчёт по кассе сохранён": "Kassa hisoboti saqlandi", "Отчёт удалён": "Hisobot o‘chirildi", "Удалить": "O‘chirish",
+  Выручка: "Tushum",
+  Эквайринг: "Ekvayring",
+  "Перечисл.": "O‘tkazma",
+  Разница: "Farq",
+  "Выберите филиал": "Filialni tanlang",
+  "Отчёт по кассе сохранён": "Kassa hisoboti saqlandi",
+  "Отчёт удалён": "Hisobot o‘chirildi",
+  Удалить: "O‘chirish",
   // кассы — периоды и доступ
-  "День": "Kun", "Неделя": "Hafta", "Год": "Yil", "Период": "Davr", "С": "Dan", "По": "Gacha",
-  "Неделя (любой день)": "Hafta (istalgan kun)", "Печать": "Chop etish",
-  "Выручка за период": "Davr tushumi", "Итого": "Jami", "Итого за период": "Davr uchun jami", "Ваш филиал": "Sizning filial",
-  "Отчёты за период": "Davr hisobotlari", "Обновить отчёт": "Hisobotni yangilash",
-  "ч": "soat", "Редактирование доступно ещё": "Tahrirlash yana mumkin",
-  "Новый отчёт — заполните и сохраните": "Yangi hisobot — to‘ldiring va saqlang",
-  "Редактирование закрыто: прошло больше 24 часов": "Tahrirlash yopiq: 24 soatdan oshdi",
-  "Редактирование закрыто: с момента создания прошло более 24 часов. Изменения может внести только руководитель.": "Tahrirlash yopiq: yaratilganiga 24 soatdan oshdi. O‘zgartirishni faqat rahbar kirita oladi.",
-  "Отчёт по кассам филиалов": "Filiallar kassalari hisoboti", "(суммы в сум)": "(summalar so‘mda)",
-  "Разрешите всплывающие окна для печати": "Chop etish uchun qalqib chiquvchi oynalarga ruxsat bering", "Печать недоступна в этом окне": "Bu oynada chop etish mavjud emas",
+  День: "Kun",
+  Неделя: "Hafta",
+  Год: "Yil",
+  Период: "Davr",
+  С: "Dan",
+  По: "Gacha",
+  "Неделя (любой день)": "Hafta (istalgan kun)",
+  Печать: "Chop etish",
+  "Выручка за период": "Davr tushumi",
+  Итого: "Jami",
+  "Итого за период": "Davr uchun jami",
+  "Ваш филиал": "Sizning filial",
+  "Отчёты за период": "Davr hisobotlari",
+  "Обновить отчёт": "Hisobotni yangilash",
+  ч: "soat",
+  "Редактирование доступно ещё": "Tahrirlash yana mumkin",
+  "Новый отчёт — заполните и сохраните":
+    "Yangi hisobot — to‘ldiring va saqlang",
+  "Редактирование закрыто: прошло больше 24 часов":
+    "Tahrirlash yopiq: 24 soatdan oshdi",
+  "Редактирование закрыто: с момента создания прошло более 24 часов. Изменения может внести только руководитель.":
+    "Tahrirlash yopiq: yaratilganiga 24 soatdan oshdi. O‘zgartirishni faqat rahbar kirita oladi.",
+  "Отчёт по кассам филиалов": "Filiallar kassalari hisoboti",
+  "(суммы в сум)": "(summalar so‘mda)",
+  "Разрешите всплывающие окна для печати":
+    "Chop etish uchun qalqib chiquvchi oynalarga ruxsat bering",
+  "Печать недоступна в этом окне": "Bu oynada chop etish mavjud emas",
   // кассы — статусы и подтверждение
-  "Статус": "Holat", "Принято": "Qabul qilindi", "Ожидает": "Kutilmoqda", "Принять": "Qabul qilish",
-  "Сдать отчёт": "Hisobotni topshirish", "Отчёт сдан и ожидает подтверждения": "Hisobot topshirildi va tasdiqlash kutilmoqda",
-  "Отчёт подтверждён": "Hisobot tasdiqlandi", "Редактирование закрыто": "Tahrirlash yopiq",
-  "Укажите комментарий к расхождению с iiko": "iiko bilan farq uchun izoh yozing",
-  "Отчёт принят контролёром — редактирование закрыто.": "Hisobot nazoratchi tomonidan qabul qilindi — tahrirlash yopiq.", "Принял": "Qabul qildi",
-  "Срок сдачи истёк (после 12:00 следующего дня). Изменения может внести только контролёр.": "Topshirish muddati o‘tdi (ertangi kun 12:00 dan keyin). O‘zgartirishni faqat nazoratchi kirita oladi.",
-  "Отчёт сдан. ": "Hisobot topshirildi. ", "Новый отчёт. ": "Yangi hisobot. ",
-  "Вы контролёр — правки без ограничения по сроку.": "Siz nazoratchisiz — tuzatishlar muddatsiz.", "Правки принимаются до": "Tuzatishlar qabul qilinadi",
-  "Комментарий": "Izoh", "Причина расхождения с iiko, если есть": "iiko bilan farq sababi (agar bo‘lsa)",
-  "При расхождении с iiko комментарий обязателен": "iiko bilan farq bo‘lsa izoh majburiy",
+  Статус: "Holat",
+  Принято: "Qabul qilindi",
+  Ожидает: "Kutilmoqda",
+  Принять: "Qabul qilish",
+  "Сдать отчёт": "Hisobotni topshirish",
+  "Отчёт сдан и ожидает подтверждения":
+    "Hisobot topshirildi va tasdiqlash kutilmoqda",
+  "Отчёт подтверждён": "Hisobot tasdiqlandi",
+  "Редактирование закрыто": "Tahrirlash yopiq",
+  "Укажите комментарий к расхождению с iiko":
+    "iiko bilan farq uchun izoh yozing",
+  "Отчёт принят контролёром — редактирование закрыто.":
+    "Hisobot nazoratchi tomonidan qabul qilindi — tahrirlash yopiq.",
+  Принял: "Qabul qildi",
+  "Срок сдачи истёк (после 12:00 следующего дня). Изменения может внести только контролёр.":
+    "Topshirish muddati o‘tdi (ertangi kun 12:00 dan keyin). O‘zgartirishni faqat nazoratchi kirita oladi.",
+  "Отчёт сдан. ": "Hisobot topshirildi. ",
+  "Новый отчёт. ": "Yangi hisobot. ",
+  "Вы контролёр — правки без ограничения по сроку.":
+    "Siz nazoratchisiz — tuzatishlar muddatsiz.",
+  "Правки принимаются до": "Tuzatishlar qabul qilinadi",
+  Комментарий: "Izoh",
+  "Причина расхождения с iiko, если есть":
+    "iiko bilan farq sababi (agar bo‘lsa)",
+  "При расхождении с iiko комментарий обязателен":
+    "iiko bilan farq bo‘lsa izoh majburiy",
   "отчётов ожидают подтверждения": "hisobot tasdiqlashni kutmoqda",
   // кассы — расшифровка расходов
   "Расходы — на что потрачено": "Xarajatlar — nimaga sarflandi",
-  "Например: закупка продуктов, хозтовары, мелкий ремонт": "Masalan: mahsulot xaridi, xo‘jalik buyumlari, mayda ta’mirlash",
+  "Например: закупка продуктов, хозтовары, мелкий ремонт":
+    "Masalan: mahsulot xaridi, xo‘jalik buyumlari, mayda ta’mirlash",
   "При расходах комментарий обязателен": "Xarajat bo‘lsa izoh majburiy",
   "Укажите, на что были расходы": "Xarajat nimaga sarflanganini yozing",
-  "Примечание": "Izoh",
+  Примечание: "Izoh",
   // периоды как в iiko
-  "За период": "Davr uchun", "с": "dan", "по": "gacha",
-  "Открытый период": "Ochiq davr", "Текущая неделя": "Joriy hafta", "Текущий месяц": "Joriy oy", "Текущий год": "Joriy yil",
-  "Вчера": "Kecha", "Прошлая неделя": "O‘tgan hafta", "Прошлый месяц": "O‘tgan oy", "Прошлый год": "O‘tgan yil", "Другой…": "Boshqa…",
+  "За период": "Davr uchun",
+  с: "dan",
+  по: "gacha",
+  "Открытый период": "Ochiq davr",
+  "Текущая неделя": "Joriy hafta",
+  "Текущий месяц": "Joriy oy",
+  "Текущий год": "Joriy yil",
+  Вчера: "Kecha",
+  "Прошлая неделя": "O‘tgan hafta",
+  "Прошлый месяц": "O‘tgan oy",
+  "Прошлый год": "O‘tgan yil",
+  "Другой…": "Boshqa…",
   // сейф и инкассация
   "Сейф филиала и передача денег": "Filial seyfi va pul topshirish",
-  "выберите филиал вверху, чтобы видеть сейф и передавать деньги": "seyfni ko‘rish va pul topshirish uchun yuqorida filialni tanlang",
-  "Остаток в сейфе": "Seyfdagi qoldiq", "В пути / на подтверждении": "Yo‘lda / tasdiqlashda",
-  "Наличных поступило (всего)": "Kelib tushgan naqd (jami)", "Передано в офис (всего)": "Ofisga topshirilgan (jami)",
-  "Передать в головной офис": "Bosh ofisga topshirish", "Через кого": "Kim orqali",
-  "инкассатор, водитель, директор…": "inkassator, haydovchi, direktor…", "Передать": "Topshirish",
-  "Доступно к передаче": "Topshirish mumkin", "Передачи за период": "Davr uchun topshirishlar", "Передач за период нет": "Davr uchun topshirishlar yo‘q",
-  "через": "orqali", "Принято офисом": "Ofis qabul qildi", "В пути": "Yo‘lda", "Подтвердить приём": "Qabulni tasdiqlash",
-  "Передача удалена": "Topshirish o‘chirildi", "Передача отправлена — ожидает подтверждения офиса": "Topshirish yuborildi — ofis tasdiqlashi kutilmoqda",
+  "выберите филиал вверху, чтобы видеть сейф и передавать деньги":
+    "seyfni ko‘rish va pul topshirish uchun yuqorida filialni tanlang",
+  "Остаток в сейфе": "Seyfdagi qoldiq",
+  "В пути / на подтверждении": "Yo‘lda / tasdiqlashda",
+  "Наличных поступило (всего)": "Kelib tushgan naqd (jami)",
+  "Передано в офис (всего)": "Ofisga topshirilgan (jami)",
+  "Передать в головной офис": "Bosh ofisga topshirish",
+  "Через кого": "Kim orqali",
+  "инкассатор, водитель, директор…": "inkassator, haydovchi, direktor…",
+  Передать: "Topshirish",
+  "Доступно к передаче": "Topshirish mumkin",
+  "Передачи за период": "Davr uchun topshirishlar",
+  "Передач за период нет": "Davr uchun topshirishlar yo‘q",
+  через: "orqali",
+  "Принято офисом": "Ofis qabul qildi",
+  "В пути": "Yo‘lda",
+  "Подтвердить приём": "Qabulni tasdiqlash",
+  "Передача удалена": "Topshirish o‘chirildi",
+  "Передача отправлена — ожидает подтверждения офиса":
+    "Topshirish yuborildi — ofis tasdiqlashi kutilmoqda",
   "Приём денег подтверждён": "Pul qabul qilingani tasdiqlandi",
-  "Укажите сумму передачи": "Topshirish summasini kiriting", "Сумма больше остатка в сейфе": "Summa seyf qoldig‘idan katta",
-  "Укажите, через кого переданы деньги": "Pul kim orqali topshirilganini yozing",
+  "Укажите сумму передачи": "Topshirish summasini kiriting",
+  "Сумма больше остатка в сейфе": "Summa seyf qoldig‘idan katta",
+  "Укажите, через кого переданы деньги":
+    "Pul kim orqali topshirilganini yozing",
   "передач денег в пути": "pul topshirish yo‘lda",
   // фото чеков
-  "Фото чека / товара": "Chek / tovar fotosi", "по желанию, до 3 фото — доказательство расхода": "ixtiyoriy, 3 tagacha foto — xarajat isboti",
-  "Фото добавлено": "Foto qo‘shildi", "Не удалось обработать фото": "Fotoni qayta ishlab bo‘lmadi", "Максимум 3 фото": "Ko‘pi bilan 3 ta foto",
+  "Фото чека / товара": "Chek / tovar fotosi",
+  "по желанию, до 3 фото — доказательство расхода":
+    "ixtiyoriy, 3 tagacha foto — xarajat isboti",
+  "Фото добавлено": "Foto qo‘shildi",
+  "Не удалось обработать фото": "Fotoni qayta ishlab bo‘lmadi",
+  "Максимум 3 фото": "Ko‘pi bilan 3 ta foto",
   // календарь
-  "Январь": "Yanvar", "Февраль": "Fevral", "Март": "Mart", "Апрель": "Aprel", "Май": "May", "Июнь": "Iyun",
-  "Июль": "Iyul", "Август": "Avgust", "Сентябрь": "Sentabr", "Октябрь": "Oktabr", "Ноябрь": "Noyabr", "Декабрь": "Dekabr",
-  "Пн": "Du", "Вт": "Se", "Ср": "Cho", "Чт": "Pa", "Пт": "Ju", "Сб": "Sha", "Вс": "Ya",
+  Январь: "Yanvar",
+  Февраль: "Fevral",
+  Март: "Mart",
+  Апрель: "Aprel",
+  Май: "May",
+  Июнь: "Iyun",
+  Июль: "Iyul",
+  Август: "Avgust",
+  Сентябрь: "Sentabr",
+  Октябрь: "Oktabr",
+  Ноябрь: "Noyabr",
+  Декабрь: "Dekabr",
+  Пн: "Du",
+  Вт: "Se",
+  Ср: "Cho",
+  Чт: "Pa",
+  Пт: "Ju",
+  Сб: "Sha",
+  Вс: "Ya",
   // аналитика продаж
-  "Аналитика продаж": "Sotuv tahlili", "Продажи": "Sotuv", "Средний чек": "O‘rtacha chek", "Количество чеков": "Cheklar soni",
-  "Прошлый период": "O‘tgan davr", "к прошлому периоду": "o‘tgan davrga", "нет данных за прошлый период": "o‘tgan davr uchun ma’lumot yo‘q",
-  "Динамика выручки": "Tushum dinamikasi", "Выручка по типам оплат": "To‘lov turlari bo‘yicha tushum",
-  "ABC-анализ товаров": "Tovarlar ABC-tahlili", "A — основная выручка, C — аутсайдеры": "A — asosiy tushum, C — autsayderlar",
-  "Группа": "Guruh", "тов.": "tovar", "Товар": "Tovar", "Кол-во": "Soni", "Доля": "Ulush", "Накопит.": "Jami ulush",
-  "Нет данных за выбранный период": "Tanlangan davr uchun ma’lumot yo‘q", "шт": "dona",
-  "Лучше всего продаются": "Eng ko‘p sotilgan", "Хуже всего продаются": "Eng kam sotilgan",
+  "Аналитика продаж": "Sotuv tahlili",
+  Продажи: "Sotuv",
+  "Средний чек": "O‘rtacha chek",
+  "Количество чеков": "Cheklar soni",
+  "Прошлый период": "O‘tgan davr",
+  "к прошлому периоду": "o‘tgan davrga",
+  "нет данных за прошлый период": "o‘tgan davr uchun ma’lumot yo‘q",
+  "Динамика выручки": "Tushum dinamikasi",
+  "Выручка по типам оплат": "To‘lov turlari bo‘yicha tushum",
+  "ABC-анализ товаров": "Tovarlar ABC-tahlili",
+  "A — основная выручка, C — аутсайдеры": "A — asosiy tushum, C — autsayderlar",
+  Группа: "Guruh",
+  "тов.": "tovar",
+  Товар: "Tovar",
+  "Кол-во": "Soni",
+  Доля: "Ulush",
+  "Накопит.": "Jami ulush",
+  "Нет данных за выбранный период": "Tanlangan davr uchun ma’lumot yo‘q",
+  шт: "dona",
+  "Лучше всего продаются": "Eng ko‘p sotilgan",
+  "Хуже всего продаются": "Eng kam sotilgan",
   "Выводы и рекомендации": "Xulosa va tavsiyalar",
-  "Данные по товарам рассчитаны из дневной выручки касс. После подключения iiko здесь будет реальная номенклатура: блюда, количество и суммы по чекам.": "Tovar ma’lumotlari kunlik kassa tushumidan hisoblangan. iiko ulangach, bu yerda haqiqiy nomenklatura bo‘ladi: taomlar, soni va chek summalari.",
-  "«Наличными всего» = фискальная + нефискальная. «Эквайринг» = Humo + Uzcard + Click + Payme + Uzum Tezkor + Yandex. «Итого выручка» = наличные + эквайринг + перечисление. «Разница с iiko» = итог минус сумма по iiko.": "«Jami naqd» = fiskal + nofiskal. «Ekvayring» = Humo + Uzcard + Click + Payme + Uzum Tezkor + Yandex. «Jami tushum» = naqd + ekvayring + o‘tkazma. «iiko bilan farq» = jami minus iiko summasi.",
+  "Данные по товарам рассчитаны из дневной выручки касс. После подключения iiko здесь будет реальная номенклатура: блюда, количество и суммы по чекам.":
+    "Tovar ma’lumotlari kunlik kassa tushumidan hisoblangan. iiko ulangach, bu yerda haqiqiy nomenklatura bo‘ladi: taomlar, soni va chek summalari.",
+  "«Наличными всего» = фискальная + нефискальная. «Эквайринг» = Humo + Uzcard + Click + Payme + Uzum Tezkor + Yandex. «Итого выручка» = наличные + эквайринг + перечисление. «Разница с iiko» = итог минус сумма по iiko.":
+    "«Jami naqd» = fiskal + nofiskal. «Ekvayring» = Humo + Uzcard + Click + Payme + Uzum Tezkor + Yandex. «Jami tushum» = naqd + ekvayring + o‘tkazma. «iiko bilan farq» = jami minus iiko summasi.",
   // детали задачи
-  "Описание": "Tavsif", "Сумма": "Summa", "Отдел": "Bo‘lim", "Категория": "Turkum", "Приоритет": "Muhimlik",
-  "Филиал": "Filial", "Юр. лицо": "Yuridik shaxs", "Создана": "Yaratilgan", "Текущая фаза": "Joriy bosqich",
-  "Журнал (неизменяемый)": "Jurnal (o‘zgarmas)", "Краткая суть (ИИ)": "Qisqacha mazmun (AI)",
+  Описание: "Tavsif",
+  Сумма: "Summa",
+  Отдел: "Bo‘lim",
+  Категория: "Turkum",
+  Приоритет: "Muhimlik",
+  Филиал: "Filial",
+  "Юр. лицо": "Yuridik shaxs",
+  Создана: "Yaratilgan",
+  "Текущая фаза": "Joriy bosqich",
+  "Журнал (неизменяемый)": "Jurnal (o‘zgarmas)",
+  "Краткая суть (ИИ)": "Qisqacha mazmun (AI)",
 };
-const tr = (ru) => (LANG === "uz" ? (UZ[ru] || ru) : ru);
+const tr = (ru) => (LANG === "uz" ? UZ[ru] || ru : ru);
 
 /* ---------------------------------- утилиты ------------------------------- */
 function fmtDur(ms) {
   ms = Math.max(0, ms);
   const m = Math.round(ms / M);
   if (m < 60) return m + " мин";
-  const h = Math.floor(m / 60), mm = m % 60;
+  const h = Math.floor(m / 60),
+    mm = m % 60;
   if (h < 24) return mm ? `${h} ч ${mm} мин` : `${h} ч`;
-  const d = Math.floor(h / 24), hh = h % 24;
+  const d = Math.floor(h / 24),
+    hh = h % 24;
   return hh ? `${d} дн ${hh} ч` : `${d} дн`;
 }
 // Часовой пояс Узбекистана — даты/время считаем и показываем по Ташкенту.
 const TZ = "Asia/Tashkent";
-function fmtMoney(n) { return (n || 0).toLocaleString("ru-RU") + " сум"; }
+function fmtMoney(n) {
+  return (n || 0).toLocaleString("ru-RU") + " сум";
+}
 // длительность рабочего времени: без «дней» (смена/сессия), для сводных карточек — только часы
-const fmtWork = (ms) => { const m = Math.max(0, Math.round(ms / M)); const h = Math.floor(m / 60), mm = m % 60; return h ? (mm ? `${h} ч ${mm} мин` : `${h} ч`) : `${mm} мин`; };
+const fmtWork = (ms) => {
+  const m = Math.max(0, Math.round(ms / M));
+  const h = Math.floor(m / 60),
+    mm = m % 60;
+  return h ? (mm ? `${h} ч ${mm} мин` : `${h} ч`) : `${mm} мин`;
+};
 const fmtWorkH = (ms) => `${Math.round(Math.max(0, ms) / H)} ч`;
-const fmtSum = (n) => (Math.round(n || 0)).toLocaleString("ru-RU") + " сум";
+const fmtSum = (n) => Math.round(n || 0).toLocaleString("ru-RU") + " сум";
 function fmtDateTime(ms) {
   return new Date(ms).toLocaleString("ru-RU", {
     timeZone: TZ,
-    day: "2-digit", month: "2-digit", year: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
 }
 function initials(name) {
   const p = (name || "?").trim().split(/\s+/);
   return ((p[0]?.[0] || "") + (p[1]?.[0] || "")).toUpperCase();
 }
-const AVATAR_COLORS = ["#2563EB", "#7C3AED", "#DB2777", "#EA580C", "#0891B2", "#16A34A", "#9333EA"];
+const AVATAR_COLORS = [
+  "#2563EB",
+  "#7C3AED",
+  "#DB2777",
+  "#EA580C",
+  "#0891B2",
+  "#16A34A",
+  "#9333EA",
+];
 function avatarColor(id) {
-  let s = 0; for (const ch of String(id)) s += ch.charCodeAt(0);
+  let s = 0;
+  for (const ch of String(id)) s += ch.charCodeAt(0);
   return AVATAR_COLORS[s % AVATAR_COLORS.length];
 }
 // Статус SLA для задачи (Этап 2)
 function slaInfo(t, now) {
   if (t.phase >= 5) return { tone: "done", text: "Завершено", color: C.faint };
   const left = t.slaDeadline - now;
-  if (left <= 0) return { tone: "bad", text: "Просрочено на " + fmtDur(-left), color: C.bad };
-  if (left < H) return { tone: "warn", text: "Осталось " + fmtDur(left), color: C.warn };
+  if (left <= 0)
+    return {
+      tone: "bad",
+      text: "Просрочено на " + fmtDur(-left),
+      color: C.bad,
+    };
+  if (left < H)
+    return { tone: "warn", text: "Осталось " + fmtDur(left), color: C.warn };
   return { tone: "ok", text: "Осталось " + fmtDur(left), color: C.ok };
 }
 const lightTone = (rate) => (rate >= 90 ? C.ok : rate >= 80 ? C.warn : C.bad);
@@ -238,27 +491,152 @@ const BRANCHES = [
   { id: 2, companyId: 1, name: "Узбекистанская", iikoDept: "Uzbekistanskaya" },
   { id: 3, companyId: 1, name: "Аэропорт", iikoDept: "Aeroport" },
   { id: 4, companyId: 2, name: "Цех «Навруз»", iikoDept: "Navruzi Цех" },
-  { id: 5, companyId: 1, name: "Магазин «Навруз»", iikoDept: "Наврузи Магазин" },
+  {
+    id: 5,
+    companyId: 1,
+    name: "Магазин «Навруз»",
+    iikoDept: "Наврузи Магазин",
+  },
 ];
 // Месячные бюджетные лимиты по филиалам (Этап улучшений: контроль перерасхода)
 const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000, 5: 300000 };
 
 const USERS = [
-  { id: "u1",  name: "Соколов Д. А.",  role: "director",   pos: "Генеральный директор",     level: 1, branchId: null, parentId: null },
-  { id: "u2",  name: "Орлова Е. В.",   role: "director",   pos: "Операционный директор",    level: 1, branchId: null, parentId: "u1" },
-  { id: "u3",  name: "Иванова М. П.",  role: "finance",    pos: "Финансист",                level: 2, branchId: null, parentId: "u1" },
-  { id: "u4",  name: "Ахмедов И. О.",  role: "manager",    pos: "Управляющий филиалом",     level: 2, branchId: 3,    parentId: "u2" },
-  { id: "u5",  name: "Кузнецов П. С.", role: "manager",    pos: "Управляющий филиалом",     level: 2, branchId: 2,    parentId: "u2" },
-  { id: "u6",  name: "Петров А. И.",   role: "sysadmin",   pos: "Системный администратор",  level: 3, branchId: 3,    parentId: "u4" },
-  { id: "u7",  name: "Смирнов В. Н.",  role: "staff",      pos: "Техник",                   level: 3, branchId: 2,    parentId: "u5" },
-  { id: "u8",  name: "Васильева О. К.",role: "accountant", pos: "Бухгалтер",                level: 3, branchId: 1,    parentId: "u3" },
-  { id: "u9",  name: "Новиков Р. Т.",  role: "staff",      pos: "Линейный сотрудник",       level: 4, branchId: 3,    parentId: "u4" },
-  { id: "u10", name: "Морозов А. Л.",  role: "manager",    pos: "Управляющий филиалом",     level: 2, branchId: 4,    parentId: "u2" },
-  { id: "u11", name: "Зайцев К. В.",   role: "staff",      pos: "Техник",                   level: 3, branchId: 4,    parentId: "u10" },
-  { id: "u12", name: "Тошматов Ж. Б.", role: "staff",      pos: "Заведующий складом",       level: 3, branchId: 3,    parentId: "u4" },
-  { id: "u13", name: "Каримова Д. А.", role: "staff",      pos: "Оператор iiko",            level: 3, branchId: 3,    parentId: "u4" },
-  { id: "u14", name: "Сидорова Л. И.", role: "accountant", pos: "Старший бухгалтер",        level: 2, branchId: 1,    parentId: "u3" },
-  { id: "u15", name: "Юсупова Г. М.",  role: "finance",    pos: "Главный бухгалтер",        level: 2, branchId: null, parentId: "u3" },
+  {
+    id: "u1",
+    name: "Соколов Д. А.",
+    role: "director",
+    pos: "Генеральный директор",
+    level: 1,
+    branchId: null,
+    parentId: null,
+  },
+  {
+    id: "u2",
+    name: "Орлова Е. В.",
+    role: "director",
+    pos: "Операционный директор",
+    level: 1,
+    branchId: null,
+    parentId: "u1",
+  },
+  {
+    id: "u3",
+    name: "Иванова М. П.",
+    role: "finance",
+    pos: "Финансист",
+    level: 2,
+    branchId: null,
+    parentId: "u1",
+  },
+  {
+    id: "u4",
+    name: "Ахмедов И. О.",
+    role: "manager",
+    pos: "Управляющий филиалом",
+    level: 2,
+    branchId: 3,
+    parentId: "u2",
+  },
+  {
+    id: "u5",
+    name: "Кузнецов П. С.",
+    role: "manager",
+    pos: "Управляющий филиалом",
+    level: 2,
+    branchId: 2,
+    parentId: "u2",
+  },
+  {
+    id: "u6",
+    name: "Петров А. И.",
+    role: "sysadmin",
+    pos: "Системный администратор",
+    level: 3,
+    branchId: 3,
+    parentId: "u4",
+  },
+  {
+    id: "u7",
+    name: "Смирнов В. Н.",
+    role: "staff",
+    pos: "Техник",
+    level: 3,
+    branchId: 2,
+    parentId: "u5",
+  },
+  {
+    id: "u8",
+    name: "Васильева О. К.",
+    role: "accountant",
+    pos: "Бухгалтер",
+    level: 3,
+    branchId: 1,
+    parentId: "u3",
+  },
+  {
+    id: "u9",
+    name: "Новиков Р. Т.",
+    role: "staff",
+    pos: "Линейный сотрудник",
+    level: 4,
+    branchId: 3,
+    parentId: "u4",
+  },
+  {
+    id: "u10",
+    name: "Морозов А. Л.",
+    role: "manager",
+    pos: "Управляющий филиалом",
+    level: 2,
+    branchId: 4,
+    parentId: "u2",
+  },
+  {
+    id: "u11",
+    name: "Зайцев К. В.",
+    role: "staff",
+    pos: "Техник",
+    level: 3,
+    branchId: 4,
+    parentId: "u10",
+  },
+  {
+    id: "u12",
+    name: "Тошматов Ж. Б.",
+    role: "staff",
+    pos: "Заведующий складом",
+    level: 3,
+    branchId: 3,
+    parentId: "u4",
+  },
+  {
+    id: "u13",
+    name: "Каримова Д. А.",
+    role: "staff",
+    pos: "Оператор iiko",
+    level: 3,
+    branchId: 3,
+    parentId: "u4",
+  },
+  {
+    id: "u14",
+    name: "Сидорова Л. И.",
+    role: "accountant",
+    pos: "Старший бухгалтер",
+    level: 2,
+    branchId: 1,
+    parentId: "u3",
+  },
+  {
+    id: "u15",
+    name: "Юсупова Г. М.",
+    role: "finance",
+    pos: "Главный бухгалтер",
+    level: 2,
+    branchId: null,
+    parentId: "u3",
+  },
 ];
 const POSITIONS = [
   { id: "p1", title: "Генеральный директор", level: 1 },
@@ -274,14 +652,39 @@ const POSITIONS = [
   { id: "p11", title: "Старший бухгалтер", level: 2 },
   { id: "p12", title: "Главный бухгалтер", level: 2 },
 ];
-const DEFAULT_SLA = { "Критический": 2, "Высокий": 8, "Обычный": 24 };
+const DEFAULT_SLA = { Критический: 2, Высокий: 8, Обычный: 24 };
 const SOP_STEPS = {
-  "IT-поддержка": ["Диагностировать проблему", "Проверить питание и подключение", "Устранить сбой или заменить узел", "Проверить работу вместе с пользователем", "Прикрепить фото/скрин результата"],
-  "Ремонт оборудования": ["Осмотреть оборудование, зафиксировать неисправность", "Устранить неисправность", "Проверить работу после ремонта", "Прикрепить фотоотчёт (через камеру)"],
-  "Финансы / Закупка": ["Сверить сумму со счётом", "Проверить бюджетный лимит филиала", "Приложить скан счёта", "Дождаться согласования"],
-  "Прочее": ["Выполнить задачу", "Зафиксировать результат", "Прикрепить подтверждение"],
+  "IT-поддержка": [
+    "Диагностировать проблему",
+    "Проверить питание и подключение",
+    "Устранить сбой или заменить узел",
+    "Проверить работу вместе с пользователем",
+    "Прикрепить фото/скрин результата",
+  ],
+  "Ремонт оборудования": [
+    "Осмотреть оборудование, зафиксировать неисправность",
+    "Устранить неисправность",
+    "Проверить работу после ремонта",
+    "Прикрепить фотоотчёт (через камеру)",
+  ],
+  "Финансы / Закупка": [
+    "Сверить сумму со счётом",
+    "Проверить бюджетный лимит филиала",
+    "Приложить скан счёта",
+    "Дождаться согласования",
+  ],
+  Прочее: [
+    "Выполнить задачу",
+    "Зафиксировать результат",
+    "Прикрепить подтверждение",
+  ],
 };
-const DEFAULT_SOPS = Object.fromEntries(Object.entries(SOP_STEPS).map(([k, v]) => [k, { steps: v, requirePhoto: true }]));
+const DEFAULT_SOPS = Object.fromEntries(
+  Object.entries(SOP_STEPS).map(([k, v]) => [
+    k,
+    { steps: v, requirePhoto: true },
+  ]),
+);
 
 // Отделы (границы доступа). restricted = закрытый отдел: его задачи видны
 // только сотрудникам этого отдела, финансам и высшему руководству.
@@ -293,67 +696,348 @@ const DEPARTMENTS = [
   { id: "d5", name: "Управление", restricted: false },
 ];
 // Какой отдел отвечает за категорию задачи (используется при создании заявки)
-const CAT_DEPT = { "IT-поддержка": "d2", "Ремонт оборудования": "d3", "Финансы / Закупка": "d1", "Прочее": "d4" };
+const CAT_DEPT = {
+  "IT-поддержка": "d2",
+  "Ремонт оборудования": "d3",
+  "Финансы / Закупка": "d1",
+  Прочее: "d4",
+};
 // Привязка демо-сотрудников к отделам
-const USER_DEPT = { u1: "d5", u2: "d5", u3: "d1", u4: "d5", u5: "d5", u6: "d2", u7: "d3", u8: "d1", u9: "d4", u10: "d5", u11: "d3", u12: "d4", u13: "d4", u14: "d1", u15: "d1" };
+const USER_DEPT = {
+  u1: "d5",
+  u2: "d5",
+  u3: "d1",
+  u4: "d5",
+  u5: "d5",
+  u6: "d2",
+  u7: "d3",
+  u8: "d1",
+  u9: "d4",
+  u10: "d5",
+  u11: "d3",
+  u12: "d4",
+  u13: "d4",
+  u14: "d1",
+  u15: "d1",
+};
 
 // Шаблоны процессов (маршруты согласования) — упорядоченные шаги с ответственными.
 const ROUTE_TEMPLATES = [
   {
-    id: "r1", name: "Приёмка товара и оплата", category: "Финансы / Закупка",
+    id: "r1",
+    name: "Приёмка товара и оплата",
+    category: "Финансы / Закупка",
     steps: [
-      { title: "Приёмка товара", actor: "Заведующий складом", action: "Принял товар", photo: true, doc: false },
-      { title: "Приходная накладная", actor: "Оператор iiko", action: "Оформил приходную накладную", photo: false, doc: true, docLabel: "Приходная накладная" },
-      { title: "Проверка оприходования", actor: "Старший бухгалтер", action: "Проверил оприходование", photo: false, doc: false, check: true },
-      { title: "Проверка и оплата", actor: "Главный бухгалтер", action: "Проверил всё и провёл оплату", photo: false, doc: true, docLabel: "Счёт-фактура", check: true, pay: true },
+      {
+        title: "Приёмка товара",
+        actor: "Заведующий складом",
+        action: "Принял товар",
+        photo: true,
+        doc: false,
+      },
+      {
+        title: "Приходная накладная",
+        actor: "Оператор iiko",
+        action: "Оформил приходную накладную",
+        photo: false,
+        doc: true,
+        docLabel: "Приходная накладная",
+      },
+      {
+        title: "Проверка оприходования",
+        actor: "Старший бухгалтер",
+        action: "Проверил оприходование",
+        photo: false,
+        doc: false,
+        check: true,
+      },
+      {
+        title: "Проверка и оплата",
+        actor: "Главный бухгалтер",
+        action: "Проверил всё и провёл оплату",
+        photo: false,
+        doc: true,
+        docLabel: "Счёт-фактура",
+        check: true,
+        pay: true,
+      },
     ],
   },
 ];
 const routeById = (id) => ORG.routes.find((r) => r.id === id);
 function assignByActor(actor, branchId) {
   const cands = ORG.users.filter((u) => u.pos === actor && u.active !== false);
-  return (cands.find((u) => u.branchId === branchId) || cands[0] || ORG.users[0])?.id;
+  return (
+    cands.find((u) => u.branchId === branchId) ||
+    cands[0] ||
+    ORG.users[0]
+  )?.id;
 }
 
 // Живой реестр оргструктуры: редактируется в Админ-панели, читается хелперами.
-let ORG = { companies: COMPANIES, branches: BRANCHES, positions: POSITIONS, users: USERS, departments: DEPARTMENTS, catDept: CAT_DEPT, routes: ROUTE_TEMPLATES, budgets: BRANCH_BUDGET, sla: DEFAULT_SLA, sops: DEFAULT_SOPS };
+let ORG = {
+  companies: COMPANIES,
+  branches: BRANCHES,
+  positions: POSITIONS,
+  users: USERS,
+  departments: DEPARTMENTS,
+  catDept: CAT_DEPT,
+  routes: ROUTE_TEMPLATES,
+  budgets: BRANCH_BUDGET,
+  sla: DEFAULT_SLA,
+  sops: DEFAULT_SOPS,
+};
 function syncOrg(s) {
   if (!s) return;
   ORG = {
-    companies: s.companies || COMPANIES, branches: s.branches || BRANCHES,
-    positions: s.positions || POSITIONS, users: s.users || USERS,
-    departments: s.departments || DEPARTMENTS, catDept: s.catDept || CAT_DEPT,
+    companies: s.companies || COMPANIES,
+    branches: s.branches || BRANCHES,
+    positions: s.positions || POSITIONS,
+    users: s.users || USERS,
+    departments: s.departments || DEPARTMENTS,
+    catDept: s.catDept || CAT_DEPT,
     routes: s.routes || ROUTE_TEMPLATES,
-    budgets: s.budgets || BRANCH_BUDGET, sla: s.sla || DEFAULT_SLA, sops: s.sops || DEFAULT_SOPS,
+    budgets: s.budgets || BRANCH_BUDGET,
+    sla: s.sla || DEFAULT_SLA,
+    sops: s.sops || DEFAULT_SOPS,
   };
 }
 const userById = (id) => ORG.users.find((u) => u.id === id);
 const branchById = (id) => ORG.branches.find((b) => b.id === id);
-const companyOfBranch = (id) => { const b = branchById(id); return b ? ORG.companies.find((c) => c.id === b.companyId) : null; };
+const companyOfBranch = (id) => {
+  const b = branchById(id);
+  return b ? ORG.companies.find((c) => c.id === b.companyId) : null;
+};
 const deptById = (id) => ORG.departments.find((d) => d.id === id);
 const deptForCategory = (cat) => ORG.catDept[cat] || "d4";
 const budgetFor = (id) => ORG.budgets[id] || 0;
 const slaFor = (pr) => (ORG.sla[pr] != null ? ORG.sla[pr] : 24);
-const sopFor = (cat) => ORG.sops[cat] || ORG.sops["Прочее"] || { steps: [], requirePhoto: false };
+const sopFor = (cat) =>
+  ORG.sops[cat] || ORG.sops["Прочее"] || { steps: [], requirePhoto: false };
 
 /* ----------------------------- демо-данные -------------------------------- */
 const TASK_SPEC = [
-  { t: "Не работает терминал оплаты", d: "Терминал безналичной оплаты не проводит платежи, на кассе скопилась очередь.", b: 3, e: "u6", c: "u4", ph: 3, cat: "IT-поддержка", pr: "Критический", slaH: -1, com: 2, att: 1, fav: true },
-  { t: "Протёк кондиционер в зале", d: "Кондиционер в главном зале течёт, есть риск порчи документов.", b: 3, e: "u6", c: "u4", ph: 4, cat: "Ремонт оборудования", pr: "Высокий", slaH: 1, com: 5, att: 2 },
-  { t: "Заявка на закупку ТМЦ (бумага, картриджи)", d: "Нужно закупить бумагу А4 и картриджи для филиала.", b: 3, e: "u9", c: "u4", ph: 2, cat: "Финансы / Закупка", pr: "Обычный", slaH: 20, com: 1, att: 0, amount: 45000 },
-  { t: "Счёт на оплату аренды помещения", d: "Поступил счёт на аренду за текущий месяц, требуется согласование.", b: 1, e: "u8", c: "u3", ph: 4, cat: "Финансы / Закупка", pr: "Высокий", slaH: 4, com: 3, att: 1, amount: 90000 },
-  { t: "Сломался принтер, не печатает накладные", d: "Принтер на складе перестал печатать, накладные не выгружаются.", b: 2, e: "u7", c: "u5", ph: 1, cat: "IT-поддержка", pr: "Высокий", slaH: 8, com: 0, att: 0 },
-  { t: "Ремонт холодильной витрины", d: "Витрина не держала температуру, вызывали мастера.", b: 2, e: "u7", c: "u5", ph: 5, cat: "Ремонт оборудования", pr: "Высокий", slaH: -40, com: 8, att: 3, amount: 150000 },
-  { t: "Замена ламп освещения в зале", d: "Перегорели лампы, заменили на новые.", b: 3, e: "u9", c: "u4", ph: 5, cat: "Ремонт оборудования", pr: "Обычный", slaH: -50, com: 2, att: 1, amount: 8000 },
-  { t: "Обновление кассового ПО", d: "Установили обновление кассовой программы на всех кассах.", b: 3, e: "u6", c: "u4", ph: 5, cat: "IT-поддержка", pr: "Обычный", slaH: -30, com: 4, att: 0 },
-  { t: "Не открывается замок склада", d: "Заклинило замок на складе, нет доступа к товару.", b: 4, e: "u11", c: "u10", ph: 1, cat: "Ремонт оборудования", pr: "Критический", slaH: 2, com: 0, att: 0, amount: 5000 },
-  { t: "Закупка оборудования для филиала", d: "Требуется закупка нового оборудования, счёт на согласовании.", b: 4, e: "u11", c: "u10", ph: 4, cat: "Финансы / Закупка", pr: "Высокий", slaH: 6, com: 2, att: 1, amount: 150000 },
-  { t: "Авария: прорыв трубы, затопление", d: "Прорвало трубу в подсобном помещении, идёт затопление.", b: 4, e: "u11", c: "u10", ph: 3, cat: "Ремонт оборудования", pr: "Критический", slaH: -0.5, com: 6, att: 1, amount: 95000, fav: true },
-  { t: "Заявка на отпуск", d: "Прошу предоставить ежегодный оплачиваемый отпуск.", b: 3, e: "u9", c: "u4", ph: 2, cat: "Прочее", pr: "Обычный", slaH: 40, com: 0, att: 0 },
-  { t: "Слетел роутер, нет интернета", d: "Пропал интернет на филиале, не работают онлайн-кассы.", b: 2, e: "u7", c: "u5", ph: 3, cat: "IT-поддержка", pr: "Высокий", slaH: 2, com: 3, att: 0 },
-  { t: "Списание просроченных продуктов", d: "Списание партии просроченных продуктов по акту.", b: 3, e: "u9", c: "u4", ph: 5, cat: "Прочее", pr: "Обычный", slaH: -60, com: 1, att: 1, amount: 12000 },
-  { t: "Ремонт кофемашины", d: "Кофемашина не варит кофе, требуется ремонт.", b: 4, e: "u11", c: "u10", ph: 5, cat: "Ремонт оборудования", pr: "Обычный", slaH: -20, com: 3, att: 1, amount: 30000 },
-  { t: "Повторный ремонт кофемашины", d: "Кофемашина снова вышла из строя через неделю после ремонта.", b: 4, e: "u11", c: "u10", ph: 3, cat: "Ремонт оборудования", pr: "Высокий", slaH: 3, com: 2, att: 0, amount: 35000, overBudget: true },
+  {
+    t: "Не работает терминал оплаты",
+    d: "Терминал безналичной оплаты не проводит платежи, на кассе скопилась очередь.",
+    b: 3,
+    e: "u6",
+    c: "u4",
+    ph: 3,
+    cat: "IT-поддержка",
+    pr: "Критический",
+    slaH: -1,
+    com: 2,
+    att: 1,
+    fav: true,
+  },
+  {
+    t: "Протёк кондиционер в зале",
+    d: "Кондиционер в главном зале течёт, есть риск порчи документов.",
+    b: 3,
+    e: "u6",
+    c: "u4",
+    ph: 4,
+    cat: "Ремонт оборудования",
+    pr: "Высокий",
+    slaH: 1,
+    com: 5,
+    att: 2,
+  },
+  {
+    t: "Заявка на закупку ТМЦ (бумага, картриджи)",
+    d: "Нужно закупить бумагу А4 и картриджи для филиала.",
+    b: 3,
+    e: "u9",
+    c: "u4",
+    ph: 2,
+    cat: "Финансы / Закупка",
+    pr: "Обычный",
+    slaH: 20,
+    com: 1,
+    att: 0,
+    amount: 45000,
+  },
+  {
+    t: "Счёт на оплату аренды помещения",
+    d: "Поступил счёт на аренду за текущий месяц, требуется согласование.",
+    b: 1,
+    e: "u8",
+    c: "u3",
+    ph: 4,
+    cat: "Финансы / Закупка",
+    pr: "Высокий",
+    slaH: 4,
+    com: 3,
+    att: 1,
+    amount: 90000,
+  },
+  {
+    t: "Сломался принтер, не печатает накладные",
+    d: "Принтер на складе перестал печатать, накладные не выгружаются.",
+    b: 2,
+    e: "u7",
+    c: "u5",
+    ph: 1,
+    cat: "IT-поддержка",
+    pr: "Высокий",
+    slaH: 8,
+    com: 0,
+    att: 0,
+  },
+  {
+    t: "Ремонт холодильной витрины",
+    d: "Витрина не держала температуру, вызывали мастера.",
+    b: 2,
+    e: "u7",
+    c: "u5",
+    ph: 5,
+    cat: "Ремонт оборудования",
+    pr: "Высокий",
+    slaH: -40,
+    com: 8,
+    att: 3,
+    amount: 150000,
+  },
+  {
+    t: "Замена ламп освещения в зале",
+    d: "Перегорели лампы, заменили на новые.",
+    b: 3,
+    e: "u9",
+    c: "u4",
+    ph: 5,
+    cat: "Ремонт оборудования",
+    pr: "Обычный",
+    slaH: -50,
+    com: 2,
+    att: 1,
+    amount: 8000,
+  },
+  {
+    t: "Обновление кассового ПО",
+    d: "Установили обновление кассовой программы на всех кассах.",
+    b: 3,
+    e: "u6",
+    c: "u4",
+    ph: 5,
+    cat: "IT-поддержка",
+    pr: "Обычный",
+    slaH: -30,
+    com: 4,
+    att: 0,
+  },
+  {
+    t: "Не открывается замок склада",
+    d: "Заклинило замок на складе, нет доступа к товару.",
+    b: 4,
+    e: "u11",
+    c: "u10",
+    ph: 1,
+    cat: "Ремонт оборудования",
+    pr: "Критический",
+    slaH: 2,
+    com: 0,
+    att: 0,
+    amount: 5000,
+  },
+  {
+    t: "Закупка оборудования для филиала",
+    d: "Требуется закупка нового оборудования, счёт на согласовании.",
+    b: 4,
+    e: "u11",
+    c: "u10",
+    ph: 4,
+    cat: "Финансы / Закупка",
+    pr: "Высокий",
+    slaH: 6,
+    com: 2,
+    att: 1,
+    amount: 150000,
+  },
+  {
+    t: "Авария: прорыв трубы, затопление",
+    d: "Прорвало трубу в подсобном помещении, идёт затопление.",
+    b: 4,
+    e: "u11",
+    c: "u10",
+    ph: 3,
+    cat: "Ремонт оборудования",
+    pr: "Критический",
+    slaH: -0.5,
+    com: 6,
+    att: 1,
+    amount: 95000,
+    fav: true,
+  },
+  {
+    t: "Заявка на отпуск",
+    d: "Прошу предоставить ежегодный оплачиваемый отпуск.",
+    b: 3,
+    e: "u9",
+    c: "u4",
+    ph: 2,
+    cat: "Прочее",
+    pr: "Обычный",
+    slaH: 40,
+    com: 0,
+    att: 0,
+  },
+  {
+    t: "Слетел роутер, нет интернета",
+    d: "Пропал интернет на филиале, не работают онлайн-кассы.",
+    b: 2,
+    e: "u7",
+    c: "u5",
+    ph: 3,
+    cat: "IT-поддержка",
+    pr: "Высокий",
+    slaH: 2,
+    com: 3,
+    att: 0,
+  },
+  {
+    t: "Списание просроченных продуктов",
+    d: "Списание партии просроченных продуктов по акту.",
+    b: 3,
+    e: "u9",
+    c: "u4",
+    ph: 5,
+    cat: "Прочее",
+    pr: "Обычный",
+    slaH: -60,
+    com: 1,
+    att: 1,
+    amount: 12000,
+  },
+  {
+    t: "Ремонт кофемашины",
+    d: "Кофемашина не варит кофе, требуется ремонт.",
+    b: 4,
+    e: "u11",
+    c: "u10",
+    ph: 5,
+    cat: "Ремонт оборудования",
+    pr: "Обычный",
+    slaH: -20,
+    com: 3,
+    att: 1,
+    amount: 30000,
+  },
+  {
+    t: "Повторный ремонт кофемашины",
+    d: "Кофемашина снова вышла из строя через неделю после ремонта.",
+    b: 4,
+    e: "u11",
+    c: "u10",
+    ph: 3,
+    cat: "Ремонт оборудования",
+    pr: "Высокий",
+    slaH: 3,
+    com: 2,
+    att: 0,
+    amount: 35000,
+    overBudget: true,
+  },
 ];
 
 function makeSeed() {
@@ -366,16 +1050,33 @@ function makeSeed() {
     else if (s.ph === 4) createdAt = now - (2 + (i % 2)) * D;
     else createdAt = now - (5 + (i % 4)) * D;
     return {
-      id: "t" + (i + 1), title: s.t, description: s.d, branchId: s.b,
+      id: "t" + (i + 1),
+      title: s.t,
+      description: s.d,
+      branchId: s.b,
       departmentId: CAT_DEPT[s.cat] || "d4",
-      executorId: s.e, controllerId: s.c, createdBy: s.c, phase: s.ph,
-      cat: s.cat, pr: s.pr, amount: s.amount || null, overBudget: !!s.overBudget,
-      attachments: s.att || 0, favorite: !!s.fav,
-      createdAt, slaDeadline: now + s.slaH * H,
+      executorId: s.e,
+      controllerId: s.c,
+      createdBy: s.c,
+      phase: s.ph,
+      cat: s.cat,
+      pr: s.pr,
+      amount: s.amount || null,
+      overBudget: !!s.overBudget,
+      attachments: s.att || 0,
+      favorite: !!s.fav,
+      createdAt,
+      slaDeadline: now + s.slaH * H,
       comments: Array.from({ length: s.com || 0 }, (_, k) => ({
         userId: k % 2 ? s.c : s.e,
-        text: ["Принято в работу.", "Уточнил детали у поставщика.", "Жду подтверждения.",
-               "Прикрепил фото.", "Готово, проверьте.", "Перепроверил ещё раз."][k % 6],
+        text: [
+          "Принято в работу.",
+          "Уточнил детали у поставщика.",
+          "Жду подтверждения.",
+          "Прикрепил фото.",
+          "Готово, проверьте.",
+          "Перепроверил ещё раз.",
+        ][k % 6],
         at: createdAt + (k + 1) * 30 * M,
       })),
     };
@@ -390,85 +1091,206 @@ function makeSeed() {
       history.push({ id: uid(), taskId: t.id, userId, action, from, to, at });
     };
     push(t.createdBy, "created", null, 1, t.createdAt);
-    if (t.phase >= 2) push(t.executorId, "viewed", 1, 2, t.createdAt + (8 + (i % 5) * 3) * M);
-    if (t.phase >= 3) push(t.executorId, "start", 2, 3, t.createdAt + (12 + (i % 4) * 4) * H);
-    if (t.phase >= 4) push(t.executorId, "review", 3, 4, t.createdAt + (16 + (i % 4) * 3) * H);
-    if (t.phase >= 5) push(t.controllerId, "done", 4, 5, t.createdAt + (40 + (i % 5) * 6) * H);
+    if (t.phase >= 2)
+      push(t.executorId, "viewed", 1, 2, t.createdAt + (8 + (i % 5) * 3) * M);
+    if (t.phase >= 3)
+      push(t.executorId, "start", 2, 3, t.createdAt + (12 + (i % 4) * 4) * H);
+    if (t.phase >= 4)
+      push(t.executorId, "review", 3, 4, t.createdAt + (16 + (i % 4) * 3) * H);
+    if (t.phase >= 5)
+      push(t.controllerId, "done", 4, 5, t.createdAt + (40 + (i % 5) * 6) * H);
   });
 
   const openIds = ["u4", "u5", "u6", "u7", "u9", "u10", "u11"];
   const shifts = {};
-  USERS.forEach((u) => { shifts[u.id] = { open: openIds.includes(u.id), openedAt: openIds.includes(u.id) ? now - 4 * H : null }; });
+  USERS.forEach((u) => {
+    shifts[u.id] = {
+      open: openIds.includes(u.id),
+      openedAt: openIds.includes(u.id) ? now - 4 * H : null,
+    };
+  });
 
   // демо-табель: смены за прошедшие дни
   const timesheet = [];
-  ["u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14"].forEach((id, k) => {
+  [
+    "u4",
+    "u5",
+    "u6",
+    "u7",
+    "u8",
+    "u9",
+    "u10",
+    "u11",
+    "u12",
+    "u13",
+    "u14",
+  ].forEach((id, k) => {
     for (let d = 1; d <= 4; d++) {
       const end = now - d * D + (2 - (k % 3)) * H;
       const dur = (8 + ((k + d) % 3)) * H + (k % 2 ? 30 * M : 0);
-      timesheet.push({ id: uid(), userId: id, start: end - dur, end, durationMs: dur });
+      timesheet.push({
+        id: uid(),
+        userId: id,
+        start: end - dur,
+        end,
+        durationMs: dur,
+      });
     }
   });
 
   // демо-отчёты по кассам филиалов
   const cashReports = [];
-  const dstr = (ms) => { const dt = new Date(ms); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`; };
+  const dstr = (ms) => {
+    const dt = new Date(ms);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  };
   const BR_MGR = { 1: "u8", 2: "u5", 3: "u4", 4: "u10", 5: "u4" };
   const rnd = (base, p) => Math.round((base * p) / 1000) * 1000;
   [1, 2, 3, 4, 5].forEach((bId, bi) => {
     for (let d = 1; d <= 6; d++) {
       const base = 6_000_000 + bi * 1_400_000 + ((d * 37) % 9) * 300_000;
-      const fiscal = rnd(base, 0.55), nonFiscal = rnd(base, 0.12);
-      const humo = rnd(base, 0.11), uzcard = rnd(base, 0.07), click = rnd(base, 0.05), payme = rnd(base, 0.06);
-      const uzumTezkor = d % 3 === 0 ? rnd(base, 0.02) : 0, yandex = d % 2 === 0 ? rnd(base, 0.03) : 0;
-      const transfer = d % 4 === 0 ? rnd(base, 0.04) : 0, transferCount = transfer ? 1 + (d % 3) : 0;
-      const expenses = rnd(base, 0.15), debt = d % 5 === 0 ? 200_000 : 0, noPay = d % 6 === 0 ? 150_000 : 0;
-      const total = fiscal + nonFiscal + humo + uzcard + click + payme + uzumTezkor + yandex + transfer;
+      const fiscal = rnd(base, 0.55),
+        nonFiscal = rnd(base, 0.12);
+      const humo = rnd(base, 0.11),
+        uzcard = rnd(base, 0.07),
+        click = rnd(base, 0.05),
+        payme = rnd(base, 0.06);
+      const uzumTezkor = d % 3 === 0 ? rnd(base, 0.02) : 0,
+        yandex = d % 2 === 0 ? rnd(base, 0.03) : 0;
+      const transfer = d % 4 === 0 ? rnd(base, 0.04) : 0,
+        transferCount = transfer ? 1 + (d % 3) : 0;
+      const expenses = rnd(base, 0.15),
+        debt = d % 5 === 0 ? 200_000 : 0,
+        noPay = d % 6 === 0 ? 150_000 : 0;
+      const total =
+        fiscal +
+        nonFiscal +
+        humo +
+        uzcard +
+        click +
+        payme +
+        uzumTezkor +
+        yandex +
+        transfer;
       const iiko = total + ((d % 3) - 1) * 50_000;
       const diff = total - iiko;
       const confirmed = d >= 3;
-      cashReports.push({ id: uid(), date: dstr(now - d * D), branchId: bId, userId: BR_MGR[bId], createdAt: now - d * D,
-        status: confirmed ? "confirmed" : "submitted", submittedAt: now - d * D, confirmedAt: confirmed ? now - (d - 1) * D : undefined, confirmedBy: confirmed ? "u1" : undefined,
-        comment: diff !== 0 ? "Расхождение по эквайрингу, уточняется у банка" : "",
-        expensesNote: expenses ? ["Закупка продуктов на рынке", "Хозтовары и упаковка", "Мелкий ремонт оборудования", "Такси для доставки, вода"][d % 4] : "",
-        transfer, transferCount, fiscal, nonFiscal, humo, uzcard, click, payme, uzumTezkor, yandex, debt, noPay, expenses, iiko });
+      cashReports.push({
+        id: uid(),
+        date: dstr(now - d * D),
+        branchId: bId,
+        userId: BR_MGR[bId],
+        createdAt: now - d * D,
+        status: confirmed ? "confirmed" : "submitted",
+        submittedAt: now - d * D,
+        confirmedAt: confirmed ? now - (d - 1) * D : undefined,
+        confirmedBy: confirmed ? "u1" : undefined,
+        comment:
+          diff !== 0 ? "Расхождение по эквайрингу, уточняется у банка" : "",
+        expensesNote: expenses
+          ? [
+              "Закупка продуктов на рынке",
+              "Хозтовары и упаковка",
+              "Мелкий ремонт оборудования",
+              "Такси для доставки, вода",
+            ][d % 4]
+          : "",
+        transfer,
+        transferCount,
+        fiscal,
+        nonFiscal,
+        humo,
+        uzcard,
+        click,
+        payme,
+        uzumTezkor,
+        yandex,
+        debt,
+        noPay,
+        expenses,
+        iiko,
+      });
     }
   });
 
   // демо-инкассации (передачи наличных в головной офис)
   const cashHandovers = [];
   [1, 2, 3, 4, 5].forEach((bId) => {
-    const cashTotal = cashReports.filter((r) => r.branchId === bId).reduce((a, r) => a + (r.fiscal || 0) + (r.nonFiscal || 0), 0);
-    const part1 = Math.round(cashTotal * 0.6 / 1000) * 1000;
-    const part2 = Math.round(cashTotal * 0.25 / 1000) * 1000;
-    cashHandovers.push({ id: uid(), branchId: bId, date: dstr(now - 3 * D), amount: part1, via: "Инкассатор банка", note: "", userId: BR_MGR[bId], createdAt: now - 3 * D, status: "received", receivedBy: "u1", receivedAt: now - 2 * D });
-    cashHandovers.push({ id: uid(), branchId: bId, date: dstr(now - 1 * D), amount: part2, via: "Водитель офиса", note: "", userId: BR_MGR[bId], createdAt: now - 1 * D, status: "sent" });
+    const cashTotal = cashReports
+      .filter((r) => r.branchId === bId)
+      .reduce((a, r) => a + (r.fiscal || 0) + (r.nonFiscal || 0), 0);
+    const part1 = Math.round((cashTotal * 0.6) / 1000) * 1000;
+    const part2 = Math.round((cashTotal * 0.25) / 1000) * 1000;
+    cashHandovers.push({
+      id: uid(),
+      branchId: bId,
+      date: dstr(now - 3 * D),
+      amount: part1,
+      via: "Инкассатор банка",
+      note: "",
+      userId: BR_MGR[bId],
+      createdAt: now - 3 * D,
+      status: "received",
+      receivedBy: "u1",
+      receivedAt: now - 2 * D,
+    });
+    cashHandovers.push({
+      id: uid(),
+      branchId: bId,
+      date: dstr(now - 1 * D),
+      amount: part2,
+      via: "Водитель офиса",
+      note: "",
+      userId: BR_MGR[bId],
+      createdAt: now - 1 * D,
+      status: "sent",
+    });
   });
 
   return {
-    tasks, history, shifts, timesheet, cashReports, cashHandovers, currentUserId: "u4",
+    tasks,
+    history,
+    shifts,
+    timesheet,
+    cashReports,
+    cashHandovers,
+    currentUserId: "u4",
     companies: COMPANIES.map((c) => ({ ...c })),
     branches: BRANCHES.map((b) => ({ ...b })),
     positions: POSITIONS.map((p) => ({ ...p })),
-    users: USERS.map((u) => ({ ...u, active: true, departmentId: USER_DEPT[u.id] || "d5" })),
+    users: USERS.map((u) => ({
+      ...u,
+      active: true,
+      departmentId: USER_DEPT[u.id] || "d5",
+    })),
     departments: DEPARTMENTS.map((d) => ({ ...d })),
     catDept: { ...CAT_DEPT },
-    routes: ROUTE_TEMPLATES.map((r) => ({ ...r, steps: r.steps.map((st) => ({ ...st })) })),
+    routes: ROUTE_TEMPLATES.map((r) => ({
+      ...r,
+      steps: r.steps.map((st) => ({ ...st })),
+    })),
     budgets: { ...BRANCH_BUDGET },
     sla: { ...DEFAULT_SLA },
     sops: JSON.parse(JSON.stringify(DEFAULT_SOPS)),
-    settings: { voiceInput: true, watermark: true, ipRestrict: false, lang: "ru" },
+    settings: {
+      voiceInput: true,
+      watermark: true,
+      ipRestrict: false,
+      lang: "ru",
+    },
   };
 }
 
 /* ---------------- карта «когда задача вошла в фазу» (по журналу) ----------- */
 function getEnter(history) {
   const enter = {};
-  [...history].sort((a, z) => a.at - z.at).forEach((h) => {
-    if (h.to == null) return;
-    enter[h.taskId] = enter[h.taskId] || {};
-    if (enter[h.taskId][h.to] == null) enter[h.taskId][h.to] = h.at;
-  });
+  [...history]
+    .sort((a, z) => a.at - z.at)
+    .forEach((h) => {
+      if (h.to == null) return;
+      enter[h.taskId] = enter[h.taskId] || {};
+      if (enter[h.taskId][h.to] == null) enter[h.taskId][h.to] = h.at;
+    });
   return enter;
 }
 
@@ -476,22 +1298,57 @@ function getEnter(history) {
 // Потрачено по филиалу за месяц (заявки в работе + завершённые с суммой)
 function spentForBranch(tasks, branchId, now) {
   return tasks
-    .filter((t) => t.branchId === branchId && t.amount && t.phase >= 2 && now - t.createdAt < 30 * D)
+    .filter(
+      (t) =>
+        t.branchId === branchId &&
+        t.amount &&
+        t.phase >= 2 &&
+        now - t.createdAt < 30 * D,
+    )
     .reduce((a, t) => a + t.amount, 0);
 }
 
 /* ---------------------- симуляция ИИ (Этап 4) ----------------------------- */
 function aiParse(text) {
   const s = text.toLowerCase();
-  const map = [["север", 2], ["юг", 3], ["восток", 4], ["центр", 1]];
+  const map = [
+    ["север", 2],
+    ["юг", 3],
+    ["восток", 4],
+    ["центр", 1],
+  ];
   let branchId = 3;
-  for (const [k, id] of map) if (s.includes(k)) { branchId = id; break; }
+  for (const [k, id] of map)
+    if (s.includes(k)) {
+      branchId = id;
+      break;
+    }
   let cat = "Прочее";
-  if (/(терминал|принтер|компьютер|интернет|роутер|сервер|касс|по\b|программ|1с)/.test(s)) cat = "IT-поддержка";
-  else if (/(кондиционер|потек|потёк|течёт|течет|сломал|не работает|ремонт|замок|труб|витрин|лампа|освещ|затопл|кофемашин|холодильник)/.test(s)) cat = "Ремонт оборудования";
-  else if (/(счёт|счет|оплат|деньг|бюджет|закуп|аренд|инвойс|накладн|товар|пакет)/.test(s)) cat = "Финансы / Закупка";
+  if (
+    /(терминал|принтер|компьютер|интернет|роутер|сервер|касс|по\b|программ|1с)/.test(
+      s,
+    )
+  )
+    cat = "IT-поддержка";
+  else if (
+    /(кондиционер|потек|потёк|течёт|течет|сломал|не работает|ремонт|замок|труб|витрин|лампа|освещ|затопл|кофемашин|холодильник)/.test(
+      s,
+    )
+  )
+    cat = "Ремонт оборудования";
+  else if (
+    /(счёт|счет|оплат|деньг|бюджет|закуп|аренд|инвойс|накладн|товар|пакет)/.test(
+      s,
+    )
+  )
+    cat = "Финансы / Закупка";
   let pr = "Обычный";
-  if (/(срочно|критич|горит|авари|прорыв|сейчас|немедленно|очеред|заканчива)/.test(s)) pr = "Критический";
+  if (
+    /(срочно|критич|горит|авари|прорыв|сейчас|немедленно|очеред|заканчива)/.test(
+      s,
+    )
+  )
+    pr = "Критический";
   else if (/(сегодня|быстро|важно|высок)/.test(s)) pr = "Высокий";
   let amount = null;
   const mt = s.replace(/\s/g, "").match(/(\d{4,})(сум|so['’]?m|som|руб|р|₽)/i);
@@ -500,28 +1357,47 @@ function aiParse(text) {
   return { branchId, cat, pr, amount, slaH };
 }
 function pickExecutor(branchId, cat) {
-  const inB = ORG.users.filter((u) => u.branchId === branchId && u.active !== false);
-  const want = cat === "IT-поддержка" ? ["Системный администратор", "Техник"]
-    : cat === "Ремонт оборудования" ? ["Техник", "Системный администратор"]
-    : cat.startsWith("Финансы") ? ["Бухгалтер", "Линейный сотрудник"]
-    : ["Линейный сотрудник", "Техник"];
-  for (const w of want) { const f = inB.find((u) => u.pos === w); if (f) return f.id; }
+  const inB = ORG.users.filter(
+    (u) => u.branchId === branchId && u.active !== false,
+  );
+  const want =
+    cat === "IT-поддержка"
+      ? ["Системный администратор", "Техник"]
+      : cat === "Ремонт оборудования"
+        ? ["Техник", "Системный администратор"]
+        : cat.startsWith("Финансы")
+          ? ["Бухгалтер", "Линейный сотрудник"]
+          : ["Линейный сотрудник", "Техник"];
+  for (const w of want) {
+    const f = inB.find((u) => u.pos === w);
+    if (f) return f.id;
+  }
   const any = inB.find((u) => u.role === "staff" || u.role === "sysadmin");
   return any ? any.id : "u6";
 }
 function pickController(branchId) {
-  const m = ORG.users.find((u) => u.role === "manager" && u.branchId === branchId && u.active !== false);
+  const m = ORG.users.find(
+    (u) =>
+      u.role === "manager" && u.branchId === branchId && u.active !== false,
+  );
   return m ? m.id : "u2";
 }
 function aiSummary(t) {
-  const ex = userById(t.executorId), ct = userById(t.controllerId);
-  const stage = t.phase >= 5 ? "Задача завершена и принята контролёром."
-    : t.phase === 4 ? "Работа выполнена и ожидает финальной проверки контролёра."
-    : t.phase === 3 ? "Задача в активной работе у исполнителя."
-    : "Задача зафиксирована, идёт реакция ответственных.";
-  return `Суть: ${t.title.toLowerCase()}. Категория — ${t.cat}, приоритет — ${t.pr}. ` +
+  const ex = userById(t.executorId),
+    ct = userById(t.controllerId);
+  const stage =
+    t.phase >= 5
+      ? "Задача завершена и принята контролёром."
+      : t.phase === 4
+        ? "Работа выполнена и ожидает финальной проверки контролёра."
+        : t.phase === 3
+          ? "Задача в активной работе у исполнителя."
+          : "Задача зафиксирована, идёт реакция ответственных.";
+  return (
+    `Суть: ${t.title.toLowerCase()}. Категория — ${t.cat}, приоритет — ${t.pr}. ` +
     `Исполнитель — ${ex?.pos} (${ex?.name}), контроль — ${ct?.pos} (${ct?.name}). ` +
-    `${stage} Обсуждений в карточке: ${t.comments.length}.`;
+    `${stage} Обсуждений в карточке: ${t.comments.length}.`
+  );
 }
 const VOICE_SAMPLES = [
   "На филиале Юг сломался терминал оплаты, очередь на кассе, срочно нужен мастер!",
@@ -534,15 +1410,27 @@ const VOICE_SAMPLES = [
 function detectAnomalies(tasks, history, now) {
   const enter = getEnter(history);
   // средняя сумма по категории (для поиска ценовых аномалий)
-  const sums = {}, cnt = {};
-  tasks.forEach((t) => { if (t.amount) { sums[t.cat] = (sums[t.cat] || 0) + t.amount; cnt[t.cat] = (cnt[t.cat] || 0) + 1; } });
-  const avgCat = {}; Object.keys(sums).forEach((k) => (avgCat[k] = sums[k] / cnt[k]));
+  const sums = {},
+    cnt = {};
+  tasks.forEach((t) => {
+    if (t.amount) {
+      sums[t.cat] = (sums[t.cat] || 0) + t.amount;
+      cnt[t.cat] = (cnt[t.cat] || 0) + 1;
+    }
+  });
+  const avgCat = {};
+  Object.keys(sums).forEach((k) => (avgCat[k] = sums[k] / cnt[k]));
 
   const flags = {}; // taskId -> [строки]
   tasks.forEach((t) => {
     const f = [];
     const m = enter[t.id] || {};
-    if (t.phase >= 5 && m[5] && (m[5] - t.createdAt) < 5 * M && (t.slaDeadline - t.createdAt) > H)
+    if (
+      t.phase >= 5 &&
+      m[5] &&
+      m[5] - t.createdAt < 5 * M &&
+      t.slaDeadline - t.createdAt > H
+    )
       f.push("Подозрительно быстрое закрытие (возможно фиктивно)");
     if (t.amount && avgCat[t.cat] && t.amount > 1.4 * avgCat[t.cat])
       f.push("Сумма на 40%+ выше средней по категории");
@@ -561,7 +1449,12 @@ function detectAnomalies(tasks, history, now) {
     .filter(([, arr]) => arr.length >= 3)
     .map(([key, arr]) => {
       const [bid, cat] = key.split("|");
-      return { branchId: +bid, cat, count: arr.length, total: arr.reduce((a, t) => a + (t.amount || 0), 0) };
+      return {
+        branchId: +bid,
+        cat,
+        count: arr.length,
+        total: arr.reduce((a, t) => a + (t.amount || 0), 0),
+      };
     })
     .sort((a, z) => z.count - a.count);
 
@@ -570,21 +1463,41 @@ function detectAnomalies(tasks, history, now) {
 
 /* ------------------------------- reducer ---------------------------------- */
 function hist(taskId, userId, action, from, to, note) {
-  return { id: uid(), taskId, userId, action, from, to, at: Date.now(), note: note || null };
+  return {
+    id: uid(),
+    taskId,
+    userId,
+    action,
+    from,
+    to,
+    at: Date.now(),
+    note: note || null,
+  };
 }
-function routePhase(step, len) { return step >= len ? 5 : step === 0 ? 1 : step === len - 1 ? 4 : 3; }
+function routePhase(step, len) {
+  return step >= len ? 5 : step === 0 ? 1 : step === len - 1 ? 4 : 3;
+}
 function init() {
-  return { ...makeSeed(), view: "inbox", selectedId: null,
-    filters: { company: "all", branch: "all", period: "all" }, hydrated: false };
+  return {
+    ...makeSeed(),
+    view: "inbox",
+    selectedId: null,
+    filters: { company: "all", branch: "all", period: "all" },
+    hydrated: false,
+  };
 }
 function reducer(s, a) {
   switch (a.type) {
-    case "HYDRATE": return { ...s, ...a.data, hydrated: true };
-    case "MARK_HYDRATED": return { ...s, hydrated: true };
-    case "SET_VIEW": return { ...s, view: a.view, selectedId: null };
+    case "HYDRATE":
+      return { ...s, ...a.data, hydrated: true };
+    case "MARK_HYDRATED":
+      return { ...s, hydrated: true };
+    case "SET_VIEW":
+      return { ...s, view: a.view, selectedId: null };
     case "SELECT": {
       const t = s.tasks.find((x) => x.id === a.id);
-      let tasks = s.tasks, history = s.history;
+      let tasks = s.tasks,
+        history = s.history;
       if (t && t.phase === 1 && !t.routeId) {
         const me = s.currentUserId;
         if (t.executorId === me || t.controllerId === me) {
@@ -594,52 +1507,116 @@ function reducer(s, a) {
       }
       return { ...s, tasks, history, selectedId: a.id };
     }
-    case "CLOSE_TASK": return { ...s, selectedId: null };
-    case "SET_USER": return { ...s, currentUserId: a.id, selectedId: null,
-      filters: { company: "all", branch: "all", period: "all" } };
+    case "CLOSE_TASK":
+      return { ...s, selectedId: null };
+    case "SET_USER":
+      return {
+        ...s,
+        currentUserId: a.id,
+        selectedId: null,
+        filters: { company: "all", branch: "all", period: "all" },
+      };
     case "TOGGLE_SHIFT": {
       const cur = s.shifts[a.id] || { open: false };
       const open = !cur.open;
       const now = Date.now();
       let timesheet = s.timesheet || [];
       if (!open && cur.openedAt) {
-        timesheet = [{ id: uid(), userId: a.id, start: cur.openedAt, end: now, durationMs: Math.max(0, now - cur.openedAt) }, ...timesheet];
+        timesheet = [
+          {
+            id: uid(),
+            userId: a.id,
+            start: cur.openedAt,
+            end: now,
+            durationMs: Math.max(0, now - cur.openedAt),
+          },
+          ...timesheet,
+        ];
       }
-      return { ...s, timesheet, shifts: { ...s.shifts, [a.id]: { open, openedAt: open ? now : null } } };
+      return {
+        ...s,
+        timesheet,
+        shifts: { ...s.shifts, [a.id]: { open, openedAt: open ? now : null } },
+      };
     }
     case "ADVANCE":
       return {
         ...s,
         tasks: s.tasks.map((x) => (x.id === a.id ? { ...x, phase: a.to } : x)),
-        history: [...s.history, hist(a.id, s.currentUserId, a.action, a.from, a.to)],
+        history: [
+          ...s.history,
+          hist(a.id, s.currentUserId, a.action, a.from, a.to),
+        ],
       };
     case "TOGGLE_FAV":
-      return { ...s, tasks: s.tasks.map((x) => (x.id === a.id ? { ...x, favorite: !x.favorite } : x)) };
+      return {
+        ...s,
+        tasks: s.tasks.map((x) =>
+          x.id === a.id ? { ...x, favorite: !x.favorite } : x,
+        ),
+      };
     case "ADD_COMMENT":
       return {
         ...s,
-        tasks: s.tasks.map((x) => (x.id === a.id
-          ? { ...x, comments: [...x.comments, { userId: s.currentUserId, text: a.text, at: Date.now() }] } : x)),
-        history: [...s.history, hist(a.id, s.currentUserId, "comment", null, null)],
+        tasks: s.tasks.map((x) =>
+          x.id === a.id
+            ? {
+                ...x,
+                comments: [
+                  ...x.comments,
+                  { userId: s.currentUserId, text: a.text, at: Date.now() },
+                ],
+              }
+            : x,
+        ),
+        history: [
+          ...s.history,
+          hist(a.id, s.currentUserId, "comment", null, null),
+        ],
       };
     case "CREATE_TASK":
       return {
-        ...s, view: "inbox", selectedId: a.task.id,
+        ...s,
+        view: "inbox",
+        selectedId: a.task.id,
         tasks: [a.task, ...s.tasks],
-        history: [...s.history, hist(a.task.id, a.task.createdBy, "created", null, 1)],
+        history: [
+          ...s.history,
+          hist(a.task.id, a.task.createdBy, "created", null, 1),
+        ],
       };
-    case "SET_FILTER": return { ...s, filters: { ...s.filters, [a.key]: a.value } };
-    case "ADD_USER": return { ...s, users: [...s.users, a.user] };
-    case "UPDATE_USER": return { ...s, users: s.users.map((u) => (u.id === a.id ? { ...u, ...a.patch } : u)) };
-    case "ADD_POSITION": return { ...s, positions: [...s.positions, a.position] };
-    case "ADD_COMPANY": return { ...s, companies: [...s.companies, a.company] };
+    case "SET_FILTER":
+      return { ...s, filters: { ...s.filters, [a.key]: a.value } };
+    case "ADD_USER":
+      return { ...s, users: [...s.users, a.user] };
+    case "UPDATE_USER":
+      return {
+        ...s,
+        users: s.users.map((u) => (u.id === a.id ? { ...u, ...a.patch } : u)),
+      };
+    case "ADD_POSITION":
+      return { ...s, positions: [...s.positions, a.position] };
+    case "ADD_COMPANY":
+      return { ...s, companies: [...s.companies, a.company] };
     case "ROUTE_ADVANCE": {
       const tasks = s.tasks.map((t) => {
         if (t.id !== a.id) return t;
         const ns = t.currentStep + 1;
-        return { ...t, currentStep: ns, phase: routePhase(ns, t.steps.length), attachments: (t.attachments || 0) + (a.addAtt || 0) };
+        return {
+          ...t,
+          currentStep: ns,
+          phase: routePhase(ns, t.steps.length),
+          attachments: (t.attachments || 0) + (a.addAtt || 0),
+        };
       });
-      return { ...s, tasks, history: [...s.history, hist(a.id, a.userId, "step", null, null, a.note)] };
+      return {
+        ...s,
+        tasks,
+        history: [
+          ...s.history,
+          hist(a.id, a.userId, "step", null, null, a.note),
+        ],
+      };
     }
     case "ROUTE_RETURN": {
       const tasks = s.tasks.map((t) => {
@@ -647,37 +1624,136 @@ function reducer(s, a) {
         const ns = Math.max(0, t.currentStep - 1);
         return { ...t, currentStep: ns, phase: routePhase(ns, t.steps.length) };
       });
-      return { ...s, tasks, history: [...s.history, hist(a.id, a.userId, "return", null, null, a.note)] };
+      return {
+        ...s,
+        tasks,
+        history: [
+          ...s.history,
+          hist(a.id, a.userId, "return", null, null, a.note),
+        ],
+      };
     }
-    case "ADD_ROUTE": return { ...s, routes: [...s.routes, a.route] };
-    case "UPDATE_ROUTE": return { ...s, routes: s.routes.map((r) => (r.id === a.id ? { ...r, ...a.patch } : r)) };
-    case "ADD_DEPARTMENT": return { ...s, departments: [...s.departments, a.department] };
-    case "UPDATE_DEPARTMENT": return { ...s, departments: s.departments.map((d) => (d.id === a.id ? { ...d, ...a.patch } : d)) };
-    case "SET_CATDEPT": return { ...s, catDept: { ...s.catDept, [a.category]: a.departmentId } };
-    case "ADD_BRANCH": return { ...s, branches: [...s.branches, a.branch], budgets: { ...s.budgets, [a.branch.id]: a.branch.monthly || 0 } };
-    case "SET_BUDGET": return { ...s, budgets: { ...s.budgets, [a.branchId]: a.value } };
-    case "SET_SLA": return { ...s, sla: { ...s.sla, [a.priority]: a.hours } };
-    case "SET_SOP": return { ...s, sops: { ...s.sops, [a.category]: { steps: a.steps, requirePhoto: a.requirePhoto } } };
-    case "SET_SETTING": return { ...s, settings: { ...(s.settings || {}), [a.key]: a.value } };
+    case "ADD_ROUTE":
+      return { ...s, routes: [...s.routes, a.route] };
+    case "UPDATE_ROUTE":
+      return {
+        ...s,
+        routes: s.routes.map((r) => (r.id === a.id ? { ...r, ...a.patch } : r)),
+      };
+    case "ADD_DEPARTMENT":
+      return { ...s, departments: [...s.departments, a.department] };
+    case "UPDATE_DEPARTMENT":
+      return {
+        ...s,
+        departments: s.departments.map((d) =>
+          d.id === a.id ? { ...d, ...a.patch } : d,
+        ),
+      };
+    case "SET_CATDEPT":
+      return { ...s, catDept: { ...s.catDept, [a.category]: a.departmentId } };
+    case "ADD_BRANCH":
+      return {
+        ...s,
+        branches: [...s.branches, a.branch],
+        budgets: { ...s.budgets, [a.branch.id]: a.branch.monthly || 0 },
+      };
+    case "SET_BUDGET":
+      return { ...s, budgets: { ...s.budgets, [a.branchId]: a.value } };
+    case "SET_SLA":
+      return { ...s, sla: { ...s.sla, [a.priority]: a.hours } };
+    case "SET_SOP":
+      return {
+        ...s,
+        sops: {
+          ...s.sops,
+          [a.category]: { steps: a.steps, requirePhoto: a.requirePhoto },
+        },
+      };
+    case "SET_SETTING":
+      return { ...s, settings: { ...(s.settings || {}), [a.key]: a.value } };
     case "SAVE_CASH_REPORT": {
       const list = s.cashReports || [];
       const at = Date.now();
-      const idx = list.findIndex((r) => r.branchId === a.report.branchId && r.date === a.report.date);
-      const next = idx >= 0
-        ? list.map((r, i) => (i === idx ? { ...r, ...a.report, id: r.id, createdAt: r.createdAt, status: "submitted", submittedAt: at, updatedAt: at } : r))
-        : [{ ...a.report, id: uid(), createdAt: at, status: "submitted", submittedAt: at }, ...list];
+      const idx = list.findIndex(
+        (r) => r.branchId === a.report.branchId && r.date === a.report.date,
+      );
+      const next =
+        idx >= 0
+          ? list.map((r, i) =>
+              i === idx
+                ? {
+                    ...r,
+                    ...a.report,
+                    id: r.id,
+                    createdAt: r.createdAt,
+                    status: "submitted",
+                    submittedAt: at,
+                    updatedAt: at,
+                  }
+                : r,
+            )
+          : [
+              {
+                ...a.report,
+                id: uid(),
+                createdAt: at,
+                status: "submitted",
+                submittedAt: at,
+              },
+              ...list,
+            ];
       return { ...s, cashReports: next };
     }
     case "CONFIRM_CASH_REPORT":
-      return { ...s, cashReports: (s.cashReports || []).map((r) => (r.id === a.id ? { ...r, status: "confirmed", confirmedAt: Date.now(), confirmedBy: a.userId } : r)) };
-    case "DELETE_CASH_REPORT": return { ...s, cashReports: (s.cashReports || []).filter((r) => r.id !== a.id) };
+      return {
+        ...s,
+        cashReports: (s.cashReports || []).map((r) =>
+          r.id === a.id
+            ? {
+                ...r,
+                status: "confirmed",
+                confirmedAt: Date.now(),
+                confirmedBy: a.userId,
+              }
+            : r,
+        ),
+      };
+    case "DELETE_CASH_REPORT":
+      return {
+        ...s,
+        cashReports: (s.cashReports || []).filter((r) => r.id !== a.id),
+      };
     case "ADD_HANDOVER":
-      return { ...s, cashHandovers: [{ ...a.handover, id: uid(), status: "sent", createdAt: Date.now() }, ...(s.cashHandovers || [])] };
+      return {
+        ...s,
+        cashHandovers: [
+          { ...a.handover, id: uid(), status: "sent", createdAt: Date.now() },
+          ...(s.cashHandovers || []),
+        ],
+      };
     case "CONFIRM_HANDOVER":
-      return { ...s, cashHandovers: (s.cashHandovers || []).map((h) => (h.id === a.id ? { ...h, status: "received", receivedBy: a.userId, receivedAt: Date.now() } : h)) };
-    case "DELETE_HANDOVER": return { ...s, cashHandovers: (s.cashHandovers || []).filter((h) => h.id !== a.id) };
-    case "RESET": return { ...init(), ...makeSeed(), hydrated: true, view: s.view };
-    default: return s;
+      return {
+        ...s,
+        cashHandovers: (s.cashHandovers || []).map((h) =>
+          h.id === a.id
+            ? {
+                ...h,
+                status: "received",
+                receivedBy: a.userId,
+                receivedAt: Date.now(),
+              }
+            : h,
+        ),
+      };
+    case "DELETE_HANDOVER":
+      return {
+        ...s,
+        cashHandovers: (s.cashHandovers || []).filter((h) => h.id !== a.id),
+      };
+    case "RESET":
+      return { ...init(), ...makeSeed(), hydrated: true, view: s.view };
+    default:
+      return s;
   }
 }
 
@@ -690,21 +1766,38 @@ function reducer(s, a) {
 function visibleTasks(tasks, user) {
   if (user.role === "director") return tasks;
   const dept = user.departmentId;
-  const restricted = new Set(ORG.departments.filter((d) => d.restricted).map((d) => d.id));
+  const restricted = new Set(
+    ORG.departments.filter((d) => d.restricted).map((d) => d.id),
+  );
   return tasks.filter((t) => {
-    if (t.executorId === user.id || t.controllerId === user.id) return true;       // своя задача
-    if (t.assignees && t.assignees.includes(user.id)) return true;                  // участник маршрута
-    if (dept != null && t.departmentId === dept) return true;                       // свой отдел
-    if ((user.role === "finance" || user.role === "accountant") && (t.amount || restricted.has(t.departmentId))) return true; // финконтроль
-    if (user.role === "manager" && t.branchId === user.branchId && !restricted.has(t.departmentId)) return true; // свой филиал, кроме закрытых отделов
+    if (t.executorId === user.id || t.controllerId === user.id) return true; // своя задача
+    if (t.assignees && t.assignees.includes(user.id)) return true; // участник маршрута
+    if (dept != null && t.departmentId === dept) return true; // свой отдел
+    if (
+      (user.role === "finance" || user.role === "accountant") &&
+      (t.amount || restricted.has(t.departmentId))
+    )
+      return true; // финконтроль
+    if (
+      user.role === "manager" &&
+      t.branchId === user.branchId &&
+      !restricted.has(t.departmentId)
+    )
+      return true; // свой филиал, кроме закрытых отделов
     return false;
   });
 }
 function applyFilters(tasks, f, now) {
   return tasks.filter((t) => {
     if (f.branch !== "all" && t.branchId !== +f.branch) return false;
-    if (f.company !== "all") { const b = branchById(t.branchId); if (!b || b.companyId !== +f.company) return false; }
-    if (f.period !== "all") { const span = f.period === "7" ? 7 * D : 30 * D; if (now - t.createdAt > span) return false; }
+    if (f.company !== "all") {
+      const b = branchById(t.branchId);
+      if (!b || b.companyId !== +f.company) return false;
+    }
+    if (f.period !== "all") {
+      const span = f.period === "7" ? 7 * D : 30 * D;
+      if (now - t.createdAt > span) return false;
+    }
     return true;
   });
 }
@@ -712,12 +1805,19 @@ function applyFilters(tasks, f, now) {
 /* ----------------------------- персистентность ----------------------------- */
 const store = {
   async load() {
-    try { if (typeof window !== "undefined" && window.storage) { const r = await window.storage.get(STORAGE_KEY); return r ? JSON.parse(r.value) : null; } }
-    catch (e) {}
+    try {
+      if (typeof window !== "undefined" && window.storage) {
+        const r = await window.storage.get(STORAGE_KEY);
+        return r ? JSON.parse(r.value) : null;
+      }
+    } catch (e) {}
     return null;
   },
   async save(data) {
-    try { if (typeof window !== "undefined" && window.storage) await window.storage.set(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+    try {
+      if (typeof window !== "undefined" && window.storage)
+        await window.storage.set(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {}
   },
 };
 
@@ -725,8 +1825,16 @@ const store = {
 function Avatar({ id, size = 28 }) {
   const u = userById(id);
   return (
-    <span className="inline-flex items-center justify-center rounded-full font-bold text-white shrink-0"
-      style={{ width: size, height: size, background: avatarColor(id), fontSize: size * 0.4 }} title={u?.name}>
+    <span
+      className="inline-flex items-center justify-center rounded-full font-bold text-white shrink-0"
+      style={{
+        width: size,
+        height: size,
+        background: avatarColor(id),
+        fontSize: size * 0.4,
+      }}
+      title={u?.name}
+    >
       {initials(u?.name || "?")}
     </span>
   );
@@ -734,9 +1842,19 @@ function Avatar({ id, size = 28 }) {
 function PhasePill({ phase, small }) {
   const p = PHASES[phase - 1];
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full font-semibold"
-      style={{ background: p.soft, color: p.color, padding: small ? "2px 8px" : "4px 10px", fontSize: small ? 11 : 12.5, whiteSpace: "nowrap" }}>
-      <span style={{ background: p.color, width: 7, height: 7, borderRadius: 99 }} />
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full font-semibold"
+      style={{
+        background: p.soft,
+        color: p.color,
+        padding: small ? "2px 8px" : "4px 10px",
+        fontSize: small ? 11 : 12.5,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        style={{ background: p.color, width: 7, height: 7, borderRadius: 99 }}
+      />
       {p.n}. {tr(p.label)}
     </span>
   );
@@ -745,7 +1863,15 @@ function MiniRail({ phase }) {
   return (
     <div className="flex gap-1 w-full">
       {PHASES.map((p) => (
-        <div key={p.n} className="rounded-full" style={{ flex: 1, height: 6, background: p.n <= phase ? p.color : "#E5EAF2" }} />
+        <div
+          key={p.n}
+          className="rounded-full"
+          style={{
+            flex: 1,
+            height: 6,
+            background: p.n <= phase ? p.color : "#E5EAF2",
+          }}
+        />
       ))}
     </div>
   );
@@ -753,25 +1879,51 @@ function MiniRail({ phase }) {
 function PhaseRail({ phase }) {
   return (
     <div className="relative w-full">
-      <div className="absolute" style={{ left: "10%", right: "10%", top: 15, height: 3, background: "#E5EAF2", borderRadius: 2 }} />
+      <div
+        className="absolute"
+        style={{
+          left: "10%",
+          right: "10%",
+          top: 15,
+          height: 3,
+          background: "#E5EAF2",
+          borderRadius: 2,
+        }}
+      />
       <div className="relative flex items-start justify-between gap-1">
         {PHASES.map((p) => {
           const st = p.n < phase ? "done" : p.n === phase ? "current" : "todo";
           const sz = st === "current" ? 34 : 30;
           return (
-            <div key={p.n} className="flex flex-col items-center" style={{ flex: "1 1 0", minWidth: 0 }}>
-              <div className="flex items-center justify-center rounded-full font-bold"
+            <div
+              key={p.n}
+              className="flex flex-col items-center"
+              style={{ flex: "1 1 0", minWidth: 0 }}
+            >
+              <div
+                className="flex items-center justify-center rounded-full font-bold"
                 style={{
-                  width: sz, height: sz,
+                  width: sz,
+                  height: sz,
                   background: st === "todo" ? "#EEF2F7" : p.color,
                   color: st === "todo" ? "#94A3B8" : "#fff",
                   boxShadow: st === "current" ? `0 0 0 4px ${p.soft}` : "none",
                   fontSize: st === "current" ? 15 : 13,
-                }}>
+                }}
+              >
                 {st === "done" ? "✓" : p.n}
               </div>
-              <div className="mt-1.5 text-center" style={{ fontSize: 10, lineHeight: 1.15, width: "100%", overflowWrap: "break-word",
-                color: st === "todo" ? "#94A3B8" : "#334155", fontWeight: st === "current" ? 700 : 500 }}>
+              <div
+                className="mt-1.5 text-center"
+                style={{
+                  fontSize: 10,
+                  lineHeight: 1.15,
+                  width: "100%",
+                  overflowWrap: "break-word",
+                  color: st === "todo" ? "#94A3B8" : "#334155",
+                  fontWeight: st === "current" ? 700 : 500,
+                }}
+              >
                 {tr(p.label)}
               </div>
             </div>
@@ -782,17 +1934,44 @@ function PhaseRail({ phase }) {
   );
 }
 function Badge({ children, color = C.sub, bg = C.line }) {
-  return <span className="rounded-full font-semibold" style={{ background: bg, color, padding: "2px 9px", fontSize: 12 }}>{children}</span>;
+  return (
+    <span
+      className="rounded-full font-semibold"
+      style={{ background: bg, color, padding: "2px 9px", fontSize: 12 }}
+    >
+      {children}
+    </span>
+  );
 }
 function BigBtn({ children, color, icon: Icon, onClick, outline, disabled }) {
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button
+      onClick={onClick}
+      disabled={disabled}
       className="w-full inline-flex items-center justify-center gap-2 rounded-xl py-3 font-bold transition"
-      style={disabled
-        ? { background: C.line, color: C.faint, fontSize: 15, cursor: "not-allowed" }
-        : outline
-        ? { border: `2px solid ${color}`, color, fontSize: 15, background: "#fff" }
-        : { background: color, color: "#fff", fontSize: 15, boxShadow: `0 6px 16px ${color}33` }}>
+      style={
+        disabled
+          ? {
+              background: C.line,
+              color: C.faint,
+              fontSize: 15,
+              cursor: "not-allowed",
+            }
+          : outline
+            ? {
+                border: `2px solid ${color}`,
+                color,
+                fontSize: 15,
+                background: "#fff",
+              }
+            : {
+                background: color,
+                color: "#fff",
+                fontSize: 15,
+                boxShadow: `0 6px 16px ${color}33`,
+              }
+      }
+    >
       {Icon && <Icon size={18} />} {children}
     </button>
   );
@@ -800,26 +1979,61 @@ function BigBtn({ children, color, icon: Icon, onClick, outline, disabled }) {
 function Meta({ label, value }) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>
+        {label}
+      </div>
       <div style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>{value}</div>
     </div>
   );
 }
 function Field({ label, children }) {
-  return <div><div style={{ fontSize: 12, color: C.faint, fontWeight: 600, marginBottom: 4 }}>{label}</div>{children}</div>;
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 12,
+          color: C.faint,
+          fontWeight: 600,
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      {children}
+    </div>
+  );
 }
 function Select({ value, onChange, options }) {
   // единый стандарт дизайна: все выпадающие списки программы — через NiceSelect
-  return <NiceSelect value={value} onChange={(v) => onChange(String(v))} options={options} width="100%" />;
+  return (
+    <NiceSelect
+      value={value}
+      onChange={(v) => onChange(String(v))}
+      options={options}
+      width="100%"
+    />
+  );
 }
 function Kpi({ label, value, tone }) {
   return (
-    <div className="rounded-2xl bg-white p-4" style={{ border: `1px solid ${C.border}` }}>
+    <div
+      className="rounded-2xl bg-white p-4"
+      style={{ border: `1px solid ${C.border}` }}
+    >
       <div className="flex items-center gap-2 mb-1">
-        <span style={{ width: 9, height: 9, borderRadius: 99, background: tone }} />
-        <span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>{label}</span>
+        <span
+          style={{ width: 9, height: 9, borderRadius: 99, background: tone }}
+        />
+        <span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>
+          {label}
+        </span>
       </div>
-      <div className="font-extrabold" style={{ color: C.ink, fontSize: 30, lineHeight: 1.1 }}>{value}</div>
+      <div
+        className="font-extrabold"
+        style={{ color: C.ink, fontSize: 30, lineHeight: 1.1 }}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -832,16 +2046,53 @@ function Ring({ value, label, color, size = 132 }) {
     <div className="flex flex-col items-center">
       <div style={{ position: "relative", width: size, height: size }}>
         <svg width={size} height={size}>
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#EDF1F7" strokeWidth={12} />
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={12}
-            strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round"
-            transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: "stroke-dashoffset .6s" }} />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="#EDF1F7"
+            strokeWidth={12}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={12}
+            strokeDasharray={circ}
+            strokeDashoffset={off}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            style={{ transition: "stroke-dashoffset .6s" }}
+          />
         </svg>
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span className="font-extrabold" style={{ color: C.ink, fontSize: 28 }}>{v}%</span>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <span
+            className="font-extrabold"
+            style={{ color: C.ink, fontSize: 28 }}
+          >
+            {v}%
+          </span>
         </div>
       </div>
-      {label && <div className="mt-1 text-center" style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>{label}</div>}
+      {label && (
+        <div
+          className="mt-1 text-center"
+          style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}
+        >
+          {label}
+        </div>
+      )}
     </div>
   );
 }
@@ -852,51 +2103,138 @@ function TaskCard({ t, now, onOpen, onFav, anomaly }) {
   const sla = slaInfo(t, now);
   const b = branchById(t.branchId);
   return (
-    <button onClick={() => onOpen(t.id)}
+    <button
+      onClick={() => onOpen(t.id)}
       className="relative w-full text-left rounded-2xl bg-white overflow-hidden transition focus:outline-none"
-      style={{ border: `1px solid ${C.border}`, boxShadow: "0 1px 2px rgba(15,23,42,.04)" }}
-      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 8px 24px rgba(15,23,42,.10)")}
-      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 1px 2px rgba(15,23,42,.04)")}>
-      <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 5, background: p.color }} />
+      style={{
+        border: `1px solid ${C.border}`,
+        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
+      }}
+      onMouseEnter={(e) =>
+        (e.currentTarget.style.boxShadow = "0 8px 24px rgba(15,23,42,.10)")
+      }
+      onMouseLeave={(e) =>
+        (e.currentTarget.style.boxShadow = "0 1px 2px rgba(15,23,42,.04)")
+      }
+    >
+      <span
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 5,
+          background: p.color,
+        }}
+      />
       <div className="p-3 pl-4">
         <div className="flex items-start justify-between gap-2">
-          <h4 className="font-bold leading-snug" style={{ color: C.ink, fontSize: 15, overflowWrap: "break-word", minWidth: 0 }}>{t.title}</h4>
-          <span role="button" tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onFav(t.id); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onFav(t.id); } }}
-            className="shrink-0 -mr-1 -mt-1 p-1 rounded-lg" title="В избранное">
-            <Star size={18} fill={t.favorite ? "#FACC15" : "none"} color={t.favorite ? "#FACC15" : C.faint} />
+          <h4
+            className="font-bold leading-snug"
+            style={{
+              color: C.ink,
+              fontSize: 15,
+              overflowWrap: "break-word",
+              minWidth: 0,
+            }}
+          >
+            {t.title}
+          </h4>
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onFav(t.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                onFav(t.id);
+              }
+            }}
+            className="shrink-0 -mr-1 -mt-1 p-1 rounded-lg"
+            title="В избранное"
+          >
+            <Star
+              size={18}
+              fill={t.favorite ? "#FACC15" : "none"}
+              color={t.favorite ? "#FACC15" : C.faint}
+            />
           </span>
         </div>
-        <div className="mt-1" style={{ fontSize: 13, color: C.sub }}>{b?.name} • {t.cat}</div>
+        <div className="mt-1" style={{ fontSize: 13, color: C.sub }}>
+          {b?.name} • {t.cat}
+        </div>
 
         {anomaly && (
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg" style={{ background: "#FEF2F2", color: C.bad, padding: "3px 8px", fontSize: 11.5, fontWeight: 600 }}>
+          <div
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg"
+            style={{
+              background: "#FEF2F2",
+              color: C.bad,
+              padding: "3px 8px",
+              fontSize: 11.5,
+              fontWeight: 600,
+            }}
+          >
             <AlertTriangle size={13} /> ИИ-ревизор: аномалия
           </div>
         )}
 
         <div className="mt-2.5 space-y-1.5" style={{ fontSize: 13 }}>
-          <div className="flex items-center gap-2 min-w-0" style={{ color: C.sub }}>
+          <div
+            className="flex items-center gap-2 min-w-0"
+            style={{ color: C.sub }}
+          >
             <Avatar id={t.executorId} size={22} />
-            <span className="flex-1 min-w-0 truncate"><b style={{ color: C.ink, fontWeight: 600 }}>{tr("Исполнитель:")}</b> {userById(t.executorId)?.name}</span>
+            <span className="flex-1 min-w-0 truncate">
+              <b style={{ color: C.ink, fontWeight: 600 }}>
+                {tr("Исполнитель:")}
+              </b>{" "}
+              {userById(t.executorId)?.name}
+            </span>
           </div>
-          <div className="flex items-center gap-2 min-w-0" style={{ color: C.sub }}>
+          <div
+            className="flex items-center gap-2 min-w-0"
+            style={{ color: C.sub }}
+          >
             <Avatar id={t.controllerId} size={22} />
-            <span className="flex-1 min-w-0 truncate"><b style={{ color: C.ink, fontWeight: 600 }}>{tr("Контролёр:")}</b> {userById(t.controllerId)?.name}</span>
+            <span className="flex-1 min-w-0 truncate">
+              <b style={{ color: C.ink, fontWeight: 600 }}>
+                {tr("Контролёр:")}
+              </b>{" "}
+              {userById(t.controllerId)?.name}
+            </span>
           </div>
         </div>
 
-        <div className="mt-2.5"><MiniRail phase={t.phase} /></div>
+        <div className="mt-2.5">
+          <MiniRail phase={t.phase} />
+        </div>
 
         <div className="mt-2.5 flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 rounded-lg font-semibold"
-            style={{ fontSize: 12.5, color: sla.color, background: t.phase >= 5 ? C.line : sla.color + "14", padding: "3px 9px" }}>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-lg font-semibold"
+            style={{
+              fontSize: 12.5,
+              color: sla.color,
+              background: t.phase >= 5 ? C.line : sla.color + "14",
+              padding: "3px 9px",
+            }}
+          >
             <Clock size={13} /> {sla.text}
           </span>
-          <div className="flex items-center gap-3" style={{ color: C.faint, fontSize: 13 }}>
-            <span className="inline-flex items-center gap-1"><MessageSquare size={14} /> {t.comments.length}</span>
-            <span className="inline-flex items-center gap-1"><Paperclip size={14} /> {t.attachments}</span>
+          <div
+            className="flex items-center gap-3"
+            style={{ color: C.faint, fontSize: 13 }}
+          >
+            <span className="inline-flex items-center gap-1">
+              <MessageSquare size={14} /> {t.comments.length}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Paperclip size={14} /> {t.attachments}
+            </span>
           </div>
         </div>
       </div>
@@ -912,8 +2250,29 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
   const colCards = (n) => tasks.filter((t) => t.phase === n);
   const Cards = ({ n }) => {
     const col = colCards(n);
-    if (col.length === 0) return <div className="text-center py-6" style={{ color: C.faint, fontSize: 13 }}>{tr("Нет задач")}</div>;
-    return <>{col.map((t) => <TaskCard key={t.id} t={t} now={now} onOpen={onOpen} onFav={onFav} anomaly={!!(flags && flags[t.id])} />)}</>;
+    if (col.length === 0)
+      return (
+        <div
+          className="text-center py-6"
+          style={{ color: C.faint, fontSize: 13 }}
+        >
+          {tr("Нет задач")}
+        </div>
+      );
+    return (
+      <>
+        {col.map((t) => (
+          <TaskCard
+            key={t.id}
+            t={t}
+            now={now}
+            onOpen={onOpen}
+            onFav={onFav}
+            anomaly={!!(flags && flags[t.id])}
+          />
+        ))}
+      </>
+    );
   };
   return (
     <>
@@ -923,11 +2282,38 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
           {PHASES.map((p, i) => {
             const on = active === p.n;
             return (
-              <button key={p.n} onClick={() => setActive(p.n)} className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-bold"
-                style={{ background: on ? p.color : "#fff", color: on ? "#fff" : C.ink, border: `1px solid ${on ? p.color : C.border}`, fontSize: 12.5, whiteSpace: "nowrap" }}>
-                <span style={{ background: on ? "#fff" : p.color, width: 8, height: 8, borderRadius: 99 }} />
+              <button
+                key={p.n}
+                onClick={() => setActive(p.n)}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-bold"
+                style={{
+                  background: on ? p.color : "#fff",
+                  color: on ? "#fff" : C.ink,
+                  border: `1px solid ${on ? p.color : C.border}`,
+                  fontSize: 12.5,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span
+                  style={{
+                    background: on ? "#fff" : p.color,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 99,
+                  }}
+                />
                 {tr(p.label)}
-                <span className="rounded-full font-bold" style={{ background: on ? "rgba(255,255,255,.25)" : p.soft, color: on ? "#fff" : p.color, fontSize: 11, padding: "0 7px" }}>{counts[i]}</span>
+                <span
+                  className="rounded-full font-bold"
+                  style={{
+                    background: on ? "rgba(255,255,255,.25)" : p.soft,
+                    color: on ? "#fff" : p.color,
+                    fontSize: 11,
+                    padding: "0 7px",
+                  }}
+                >
+                  {counts[i]}
+                </span>
               </button>
             );
           })}
@@ -938,15 +2324,48 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
       </div>
 
       {/* Десктоп (xl+): 5 равных колонок во всю ширину — без горизонтального ползунка */}
-      <div className="hidden xl:grid gap-3" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+      <div
+        className="hidden xl:grid gap-3"
+        style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}
+      >
         {PHASES.map((p, i) => (
           <div key={p.n} className="min-w-0">
             <div className="flex items-center gap-2 px-1 pb-2.5">
-              <span className="shrink-0" style={{ background: p.color, width: 10, height: 10, borderRadius: 99 }} />
-              <span className="font-bold uppercase truncate" style={{ color: C.ink, fontSize: 11.5, letterSpacing: ".03em" }}>{tr(p.label)}</span>
-              <span className="ml-auto shrink-0 rounded-full font-bold" style={{ background: p.soft, color: p.color, fontSize: 11.5, padding: "1px 8px" }}>{counts[i]}</span>
+              <span
+                className="shrink-0"
+                style={{
+                  background: p.color,
+                  width: 10,
+                  height: 10,
+                  borderRadius: 99,
+                }}
+              />
+              <span
+                className="font-bold uppercase truncate"
+                style={{ color: C.ink, fontSize: 11.5, letterSpacing: ".03em" }}
+              >
+                {tr(p.label)}
+              </span>
+              <span
+                className="ml-auto shrink-0 rounded-full font-bold"
+                style={{
+                  background: p.soft,
+                  color: p.color,
+                  fontSize: 11.5,
+                  padding: "1px 8px",
+                }}
+              >
+                {counts[i]}
+              </span>
             </div>
-            <div className="flex flex-col gap-2.5 rounded-2xl p-2" style={{ background: "#FBFCFE", border: `1px dashed ${C.border}`, minHeight: 120 }}>
+            <div
+              className="flex flex-col gap-2.5 rounded-2xl p-2"
+              style={{
+                background: "#FBFCFE",
+                border: `1px dashed ${C.border}`,
+                minHeight: 120,
+              }}
+            >
               <Cards n={p.n} />
             </div>
           </div>
@@ -957,7 +2376,17 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
 }
 
 /* ----------------------------- деталь задачи ------------------------------- */
-function TaskDetail({ t, now, me, history, dispatch, notify, anomalyFlags, shiftOpen, onClose }) {
+function TaskDetail({
+  t,
+  now,
+  me,
+  history,
+  dispatch,
+  notify,
+  anomalyFlags,
+  shiftOpen,
+  onClose,
+}) {
   const [comment, setComment] = useState("");
   const [summary, setSummary] = useState(null);
   const sop = sopFor(t.cat);
@@ -971,49 +2400,120 @@ function TaskDetail({ t, now, me, history, dispatch, notify, anomalyFlags, shift
   const sla = slaInfo(t, now);
   const b = branchById(t.branchId);
   const co = companyOfBranch(t.branchId);
-  const log = history.filter((h) => h.taskId === t.id).sort((a, z) => a.at - z.at);
+  const log = history
+    .filter((h) => h.taskId === t.id)
+    .sort((a, z) => a.at - z.at);
   const allChecked = checks.every(Boolean);
   const canFinish = allChecked && (!needPhoto || photoTaken);
 
-  const act = (action, from, to, msg) => { dispatch({ type: "ADVANCE", id: t.id, action, from, to }); notify(msg); };
+  const act = (action, from, to, msg) => {
+    dispatch({ type: "ADVANCE", id: t.id, action, from, to });
+    notify(msg);
+  };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" style={{ background: "rgba(15,23,42,.45)" }} onClick={onClose}>
-      <div className="h-full w-full bg-white overflow-y-auto" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 bg-white px-5 py-4 flex items-start justify-between gap-3" style={{ borderBottom: `1px solid ${C.border}` }}>
+    <div
+      className="fixed inset-0 z-40 flex justify-end"
+      style={{ background: "rgba(15,23,42,.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="h-full w-full bg-white overflow-y-auto"
+        style={{ maxWidth: 560 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="sticky top-0 z-10 bg-white px-5 py-4 flex items-start justify-between gap-3"
+          style={{ borderBottom: `1px solid ${C.border}` }}
+        >
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1" style={{ fontSize: 12.5, color: C.faint }}>
-              <span>Заявка #{t.id.replace("t", "")}</span><ChevronRight size={13} /><span className="truncate">{b?.name}</span>
+            <div
+              className="flex items-center gap-2 mb-1"
+              style={{ fontSize: 12.5, color: C.faint }}
+            >
+              <span>Заявка #{t.id.replace("t", "")}</span>
+              <ChevronRight size={13} />
+              <span className="truncate">{b?.name}</span>
             </div>
-            <h2 className="font-extrabold leading-tight" style={{ color: C.ink, fontSize: 18, overflowWrap: "break-word" }}>{t.title}</h2>
+            <h2
+              className="font-extrabold leading-tight"
+              style={{ color: C.ink, fontSize: 18, overflowWrap: "break-word" }}
+            >
+              {t.title}
+            </h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl shrink-0" style={{ background: C.line }} title="Закрыть"><X size={18} color={C.sub} /></button>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl shrink-0"
+            style={{ background: C.line }}
+            title="Закрыть"
+          >
+            <X size={18} color={C.sub} />
+          </button>
         </div>
 
         <div className="px-5 py-5 space-y-5">
-          <div className="rounded-2xl p-4" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-            {t.routeId ? <StepRail steps={t.steps} current={t.currentStep} /> : <PhaseRail phase={t.phase} />}
+          <div
+            className="rounded-2xl p-4"
+            style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+          >
+            {t.routeId ? (
+              <StepRail steps={t.steps} current={t.currentStep} />
+            ) : (
+              <PhaseRail phase={t.phase} />
+            )}
           </div>
 
           {anomalyFlags && anomalyFlags.length > 0 && (
-            <div className="rounded-2xl p-4" style={{ background: "#FEF2F2", border: `1px solid #FECACA` }}>
-              <div className="flex items-center gap-2 font-bold mb-1.5" style={{ color: C.bad, fontSize: 14 }}>
+            <div
+              className="rounded-2xl p-4"
+              style={{ background: "#FEF2F2", border: `1px solid #FECACA` }}
+            >
+              <div
+                className="flex items-center gap-2 font-bold mb-1.5"
+                style={{ color: C.bad, fontSize: 14 }}
+              >
                 <AlertTriangle size={16} /> ИИ-ревизор обнаружил аномалии
               </div>
-              <ul className="space-y-1" style={{ fontSize: 13, color: "#991B1B" }}>
-                {anomalyFlags.map((f, i) => <li key={i}>• {f}</li>)}
+              <ul
+                className="space-y-1"
+                style={{ fontSize: 13, color: "#991B1B" }}
+              >
+                {anomalyFlags.map((f, i) => (
+                  <li key={i}>• {f}</li>
+                ))}
               </ul>
             </div>
           )}
 
           {/* блок ответственности */}
-          <div className="rounded-2xl p-4 space-y-3" style={{ border: `1px solid ${C.border}` }}>
-            {t.routeId ? <RouteResp t={t} /> : (<>
-              <RespRow id={t.executorId} role={tr("Исполнитель — кто делает")} />
-              <RespRow id={t.controllerId} role={tr("Контролёр — кто следит")} />
-            </>)}
-            <div className="flex items-center gap-2 rounded-xl px-3 py-2"
-              style={{ background: t.phase >= 5 ? C.line : sla.color + "14", color: sla.color, fontSize: 14, fontWeight: 700 }}>
+          <div
+            className="rounded-2xl p-4 space-y-3"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            {t.routeId ? (
+              <RouteResp t={t} />
+            ) : (
+              <>
+                <RespRow
+                  id={t.executorId}
+                  role={tr("Исполнитель — кто делает")}
+                />
+                <RespRow
+                  id={t.controllerId}
+                  role={tr("Контролёр — кто следит")}
+                />
+              </>
+            )}
+            <div
+              className="flex items-center gap-2 rounded-xl px-3 py-2"
+              style={{
+                background: t.phase >= 5 ? C.line : sla.color + "14",
+                color: sla.color,
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
               <Clock size={16} /> Срок (SLA): {sla.text}
             </div>
           </div>
@@ -1022,124 +2522,346 @@ function TaskDetail({ t, now, me, history, dispatch, notify, anomalyFlags, shift
             <Meta label={tr("Юр. лицо")} value={co?.name} />
             <Meta label={tr("Филиал")} value={b?.name} />
             <Meta label={tr("Категория")} value={t.cat} />
-            <Meta label={tr("Отдел")} value={<span className="inline-flex items-center gap-1.5">{deptById(t.departmentId)?.name || "—"}{deptById(t.departmentId)?.restricted && <Lock size={12} color={C.bad} />}</span>} />
+            <Meta
+              label={tr("Отдел")}
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  {deptById(t.departmentId)?.name || "—"}
+                  {deptById(t.departmentId)?.restricted && (
+                    <Lock size={12} color={C.bad} />
+                  )}
+                </span>
+              }
+            />
             <Meta label={tr("Приоритет")} value={tr(t.pr)} />
             <Meta label={tr("Создана")} value={fmtDateTime(t.createdAt)} />
-            <Meta label={tr("Текущая фаза")} value={<PhasePill phase={t.phase} small />} />
+            <Meta
+              label={tr("Текущая фаза")}
+              value={<PhasePill phase={t.phase} small />}
+            />
           </div>
 
           <div>
-            <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600, marginBottom: 4 }}>{tr("Описание")}</div>
-            <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.55 }}>{t.description}</p>
+            <div
+              style={{
+                fontSize: 12.5,
+                color: C.faint,
+                fontWeight: 600,
+                marginBottom: 4,
+              }}
+            >
+              {tr("Описание")}
+            </div>
+            <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.55 }}>
+              {t.description}
+            </p>
           </div>
 
           {t.amount != null && (
-            <div className="rounded-xl px-4 py-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>Доп. поля (JSONB)</div>
-              <div style={{ fontSize: 16, color: C.ink, fontWeight: 700 }}>{tr("Сумма")}: {fmtMoney(t.amount)}</div>
-              {t.overBudget && <div className="mt-1 inline-flex items-center gap-1.5" style={{ fontSize: 12.5, color: C.bad, fontWeight: 600 }}><Wallet size={14} /> Превышен бюджет филиала — требуется одобрение финансиста</div>}
+            <div
+              className="rounded-xl px-4 py-3"
+              style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+            >
+              <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>
+                Доп. поля (JSONB)
+              </div>
+              <div style={{ fontSize: 16, color: C.ink, fontWeight: 700 }}>
+                {tr("Сумма")}: {fmtMoney(t.amount)}
+              </div>
+              {t.overBudget && (
+                <div
+                  className="mt-1 inline-flex items-center gap-1.5"
+                  style={{ fontSize: 12.5, color: C.bad, fontWeight: 600 }}
+                >
+                  <Wallet size={14} /> Превышен бюджет филиала — требуется
+                  одобрение финансиста
+                </div>
+              )}
             </div>
           )}
 
-          {t.routeId && <RouteFlow t={t} me={me} shiftOpen={shiftOpen} dispatch={dispatch} notify={notify} />}
+          {t.routeId && (
+            <RouteFlow
+              t={t}
+              me={me}
+              shiftOpen={shiftOpen}
+              dispatch={dispatch}
+              notify={notify}
+            />
+          )}
 
           {/* SOP чек-лист в фазе «В работе» для исполнителя */}
           {!t.routeId && isExec && t.phase === 3 && (
-            <div className="rounded-2xl p-4" style={{ border: `1px solid ${C.border}` }}>
-              <div className="flex items-center gap-2 font-bold mb-1" style={{ color: C.ink, fontSize: 15 }}>
-                <ListChecks size={17} color={PHASES[2].color} /> Регламент (SOP): отметьте все шаги
+            <div
+              className="rounded-2xl p-4"
+              style={{ border: `1px solid ${C.border}` }}
+            >
+              <div
+                className="flex items-center gap-2 font-bold mb-1"
+                style={{ color: C.ink, fontSize: 15 }}
+              >
+                <ListChecks size={17} color={PHASES[2].color} /> Регламент
+                (SOP): отметьте все шаги
               </div>
-              <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 10 }}>Кнопка «Выполнил» разблокируется только после всех шагов и фото.</div>
+              <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 10 }}>
+                Кнопка «Выполнил» разблокируется только после всех шагов и фото.
+              </div>
               <div className="space-y-2">
                 {steps.map((st, i) => (
-                  <label key={i} className="flex items-start gap-2.5 cursor-pointer">
-                    <input type="checkbox" checked={checks[i]} onChange={() => setChecks((c) => c.map((v, k) => (k === i ? !v : v)))}
-                      style={{ width: 18, height: 18, marginTop: 1, accentColor: PHASES[2].color }} />
-                    <span style={{ fontSize: 14, color: checks[i] ? C.faint : C.ink, textDecoration: checks[i] ? "line-through" : "none" }}>{st}</span>
+                  <label
+                    key={i}
+                    className="flex items-start gap-2.5 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checks[i]}
+                      onChange={() =>
+                        setChecks((c) => c.map((v, k) => (k === i ? !v : v)))
+                      }
+                      style={{
+                        width: 18,
+                        height: 18,
+                        marginTop: 1,
+                        accentColor: PHASES[2].color,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 14,
+                        color: checks[i] ? C.faint : C.ink,
+                        textDecoration: checks[i] ? "line-through" : "none",
+                      }}
+                    >
+                      {st}
+                    </span>
                   </label>
                 ))}
               </div>
-              {needPhoto && (<>
-                <button onClick={() => { setPhotoTaken(true); notify("Фото сделано сейчас — метаданные проверены"); }}
-                  className="mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 font-semibold"
-                  style={photoTaken ? { background: "#E9F9EF", color: C.ok, border: `1px solid ${C.ok}` } : { background: C.line, color: C.ink }}>
-                  <Camera size={16} /> {photoTaken ? "Фотоотчёт прикреплён" : "Сделать фото (камера)"}
-                </button>
-                {!photoTaken && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}>Загрузка старого фото из галереи блокируется — нужен снимок в реальном времени.</div>}
-              </>)}
+              {needPhoto && (
+                <>
+                  <button
+                    onClick={() => {
+                      setPhotoTaken(true);
+                      notify("Фото сделано сейчас — метаданные проверены");
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 font-semibold"
+                    style={
+                      photoTaken
+                        ? {
+                            background: "#E9F9EF",
+                            color: C.ok,
+                            border: `1px solid ${C.ok}`,
+                          }
+                        : { background: C.line, color: C.ink }
+                    }
+                  >
+                    <Camera size={16} />{" "}
+                    {photoTaken
+                      ? "Фотоотчёт прикреплён"
+                      : "Сделать фото (камера)"}
+                  </button>
+                  {!photoTaken && (
+                    <div
+                      style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}
+                    >
+                      Загрузка старого фото из галереи блокируется — нужен
+                      снимок в реальном времени.
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
           {/* действия по ролям */}
           {!t.routeId && t.phase < 5 && (isExec || isCtrl) && !shiftOpen && (
-            <div className="rounded-xl px-3 py-2.5 flex items-center gap-2" style={{ background: "#FEF2F2", color: C.bad, fontSize: 13, border: `1px solid #FECACA` }}>
-              <Lock size={15} /> Смена закрыта — по регламенту безопасности доступен только просмотр. Откройте смену, чтобы менять статус.
+            <div
+              className="rounded-xl px-3 py-2.5 flex items-center gap-2"
+              style={{
+                background: "#FEF2F2",
+                color: C.bad,
+                fontSize: 13,
+                border: `1px solid #FECACA`,
+              }}
+            >
+              <Lock size={15} /> Смена закрыта — по регламенту безопасности
+              доступен только просмотр. Откройте смену, чтобы менять статус.
             </div>
           )}
           {!t.routeId && t.phase < 5 && (isExec || isCtrl) && shiftOpen && (
             <div className="space-y-2">
-              <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>Доступные действия для вашей роли</div>
+              <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>
+                Доступные действия для вашей роли
+              </div>
               {isExec && (t.phase === 1 || t.phase === 2) && (
-                <BigBtn color={PHASES[2].color} icon={Play} onClick={() => act("start", t.phase, 3, "Задача взята в работу")}>Взять в работу</BigBtn>
+                <BigBtn
+                  color={PHASES[2].color}
+                  icon={Play}
+                  onClick={() =>
+                    act("start", t.phase, 3, "Задача взята в работу")
+                  }
+                >
+                  Взять в работу
+                </BigBtn>
               )}
               {isExec && t.phase === 3 && (
-                <BigBtn color={PHASES[3].color} icon={Send} disabled={!canFinish}
-                  onClick={() => act("review", 3, 4, "Отправлено на проверку контролёру")}>
-                  {canFinish ? "Выполнил — отправить на проверку" : "Завершите чек-лист и фото"}
+                <BigBtn
+                  color={PHASES[3].color}
+                  icon={Send}
+                  disabled={!canFinish}
+                  onClick={() =>
+                    act("review", 3, 4, "Отправлено на проверку контролёру")
+                  }
+                >
+                  {canFinish
+                    ? "Выполнил — отправить на проверку"
+                    : "Завершите чек-лист и фото"}
                 </BigBtn>
               )}
               {isCtrl && t.phase === 4 && (
                 <div className="grid grid-cols-1 gap-2">
-                  <BigBtn color={PHASES[4].color} icon={CheckCircle2} onClick={() => act("done", 4, 5, "Работа принята, задача завершена")}>Принять и завершить</BigBtn>
-                  <BigBtn color={C.warn} icon={RotateCcw} outline onClick={() => act("return", 4, 3, "Возвращено исполнителю на доработку")}>Вернуть на доработку</BigBtn>
+                  <BigBtn
+                    color={PHASES[4].color}
+                    icon={CheckCircle2}
+                    onClick={() =>
+                      act("done", 4, 5, "Работа принята, задача завершена")
+                    }
+                  >
+                    Принять и завершить
+                  </BigBtn>
+                  <BigBtn
+                    color={C.warn}
+                    icon={RotateCcw}
+                    outline
+                    onClick={() =>
+                      act("return", 4, 3, "Возвращено исполнителю на доработку")
+                    }
+                  >
+                    Вернуть на доработку
+                  </BigBtn>
                 </div>
               )}
               {((isExec && t.phase === 4) || (isCtrl && t.phase < 4)) && (
-                <div className="rounded-xl px-3 py-2.5 flex items-center gap-2" style={{ background: C.line, color: C.sub, fontSize: 13 }}>
-                  <Info size={15} /> Сейчас ход за {isCtrl ? "исполнителем" : "контролёром"}. Кнопка появится на нужной фазе.
+                <div
+                  className="rounded-xl px-3 py-2.5 flex items-center gap-2"
+                  style={{ background: C.line, color: C.sub, fontSize: 13 }}
+                >
+                  <Info size={15} /> Сейчас ход за{" "}
+                  {isCtrl ? "исполнителем" : "контролёром"}. Кнопка появится на
+                  нужной фазе.
                 </div>
               )}
             </div>
           )}
           {!t.routeId && !isExec && !isCtrl && (
-            <div className="rounded-xl px-3 py-2.5 flex items-center gap-2" style={{ background: C.line, color: C.sub, fontSize: 13 }}>
-              <ShieldCheck size={15} /> Режим наблюдателя: вы видите задачу, но не назначены исполнителем или контролёром.
+            <div
+              className="rounded-xl px-3 py-2.5 flex items-center gap-2"
+              style={{ background: C.line, color: C.sub, fontSize: 13 }}
+            >
+              <ShieldCheck size={15} /> Режим наблюдателя: вы видите задачу, но
+              не назначены исполнителем или контролёром.
             </div>
           )}
 
           {/* AI саммари */}
-          <div className="rounded-2xl p-4" style={{ border: `1px solid ${C.border}`, background: "#FBFCFE" }}>
-            <button onClick={() => setSummary(aiSummary(t))}
+          <div
+            className="rounded-2xl p-4"
+            style={{ border: `1px solid ${C.border}`, background: "#FBFCFE" }}
+          >
+            <button
+              onClick={() => setSummary(aiSummary(t))}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 font-bold text-white"
-              style={{ background: `linear-gradient(90deg, ${C.violet}, ${C.brandA})`, fontSize: 14 }}>
+              style={{
+                background: `linear-gradient(90deg, ${C.violet}, ${C.brandA})`,
+                fontSize: 14,
+              }}
+            >
               <Bot size={16} /> {tr("Краткая суть (ИИ)")}
             </button>
-            {summary && <p className="mt-3" style={{ fontSize: 14, color: C.ink, lineHeight: 1.55 }}>{summary}</p>}
+            {summary && (
+              <p
+                className="mt-3"
+                style={{ fontSize: 14, color: C.ink, lineHeight: 1.55 }}
+              >
+                {summary}
+              </p>
+            )}
           </div>
 
           {/* обсуждение */}
           <div>
-            <div className="font-bold mb-2" style={{ color: C.ink, fontSize: 15 }}>{tr("Обсуждение")} ({t.comments.length})</div>
+            <div
+              className="font-bold mb-2"
+              style={{ color: C.ink, fontSize: 15 }}
+            >
+              {tr("Обсуждение")} ({t.comments.length})
+            </div>
             <div className="space-y-3">
               {t.comments.map((c, i) => (
                 <div key={i} className="flex gap-2.5">
                   <Avatar id={c.userId} size={28} />
-                  <div className="rounded-xl px-3 py-2 flex-1" style={{ background: C.line }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{userById(c.userId)?.name}</div>
+                  <div
+                    className="rounded-xl px-3 py-2 flex-1"
+                    style={{ background: C.line }}
+                  >
+                    <div
+                      style={{ fontSize: 13, fontWeight: 700, color: C.ink }}
+                    >
+                      {userById(c.userId)?.name}
+                    </div>
                     <div style={{ fontSize: 14, color: C.ink }}>{c.text}</div>
-                    <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{fmtDateTime(c.at)}</div>
+                    <div
+                      style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}
+                    >
+                      {fmtDateTime(c.at)}
+                    </div>
                   </div>
                 </div>
               ))}
-              {t.comments.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>Пока нет сообщений.</div>}
+              {t.comments.length === 0 && (
+                <div style={{ fontSize: 13, color: C.faint }}>
+                  Пока нет сообщений.
+                </div>
+              )}
             </div>
             <div className="mt-3 flex gap-2">
-              <input value={comment} onChange={(e) => setComment(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && comment.trim()) { dispatch({ type: "ADD_COMMENT", id: t.id, text: comment.trim() }); setComment(""); } }}
-                placeholder="Написать сообщение…" className="flex-1 rounded-xl px-3 py-2.5 focus:outline-none"
-                style={{ border: `1px solid ${C.border}`, fontSize: 14, color: C.ink }} />
-              <button onClick={() => { if (comment.trim()) { dispatch({ type: "ADD_COMMENT", id: t.id, text: comment.trim() }); setComment(""); } }}
-                className="px-4 rounded-xl font-bold text-white" style={{ background: C.brandA, fontSize: 14 }}>Отправить</button>
+              <input
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && comment.trim()) {
+                    dispatch({
+                      type: "ADD_COMMENT",
+                      id: t.id,
+                      text: comment.trim(),
+                    });
+                    setComment("");
+                  }
+                }}
+                placeholder="Написать сообщение…"
+                className="flex-1 rounded-xl px-3 py-2.5 focus:outline-none"
+                style={{
+                  border: `1px solid ${C.border}`,
+                  fontSize: 14,
+                  color: C.ink,
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (comment.trim()) {
+                    dispatch({
+                      type: "ADD_COMMENT",
+                      id: t.id,
+                      text: comment.trim(),
+                    });
+                    setComment("");
+                  }
+                }}
+                className="px-4 rounded-xl font-bold text-white"
+                style={{ background: C.brandA, fontSize: 14 }}
+              >
+                Отправить
+              </button>
             </div>
           </div>
 
@@ -1147,23 +2869,69 @@ function TaskDetail({ t, now, me, history, dispatch, notify, anomalyFlags, shift
           <div>
             <div className="flex items-center gap-2 mb-1">
               <ShieldCheck size={16} color={C.ok} />
-              <span className="font-bold" style={{ color: C.ink, fontSize: 15 }}>{tr("Журнал (неизменяемый)")}</span>
+              <span
+                className="font-bold"
+                style={{ color: C.ink, fontSize: 15 }}
+              >
+                {tr("Журнал (неизменяемый)")}
+              </span>
             </div>
-            <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>Записи нельзя удалить или отредактировать — защита от споров «я не видел».</div>
+            <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>
+              Записи нельзя удалить или отредактировать — защита от споров «я не
+              видел».
+            </div>
             <div className="relative pl-5">
-              <span style={{ position: "absolute", left: 6, top: 4, bottom: 4, width: 2, background: C.border }} />
+              <span
+                style={{
+                  position: "absolute",
+                  left: 6,
+                  top: 4,
+                  bottom: 4,
+                  width: 2,
+                  background: C.border,
+                }}
+              />
               <div className="space-y-3.5">
                 {log.map((h) => {
                   const dot = h.to ? PHASES[h.to - 1].color : C.faint;
                   return (
                     <div key={h.id} className="relative">
-                      <span style={{ position: "absolute", left: -19, top: 4, width: 11, height: 11, borderRadius: 99, background: dot, boxShadow: "0 0 0 3px #fff" }} />
+                      <span
+                        style={{
+                          position: "absolute",
+                          left: -19,
+                          top: 4,
+                          width: 11,
+                          height: 11,
+                          borderRadius: 99,
+                          background: dot,
+                          boxShadow: "0 0 0 3px #fff",
+                        }}
+                      />
                       <div style={{ fontSize: 13.5, color: C.ink }}>
-                        <b style={{ fontWeight: 700 }}>{userById(h.userId)?.name}</b> — {ACTION_LABEL[h.action] || h.action}
-                        {h.note && <span style={{ color: C.sub }}>: {h.note}</span>}
-                        {h.from && h.to && <span style={{ color: C.sub }}> ({h.from}→{h.to})</span>}
+                        <b style={{ fontWeight: 700 }}>
+                          {userById(h.userId)?.name}
+                        </b>{" "}
+                        — {ACTION_LABEL[h.action] || h.action}
+                        {h.note && (
+                          <span style={{ color: C.sub }}>: {h.note}</span>
+                        )}
+                        {h.from && h.to && (
+                          <span style={{ color: C.sub }}>
+                            {" "}
+                            ({h.from}→{h.to})
+                          </span>
+                        )}
                       </div>
-                      <div style={{ fontSize: 11.5, color: C.faint, fontFamily: "ui-monospace, monospace" }}>{fmtDateTime(h.at)}</div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: C.faint,
+                          fontFamily: "ui-monospace, monospace",
+                        }}
+                      >
+                        {fmtDateTime(h.at)}
+                      </div>
                     </div>
                   );
                 })}
@@ -1179,10 +2947,16 @@ function RespRow({ id, role }) {
   const u = userById(id);
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <div className="shrink-0"><Avatar id={id} size={40} /></div>
+      <div className="shrink-0">
+        <Avatar id={id} size={40} />
+      </div>
       <div className="min-w-0">
-        <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>{role}</div>
-        <div style={{ fontSize: 15, color: C.ink, fontWeight: 700 }}>{u?.name}</div>
+        <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>
+          {role}
+        </div>
+        <div style={{ fontSize: 15, color: C.ink, fontWeight: 700 }}>
+          {u?.name}
+        </div>
         <div style={{ fontSize: 13, color: C.sub }}>{u?.pos}</div>
       </div>
     </div>
@@ -1198,105 +2972,275 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
     const input = raw != null ? raw : text;
     if (!input.trim()) return;
     const p = aiParse(input);
-    setParsed({ ...p, executorId: pickExecutor(p.branchId, p.cat), controllerId: pickController(p.branchId) });
+    setParsed({
+      ...p,
+      executorId: pickExecutor(p.branchId, p.cat),
+      controllerId: pickController(p.branchId),
+    });
   };
   const voice = () => {
-    const sample = VOICE_SAMPLES[Math.floor(Math.random() * VOICE_SAMPLES.length)];
-    setText(sample); recognize(sample);
-    notify("Демонстрация голосового ввода (реальная версия — распознавание речи)");
+    const sample =
+      VOICE_SAMPLES[Math.floor(Math.random() * VOICE_SAMPLES.length)];
+    setText(sample);
+    recognize(sample);
+    notify(
+      "Демонстрация голосового ввода (реальная версия — распознавание речи)",
+    );
   };
 
-  const budget = parsed && parsed.amount
-    ? (() => { const spent = spentForBranch(tasks, parsed.branchId, now); const limit = budgetFor(parsed.branchId);
-        return { spent, limit, over: spent + parsed.amount > limit }; })()
-    : null;
+  const budget =
+    parsed && parsed.amount
+      ? (() => {
+          const spent = spentForBranch(tasks, parsed.branchId, now);
+          const limit = budgetFor(parsed.branchId);
+          return { spent, limit, over: spent + parsed.amount > limit };
+        })()
+      : null;
 
   const create = () => {
     const over = !!(budget && budget.over);
     const ctrl = over ? "u3" : parsed.controllerId; // при перерасходе — на финансиста
     const task = {
-      id: "t" + uid().slice(0, 6), title: text.trim().split("\n")[0].slice(0, 70),
-      description: text.trim(), branchId: parsed.branchId,
-      executorId: parsed.executorId, controllerId: ctrl, createdBy: me.id,
-      phase: 1, cat: parsed.cat, pr: parsed.pr, amount: parsed.amount || null, overBudget: over,
+      id: "t" + uid().slice(0, 6),
+      title: text.trim().split("\n")[0].slice(0, 70),
+      description: text.trim(),
+      branchId: parsed.branchId,
+      executorId: parsed.executorId,
+      controllerId: ctrl,
+      createdBy: me.id,
+      phase: 1,
+      cat: parsed.cat,
+      pr: parsed.pr,
+      amount: parsed.amount || null,
+      overBudget: over,
       departmentId: deptForCategory(parsed.cat),
-      attachments: 0, favorite: false, createdAt: now, slaDeadline: now + parsed.slaH * H, comments: [],
+      attachments: 0,
+      favorite: false,
+      createdAt: now,
+      slaDeadline: now + parsed.slaH * H,
+      comments: [],
     };
     dispatch({ type: "CREATE_TASK", task });
-    notify(over ? "Заявка создана и направлена финансисту (превышение бюджета)" : "Заявка создана и направлена исполнителю");
-    setText(""); setParsed(null);
+    notify(
+      over
+        ? "Заявка создана и направлена финансисту (превышение бюджета)"
+        : "Заявка создана и направлена исполнителю",
+    );
+    setText("");
+    setParsed(null);
   };
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-6"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         <div className="flex items-center gap-2 mb-1">
           <Sparkles size={20} color={C.violet} />
-          <h2 className="font-extrabold" style={{ color: C.ink, fontSize: 20 }}>{tr("Что случилось?")}</h2>
+          <h2 className="font-extrabold" style={{ color: C.ink, fontSize: 20 }}>
+            {tr("Что случилось?")}
+          </h2>
         </div>
         <p style={{ fontSize: 14, color: C.sub, marginBottom: 14 }}>
-          {tr("Опишите простыми словами — система сама определит филиал, категорию, срочность и назначит ответственных.")}
+          {tr(
+            "Опишите простыми словами — система сама определит филиал, категорию, срочность и назначит ответственных.",
+          )}
         </p>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
-          placeholder='Например: «На филиале Юг сломался терминал оплаты, очередь на кассе, срочно!»'
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={4}
+          placeholder="Например: «На филиале Юг сломался терминал оплаты, очередь на кассе, срочно!»"
           className="w-full rounded-xl px-4 py-3 focus:outline-none resize-none"
-          style={{ border: `1px solid ${C.border}`, fontSize: 15, color: C.ink, lineHeight: 1.5 }} />
+          style={{
+            border: `1px solid ${C.border}`,
+            fontSize: 15,
+            color: C.ink,
+            lineHeight: 1.5,
+          }}
+        />
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={() => recognize()} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
-            style={{ background: `linear-gradient(90deg, ${C.violet}, ${C.brandA})`, fontSize: 14.5 }}>
+          <button
+            onClick={() => recognize()}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{
+              background: `linear-gradient(90deg, ${C.violet}, ${C.brandA})`,
+              fontSize: 14.5,
+            }}
+          >
             <Bot size={17} /> {tr("Распознать (ИИ)")}
           </button>
           {voiceEnabled && (
-            <button onClick={voice} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold"
-              style={{ background: C.line, color: C.ink, fontSize: 14.5 }} title="Демонстрация голосового ввода">
+            <button
+              onClick={voice}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold"
+              style={{ background: C.line, color: C.ink, fontSize: 14.5 }}
+              title="Демонстрация голосового ввода"
+            >
               <Mic size={17} /> {tr("Сказать задачу")}
             </button>
           )}
         </div>
 
         {parsed && (
-          <div className="mt-5 rounded-2xl p-4 space-y-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 700 }}>ИИ распознал — проверьте и при необходимости поправьте:</div>
+          <div
+            className="mt-5 rounded-2xl p-4 space-y-3"
+            style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+          >
+            <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 700 }}>
+              ИИ распознал — проверьте и при необходимости поправьте:
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Филиал">
-                <Select value={parsed.branchId} onChange={(v) => setParsed({ ...parsed, branchId: +v, executorId: pickExecutor(+v, parsed.cat), controllerId: pickController(+v) })}
-                  options={ORG.branches.map((b) => ({ value: b.id, label: b.name }))} />
+                <Select
+                  value={parsed.branchId}
+                  onChange={(v) =>
+                    setParsed({
+                      ...parsed,
+                      branchId: +v,
+                      executorId: pickExecutor(+v, parsed.cat),
+                      controllerId: pickController(+v),
+                    })
+                  }
+                  options={ORG.branches.map((b) => ({
+                    value: b.id,
+                    label: b.name,
+                  }))}
+                />
               </Field>
               <Field label="Категория">
-                <Select value={parsed.cat} onChange={(v) => setParsed({ ...parsed, cat: v, executorId: pickExecutor(parsed.branchId, v) })}
-                  options={["IT-поддержка", "Ремонт оборудования", "Финансы / Закупка", "Прочее"].map((x) => ({ value: x, label: x }))} />
+                <Select
+                  value={parsed.cat}
+                  onChange={(v) =>
+                    setParsed({
+                      ...parsed,
+                      cat: v,
+                      executorId: pickExecutor(parsed.branchId, v),
+                    })
+                  }
+                  options={[
+                    "IT-поддержка",
+                    "Ремонт оборудования",
+                    "Финансы / Закупка",
+                    "Прочее",
+                  ].map((x) => ({ value: x, label: x }))}
+                />
               </Field>
               <Field label="Приоритет">
-                <Select value={parsed.pr} onChange={(v) => setParsed({ ...parsed, pr: v, slaH: slaFor(v) })}
-                  options={["Критический", "Высокий", "Обычный"].map((x) => ({ value: x, label: tr(x) }))} />
+                <Select
+                  value={parsed.pr}
+                  onChange={(v) =>
+                    setParsed({ ...parsed, pr: v, slaH: slaFor(v) })
+                  }
+                  options={["Критический", "Высокий", "Обычный"].map((x) => ({
+                    value: x,
+                    label: tr(x),
+                  }))}
+                />
               </Field>
               <Field label="Срок (SLA)">
-                <div className="rounded-lg px-3 py-2" style={{ background: "#fff", border: `1px solid ${C.border}`, fontSize: 14, color: C.ink }}>{parsed.slaH} ч</div>
+                <div
+                  className="rounded-lg px-3 py-2"
+                  style={{
+                    background: "#fff",
+                    border: `1px solid ${C.border}`,
+                    fontSize: 14,
+                    color: C.ink,
+                  }}
+                >
+                  {parsed.slaH} ч
+                </div>
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="flex items-center gap-2"><Avatar id={parsed.executorId} size={30} />
-                <div><div style={{ fontSize: 11.5, color: C.faint }}>Исполнитель</div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{userById(parsed.executorId)?.name}</div></div></div>
-              <div className="flex items-center gap-2"><Avatar id={budget && budget.over ? "u3" : parsed.controllerId} size={30} />
-                <div><div style={{ fontSize: 11.5, color: C.faint }}>Контролёр</div><div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{userById(budget && budget.over ? "u3" : parsed.controllerId)?.name}</div></div></div>
+              <div className="flex items-center gap-2">
+                <Avatar id={parsed.executorId} size={30} />
+                <div>
+                  <div style={{ fontSize: 11.5, color: C.faint }}>
+                    Исполнитель
+                  </div>
+                  <div
+                    style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}
+                  >
+                    {userById(parsed.executorId)?.name}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Avatar
+                  id={budget && budget.over ? "u3" : parsed.controllerId}
+                  size={30}
+                />
+                <div>
+                  <div style={{ fontSize: 11.5, color: C.faint }}>
+                    Контролёр
+                  </div>
+                  <div
+                    style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}
+                  >
+                    {
+                      userById(
+                        budget && budget.over ? "u3" : parsed.controllerId,
+                      )?.name
+                    }
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap pt-1">
               <span style={{ fontSize: 12.5, color: C.faint }}>Отдел:</span>
-              <Badge color={C.brandA} bg="#EFF4FF">{deptById(deptForCategory(parsed.cat))?.name}</Badge>
-              {deptById(deptForCategory(parsed.cat))?.restricted && <Badge color={C.bad} bg="#FEECEC">закрытый — видят только отдел и руководство</Badge>}
+              <Badge color={C.brandA} bg="#EFF4FF">
+                {deptById(deptForCategory(parsed.cat))?.name}
+              </Badge>
+              {deptById(deptForCategory(parsed.cat))?.restricted && (
+                <Badge color={C.bad} bg="#FEECEC">
+                  закрытый — видят только отдел и руководство
+                </Badge>
+              )}
             </div>
 
             {parsed.amount != null && (
-              <div className="rounded-xl px-3 py-2.5" style={{ background: "#fff", border: `1px solid ${budget.over ? "#FECACA" : C.border}` }}>
-                <div className="flex items-center gap-1.5 font-bold mb-1" style={{ fontSize: 13, color: budget.over ? C.bad : C.ink }}>
-                  <Wallet size={15} /> Бюджет филиала «{branchById(parsed.branchId)?.name}»
+              <div
+                className="rounded-xl px-3 py-2.5"
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${budget.over ? "#FECACA" : C.border}`,
+                }}
+              >
+                <div
+                  className="flex items-center gap-1.5 font-bold mb-1"
+                  style={{ fontSize: 13, color: budget.over ? C.bad : C.ink }}
+                >
+                  <Wallet size={15} /> Бюджет филиала «
+                  {branchById(parsed.branchId)?.name}»
                 </div>
-                <div style={{ fontSize: 12.5, color: C.sub }}>Лимит: {fmtMoney(budget.limit)} · Потрачено: {fmtMoney(budget.spent)} · Эта заявка: {fmtMoney(parsed.amount)}</div>
-                {budget.over && <div className="mt-1.5" style={{ fontSize: 12.5, color: C.bad, fontWeight: 600 }}>⚠ Превышение лимита — заявка уйдёт на ручное одобрение финансисту.</div>}
+                <div style={{ fontSize: 12.5, color: C.sub }}>
+                  Лимит: {fmtMoney(budget.limit)} · Потрачено:{" "}
+                  {fmtMoney(budget.spent)} · Эта заявка:{" "}
+                  {fmtMoney(parsed.amount)}
+                </div>
+                {budget.over && (
+                  <div
+                    className="mt-1.5"
+                    style={{ fontSize: 12.5, color: C.bad, fontWeight: 600 }}
+                  >
+                    ⚠ Превышение лимита — заявка уйдёт на ручное одобрение
+                    финансисту.
+                  </div>
+                )}
               </div>
             )}
 
-            <button onClick={create} className="w-full mt-1 rounded-xl py-3 font-bold text-white" style={{ background: C.brandA, fontSize: 15, boxShadow: `0 6px 16px ${C.brandA}33` }}>
+            <button
+              onClick={create}
+              className="w-full mt-1 rounded-xl py-3 font-bold text-white"
+              style={{
+                background: C.brandA,
+                fontSize: 15,
+                boxShadow: `0 6px 16px ${C.brandA}33`,
+              }}
+            >
               Создать заявку
             </button>
           </div>
@@ -1314,96 +3258,229 @@ function computeAnalytics(tasks, history, now) {
   const funnel = [];
   for (let p = 1; p <= 4; p++) {
     const durs = [];
-    tasks.forEach((t) => { const m = enter[t.id]; if (m && m[p] != null && m[p + 1] != null) durs.push(m[p + 1] - m[p]); });
+    tasks.forEach((t) => {
+      const m = enter[t.id];
+      if (m && m[p] != null && m[p + 1] != null) durs.push(m[p + 1] - m[p]);
+    });
     const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
     funnel.push({ from: p, to: p + 1, avg, count: durs.length });
   }
   const maxAvg = Math.max(1, ...funnel.map((f) => f.avg));
-  const bottleneckIdx = funnel.reduce((best, f, i) => (f.avg > funnel[best].avg ? i : best), 0);
+  const bottleneckIdx = funnel.reduce(
+    (best, f, i) => (f.avg > funnel[best].avg ? i : best),
+    0,
+  );
 
   const execIds = [...new Set(tasks.map((t) => t.executorId))];
-  const eff = execIds.map((id) => {
-    const own = tasks.filter((t) => t.executorId === id);
-    let overdue = 0; const reactions = [];
-    own.forEach((t) => {
-      const m = enter[t.id] || {};
-      if (m[2] != null) reactions.push(m[2] - t.createdAt);
-      if (t.phase >= 5) { if ((m[5] || 0) > t.slaDeadline) overdue++; }
-      else if (now > t.slaDeadline) overdue++;
-    });
-    const total = own.length;
-    const rate = total ? Math.round(((total - overdue) / total) * 100) : 100;
-    const avgReact = reactions.length ? reactions.reduce((a, b) => a + b, 0) / reactions.length : 0;
-    return { id, total, overdue, rate, avgReact };
-  }).sort((a, z) => z.rate - a.rate);
+  const eff = execIds
+    .map((id) => {
+      const own = tasks.filter((t) => t.executorId === id);
+      let overdue = 0;
+      const reactions = [];
+      own.forEach((t) => {
+        const m = enter[t.id] || {};
+        if (m[2] != null) reactions.push(m[2] - t.createdAt);
+        if (t.phase >= 5) {
+          if ((m[5] || 0) > t.slaDeadline) overdue++;
+        } else if (now > t.slaDeadline) overdue++;
+      });
+      const total = own.length;
+      const rate = total ? Math.round(((total - overdue) / total) * 100) : 100;
+      const avgReact = reactions.length
+        ? reactions.reduce((a, b) => a + b, 0) / reactions.length
+        : 0;
+      return { id, total, overdue, rate, avgReact };
+    })
+    .sort((a, z) => z.rate - a.rate);
 
   const byBranch = {};
-  tasks.forEach((t) => { if (t.amount) byBranch[t.branchId] = (byBranch[t.branchId] || 0) + t.amount; });
-  const fin = Object.entries(byBranch).map(([bid, value]) => ({ name: branchById(+bid)?.name, value })).sort((a, z) => z.value - a.value);
-  const toPay = tasks.filter((t) => t.phase === 4 && t.amount).reduce((a, t) => a + t.amount, 0);
+  tasks.forEach((t) => {
+    if (t.amount) byBranch[t.branchId] = (byBranch[t.branchId] || 0) + t.amount;
+  });
+  const fin = Object.entries(byBranch)
+    .map(([bid, value]) => ({ name: branchById(+bid)?.name, value }))
+    .sort((a, z) => z.value - a.value);
+  const toPay = tasks
+    .filter((t) => t.phase === 4 && t.amount)
+    .reduce((a, t) => a + t.amount, 0);
 
-  const overdueAll = tasks.filter((t) => t.phase < 5 && now > t.slaDeadline).length;
-  const slaRate = tasks.length ? Math.round(((tasks.length - overdueAll) / tasks.length) * 100) : 100;
+  const overdueAll = tasks.filter(
+    (t) => t.phase < 5 && now > t.slaDeadline,
+  ).length;
+  const slaRate = tasks.length
+    ? Math.round(((tasks.length - overdueAll) / tasks.length) * 100)
+    : 100;
 
   return {
-    funnel, maxAvg, bottleneckIdx, eff, fin, toPay,
-    active: tasks.filter((t) => t.phase < 5).length, overdueAll,
-    done: tasks.filter((t) => t.phase >= 5).length, slaRate,
+    funnel,
+    maxAvg,
+    bottleneckIdx,
+    eff,
+    fin,
+    toPay,
+    active: tasks.filter((t) => t.phase < 5).length,
+    overdueAll,
+    done: tasks.filter((t) => t.phase >= 5).length,
+    slaRate,
   };
 }
 
 /* ----------------------- кабина директора (Этап 5) ------------------------- */
 function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
-  const a = useMemo(() => computeAnalytics(tasks, history, now), [tasks, history, now]);
-  const { incidents } = useMemo(() => detectAnomalies(tasks, history, now), [tasks, history, now]);
+  const a = useMemo(
+    () => computeAnalytics(tasks, history, now),
+    [tasks, history, now],
+  );
+  const { incidents } = useMemo(
+    () => detectAnomalies(tasks, history, now),
+    [tasks, history, now],
+  );
   const canFilter = role === "director" || role === "finance";
 
   const exportCsv = () => {
-    const rows = [["ФИО", "Должность", "Всего", "Просрочено", "Ср. реакция (мин)", "Рейтинг %"]];
-    a.eff.forEach((e) => { const u = userById(e.id); rows.push([u?.name, u?.pos, e.total, e.overdue, Math.round(e.avgReact / M), e.rate]); });
+    const rows = [
+      [
+        "ФИО",
+        "Должность",
+        "Всего",
+        "Просрочено",
+        "Ср. реакция (мин)",
+        "Рейтинг %",
+      ],
+    ];
+    a.eff.forEach((e) => {
+      const u = userById(e.id);
+      rows.push([
+        u?.name,
+        u?.pos,
+        e.total,
+        e.overdue,
+        Math.round(e.avgReact / M),
+        e.rate,
+      ]);
+    });
     const csv = "\uFEFF" + rows.map((r) => r.join(";")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = "effektivnost.csv"; link.click();
-    URL.revokeObjectURL(url); notify("CSV-файл выгружен");
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "effektivnost.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    notify("CSV-файл выгружен");
   };
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl bg-white p-4 flex flex-wrap items-center gap-3" style={{ border: `1px solid ${C.border}` }}>
-        <span className="inline-flex items-center gap-1.5 font-bold" style={{ color: C.ink, fontSize: 13.5 }}><Filter size={16} /> Фильтр:</span>
+      <div
+        className="rounded-2xl bg-white p-4 flex flex-wrap items-center gap-3"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <span
+          className="inline-flex items-center gap-1.5 font-bold"
+          style={{ color: C.ink, fontSize: 13.5 }}
+        >
+          <Filter size={16} /> Фильтр:
+        </span>
         {canFilter ? (
           <>
-            <Select value={filters.company} onChange={(v) => dispatch({ type: "SET_FILTER", key: "company", value: v })}
-              options={[{ value: "all", label: "Все юр. лица" }, ...ORG.companies.map((c) => ({ value: c.id, label: c.name }))]} />
-            <Select value={filters.branch} onChange={(v) => dispatch({ type: "SET_FILTER", key: "branch", value: v })}
-              options={[{ value: "all", label: "Все филиалы" }, ...ORG.branches.map((b) => ({ value: b.id, label: b.name }))]} />
-            <Select value={filters.period} onChange={(v) => dispatch({ type: "SET_FILTER", key: "period", value: v })}
-              options={[{ value: "all", label: "Всё время" }, { value: "30", label: "30 дней" }, { value: "7", label: "7 дней" }]} />
+            <Select
+              value={filters.company}
+              onChange={(v) =>
+                dispatch({ type: "SET_FILTER", key: "company", value: v })
+              }
+              options={[
+                { value: "all", label: "Все юр. лица" },
+                ...ORG.companies.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+            <Select
+              value={filters.branch}
+              onChange={(v) =>
+                dispatch({ type: "SET_FILTER", key: "branch", value: v })
+              }
+              options={[
+                { value: "all", label: "Все филиалы" },
+                ...ORG.branches.map((b) => ({ value: b.id, label: b.name })),
+              ]}
+            />
+            <Select
+              value={filters.period}
+              onChange={(v) =>
+                dispatch({ type: "SET_FILTER", key: "period", value: v })
+              }
+              options={[
+                { value: "all", label: "Всё время" },
+                { value: "30", label: "30 дней" },
+                { value: "7", label: "7 дней" },
+              ]}
+            />
           </>
         ) : (
-          <span style={{ fontSize: 13, color: C.sub }}>Аналитика по вашей зоне ответственности.</span>
+          <span style={{ fontSize: 13, color: C.sub }}>
+            Аналитика по вашей зоне ответственности.
+          </span>
         )}
         <div className="ml-auto flex gap-2">
-          <button onClick={exportCsv} className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold" style={{ border: `1px solid ${C.border}`, color: C.ink, fontSize: 13 }}><Download size={15} /> CSV</button>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold" style={{ border: `1px solid ${C.border}`, color: C.ink, fontSize: 13 }}><Printer size={15} /> Печать</button>
+          <button
+            onClick={exportCsv}
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.ink,
+              fontSize: 13,
+            }}
+          >
+            <Download size={15} /> CSV
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.ink,
+              fontSize: 13,
+            }}
+          >
+            <Printer size={15} /> Печать
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl bg-white p-4 flex items-center justify-center" style={{ border: `1px solid ${C.border}` }}>
-          <Ring value={a.slaRate} label="Соблюдение SLA по сети" color={lightTone(a.slaRate)} />
+        <div
+          className="rounded-2xl bg-white p-4 flex items-center justify-center"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <Ring
+            value={a.slaRate}
+            label="Соблюдение SLA по сети"
+            color={lightTone(a.slaRate)}
+          />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:col-span-3">
           <Kpi label="Активных задач" value={a.active} tone={C.brandA} />
-          <Kpi label="Просрочено по SLA" value={a.overdueAll} tone={a.overdueAll > 0 ? C.bad : C.ok} />
+          <Kpi
+            label="Просрочено по SLA"
+            value={a.overdueAll}
+            tone={a.overdueAll > 0 ? C.bad : C.ok}
+          />
           <Kpi label="Завершено" value={a.done} tone={C.ok} />
         </div>
       </div>
 
       {/* воронка */}
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 17 }}>Воронка процессов: где «застревают» задачи</h3>
-        <p style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>Среднее время перехода между фазами по неизменяемому журналу.</p>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 17 }}>
+          Воронка процессов: где «застревают» задачи
+        </h3>
+        <p style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
+          Среднее время перехода между фазами по неизменяемому журналу.
+        </p>
         <div className="space-y-3.5">
           {a.funnel.map((f, i) => {
             const isBottle = i === a.bottleneckIdx && f.avg > 0;
@@ -1411,15 +3488,38 @@ function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
             const color = PHASES[f.to - 1].color;
             return (
               <div key={i}>
-                <div className="flex items-center justify-between mb-1" style={{ fontSize: 13.5 }}>
-                  <span style={{ color: C.ink, fontWeight: 600 }}>Фаза {f.from} ({PHASES[f.from - 1].label}) → {f.to} ({PHASES[f.to - 1].label})</span>
+                <div
+                  className="flex items-center justify-between mb-1"
+                  style={{ fontSize: 13.5 }}
+                >
+                  <span style={{ color: C.ink, fontWeight: 600 }}>
+                    Фаза {f.from} ({PHASES[f.from - 1].label}) → {f.to} (
+                    {PHASES[f.to - 1].label})
+                  </span>
                   <span className="inline-flex items-center gap-2">
-                    <b style={{ color: isBottle ? C.bad : C.ink }}>{f.avg ? fmtDur(f.avg) : "—"}</b>
-                    {isBottle && <Badge color={C.bad} bg="#FEECEC">Узкое место</Badge>}
+                    <b style={{ color: isBottle ? C.bad : C.ink }}>
+                      {f.avg ? fmtDur(f.avg) : "—"}
+                    </b>
+                    {isBottle && (
+                      <Badge color={C.bad} bg="#FEECEC">
+                        Узкое место
+                      </Badge>
+                    )}
                   </span>
                 </div>
-                <div className="rounded-full" style={{ height: 12, background: C.line }}>
-                  <div className="rounded-full" style={{ width: w + "%", height: 12, background: isBottle ? C.bad : color, transition: "width .4s" }} />
+                <div
+                  className="rounded-full"
+                  style={{ height: 12, background: C.line }}
+                >
+                  <div
+                    className="rounded-full"
+                    style={{
+                      width: w + "%",
+                      height: 12,
+                      background: isBottle ? C.bad : color,
+                      transition: "width .4s",
+                    }}
+                  />
                 </div>
               </div>
             );
@@ -1429,19 +3529,39 @@ function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
 
       {/* инциденты (ИИ-ревизор) */}
       {incidents.length > 0 && (
-        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
+        <div
+          className="rounded-2xl bg-white p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Activity size={18} color={C.bad} />
-            <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>Карта инцидентов (системные сбои)</h3>
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>
+              Карта инцидентов (системные сбои)
+            </h3>
           </div>
-          <p style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>ИИ объединяет повторяющиеся проблемы в один инцидент — повод для управленческого решения.</p>
+          <p style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>
+            ИИ объединяет повторяющиеся проблемы в один инцидент — повод для
+            управленческого решения.
+          </p>
           <div className="space-y-2.5">
             {incidents.map((inc, i) => (
-              <div key={i} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: "#FEF2F2", border: `1px solid #FECACA` }}>
+              <div
+                key={i}
+                className="rounded-xl px-4 py-3 flex items-center gap-3"
+                style={{ background: "#FEF2F2", border: `1px solid #FECACA` }}
+              >
                 <AlertTriangle size={18} color={C.bad} />
                 <div className="flex-1">
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#991B1B" }}>Филиал «{branchById(inc.branchId)?.name}» · {inc.cat}</div>
-                  <div style={{ fontSize: 12.5, color: C.sub }}>{inc.count} заявок за 30 дней{inc.total ? ` · затраты ${fmtMoney(inc.total)}` : ""}. Рекомендация ИИ: устранить причину, а не латать.</div>
+                  <div
+                    style={{ fontSize: 14, fontWeight: 700, color: "#991B1B" }}
+                  >
+                    Филиал «{branchById(inc.branchId)?.name}» · {inc.cat}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.sub }}>
+                    {inc.count} заявок за 30 дней
+                    {inc.total ? ` · затраты ${fmtMoney(inc.total)}` : ""}.
+                    Рекомендация ИИ: устранить причину, а не латать.
+                  </div>
                 </div>
               </div>
             ))}
@@ -1451,8 +3571,13 @@ function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* эффективность */}
-        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>Эффективность исполнителей</h3>
+        <div
+          className="rounded-2xl bg-white p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>
+            Эффективность исполнителей
+          </h3>
           <div>
             <table className="w-full" style={{ fontSize: 13 }}>
               <thead>
@@ -1472,13 +3597,39 @@ function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           <Avatar id={e.id} size={26} />
-                          <div><div style={{ color: C.ink, fontWeight: 600 }}>{u?.name}</div><div style={{ color: C.faint, fontSize: 11.5 }}>{u?.pos}</div></div>
+                          <div>
+                            <div style={{ color: C.ink, fontWeight: 600 }}>
+                              {u?.name}
+                            </div>
+                            <div style={{ color: C.faint, fontSize: 11.5 }}>
+                              {u?.pos}
+                            </div>
+                          </div>
                         </div>
                       </td>
-                      <td className="text-center" style={{ color: C.ink }}>{e.total}</td>
-                      <td className="text-center" style={{ color: e.overdue ? C.bad : C.sub, fontWeight: e.overdue ? 700 : 400 }}>{e.overdue}</td>
-                      <td className="text-center" style={{ color: C.sub }}>{e.avgReact ? fmtDur(e.avgReact) : "—"}</td>
-                      <td className="text-right"><span className="font-bold" style={{ color: lightTone(e.rate) }}>{e.rate}%</span></td>
+                      <td className="text-center" style={{ color: C.ink }}>
+                        {e.total}
+                      </td>
+                      <td
+                        className="text-center"
+                        style={{
+                          color: e.overdue ? C.bad : C.sub,
+                          fontWeight: e.overdue ? 700 : 400,
+                        }}
+                      >
+                        {e.overdue}
+                      </td>
+                      <td className="text-center" style={{ color: C.sub }}>
+                        {e.avgReact ? fmtDur(e.avgReact) : "—"}
+                      </td>
+                      <td className="text-right">
+                        <span
+                          className="font-bold"
+                          style={{ color: lightTone(e.rate) }}
+                        >
+                          {e.rate}%
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
@@ -1488,25 +3639,70 @@ function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
         </div>
 
         {/* финансы */}
-        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
+        <div
+          className="rounded-2xl bg-white p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>Затраты по филиалам</h3>
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>
+              Затраты по филиалам
+            </h3>
             <div className="text-right">
-              <div style={{ fontSize: 11.5, color: C.faint }}>К выплате (на согласовании)</div>
-              <div className="font-extrabold" style={{ color: C.violet, fontSize: 16 }}>{fmtMoney(a.toPay)}</div>
+              <div style={{ fontSize: 11.5, color: C.faint }}>
+                К выплате (на согласовании)
+              </div>
+              <div
+                className="font-extrabold"
+                style={{ color: C.violet, fontSize: 16 }}
+              >
+                {fmtMoney(a.toPay)}
+              </div>
             </div>
           </div>
           {a.fin.length === 0 ? (
-            <div className="py-10 text-center" style={{ color: C.faint, fontSize: 13 }}>Нет финансовых данных в выборке.</div>
+            <div
+              className="py-10 text-center"
+              style={{ color: C.faint, fontSize: 13 }}
+            >
+              Нет финансовых данных в выборке.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={a.fin} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EDF1F7" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 13, fill: C.sub }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => v / 1000 + "к"} tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} width={42} />
-                <Tooltip formatter={(v) => fmtMoney(v)} cursor={{ fill: "#F1F5F9" }} contentStyle={{ borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 13 }} />
+              <BarChart
+                data={a.fin}
+                margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#EDF1F7"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 13, fill: C.sub }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={(v) => v / 1000 + "к"}
+                  tick={{ fontSize: 12, fill: C.faint }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={42}
+                />
+                <Tooltip
+                  formatter={(v) => fmtMoney(v)}
+                  cursor={{ fill: "#F1F5F9" }}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${C.border}`,
+                    fontSize: 13,
+                  }}
+                />
                 <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                  {a.fin.map((d, i) => <Cell key={i} fill={i === 0 ? C.brandA : "#93C5FD"} />)}
+                  {a.fin.map((d, i) => (
+                    <Cell key={i} fill={i === 0 ? C.brandA : "#93C5FD"} />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -1522,31 +3718,66 @@ function PersonalAchievements({ me, tasks, history, shift, now }) {
   const enter = useMemo(() => getEnter(history), [history]);
   const own = tasks.filter((t) => t.executorId === me.id);
   const closed = own.filter((t) => t.phase >= 5).length;
-  let overdue = 0; const reactions = []; const durations = [];
+  let overdue = 0;
+  const reactions = [];
+  const durations = [];
   own.forEach((t) => {
     const m = enter[t.id] || {};
     if (m[2] != null) reactions.push(m[2] - t.createdAt);
-    if (t.phase >= 5) { if (m[5] && m[5] > t.slaDeadline) overdue++; if (m[5]) durations.push(m[5] - t.createdAt); }
-    else if (now > t.slaDeadline) overdue++;
+    if (t.phase >= 5) {
+      if (m[5] && m[5] > t.slaDeadline) overdue++;
+      if (m[5]) durations.push(m[5] - t.createdAt);
+    } else if (now > t.slaDeadline) overdue++;
   });
   const total = own.length;
   const slaRate = total ? Math.round(((total - overdue) / total) * 100) : 100;
-  const avgReact = reactions.length ? reactions.reduce((a, b) => a + b, 0) / reactions.length : 0;
-  const thisWeekMin = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / M) : 0;
+  const avgReact = reactions.length
+    ? reactions.reduce((a, b) => a + b, 0) / reactions.length
+    : 0;
+  const thisWeekMin = durations.length
+    ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / M)
+    : 0;
   const lastWeekMin = thisWeekMin ? Math.round(thisWeekMin * 1.25) : 0;
   const normMin = 60;
-  const lingered = own.filter((t) => { const m = enter[t.id] || {}; return m[2] && m[3] && m[3] - m[2] > 2 * H; }).length;
-  const returns = history.filter((h) => h.action === "return" && own.some((t) => t.id === h.taskId)).length;
-  const bonus = slaRate >= 95 ? 20 : slaRate >= 90 ? 15 : slaRate >= 80 ? 10 : 0;
+  const lingered = own.filter((t) => {
+    const m = enter[t.id] || {};
+    return m[2] && m[3] && m[3] - m[2] > 2 * H;
+  }).length;
+  const returns = history.filter(
+    (h) => h.action === "return" && own.some((t) => t.id === h.taskId),
+  ).length;
+  const bonus =
+    slaRate >= 95 ? 20 : slaRate >= 90 ? 15 : slaRate >= 80 ? 10 : 0;
   const toSuper = slaRate >= 95 ? null : 95 - slaRate;
-  const speedData = [{ name: "Прош. неделя", value: lastWeekMin }, { name: "Эта неделя", value: thisWeekMin }, { name: "Норматив", value: normMin }];
+  const speedData = [
+    { name: "Прош. неделя", value: lastWeekMin },
+    { name: "Эта неделя", value: thisWeekMin },
+    { name: "Норматив", value: normMin },
+  ];
 
   if (total === 0) {
     return (
-      <div className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${C.border}` }}>
-        <div className="flex items-center gap-3 mb-2"><Avatar id={me.id} size={48} />
-          <div><div className="font-extrabold" style={{ color: C.ink, fontSize: 19 }}>{me.name}</div><div style={{ color: C.sub, fontSize: 14 }}>{me.pos}</div></div></div>
-        <p style={{ color: C.sub, fontSize: 14 }}>Личная аналитика собирается по задачам, где вы — исполнитель. Войдите как исполнитель (например, «Петров А. И.» или «Зайцев К. В.») через меню профиля, чтобы увидеть экран достижений.</p>
+      <div
+        className="rounded-2xl bg-white p-6"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <Avatar id={me.id} size={48} />
+          <div>
+            <div
+              className="font-extrabold"
+              style={{ color: C.ink, fontSize: 19 }}
+            >
+              {me.name}
+            </div>
+            <div style={{ color: C.sub, fontSize: 14 }}>{me.pos}</div>
+          </div>
+        </div>
+        <p style={{ color: C.sub, fontSize: 14 }}>
+          Личная аналитика собирается по задачам, где вы — исполнитель. Войдите
+          как исполнитель (например, «Петров А. И.» или «Зайцев К. В.») через
+          меню профиля, чтобы увидеть экран достижений.
+        </p>
       </div>
     );
   }
@@ -1554,86 +3785,237 @@ function PersonalAchievements({ me, tasks, history, shift, now }) {
   return (
     <div className="space-y-5">
       {/* шапка */}
-      <div className="rounded-2xl bg-white p-5 flex flex-wrap items-center gap-4" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-5 flex flex-wrap items-center gap-4"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         <Avatar id={me.id} size={52} />
         <div className="flex-1">
-          <div className="font-extrabold" style={{ color: C.ink, fontSize: 20 }}>{me.name}</div>
-          <div style={{ color: C.sub, fontSize: 14 }}>{me.pos}{me.branchId ? ` · Филиал «${branchById(me.branchId)?.name}»` : ""}</div>
+          <div
+            className="font-extrabold"
+            style={{ color: C.ink, fontSize: 20 }}
+          >
+            {me.name}
+          </div>
+          <div style={{ color: C.sub, fontSize: 14 }}>
+            {me.pos}
+            {me.branchId ? ` · Филиал «${branchById(me.branchId)?.name}»` : ""}
+          </div>
         </div>
-        <span className="inline-flex items-center gap-2 rounded-xl px-3 py-2 font-bold"
-          style={shift.open ? { background: "#E9F9EF", color: C.ok } : { background: "#FEECEC", color: C.bad }}>
+        <span
+          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 font-bold"
+          style={
+            shift.open
+              ? { background: "#E9F9EF", color: C.ok }
+              : { background: "#FEECEC", color: C.bad }
+          }
+        >
           <Power size={16} /> {shift.open ? "На работе" : "Смена закрыта"}
         </span>
       </div>
 
       {/* главные цифры */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl bg-white p-4 flex items-center justify-center" style={{ border: `1px solid ${C.border}` }}>
-          <Ring value={slaRate} label="Успеваемость (SLA)" color={lightTone(slaRate)} />
+        <div
+          className="rounded-2xl bg-white p-4 flex items-center justify-center"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <Ring
+            value={slaRate}
+            label="Успеваемость (SLA)"
+            color={lightTone(slaRate)}
+          />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:col-span-3">
-          <Kpi label="Среднее время реакции" value={avgReact ? fmtDur(avgReact) : "—"} tone={C.ok} />
+          <Kpi
+            label="Среднее время реакции"
+            value={avgReact ? fmtDur(avgReact) : "—"}
+            tone={C.ok}
+          />
           <Kpi label="Закрыто задач" value={closed} tone={C.brandA} />
         </div>
       </div>
 
       {/* мотивация / бонус */}
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <div className="flex items-center gap-2 mb-3"><Award size={18} color="#FACC15" /><h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>Мой бонус за скорость</h3></div>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <Award size={18} color="#FACC15" />
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>
+            Мой бонус за скорость
+          </h3>
+        </div>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 mb-3">
-          <div><div style={{ fontSize: 12.5, color: C.faint }}>Текущая премия</div><div className="font-extrabold" style={{ color: bonus ? C.ok : C.faint, fontSize: 24 }}>+{bonus}% <span style={{ fontSize: 14, color: C.sub, fontWeight: 600 }}>к окладу</span></div></div>
-          <div><div style={{ fontSize: 12.5, color: C.faint }}>До супер-бонуса (+20%)</div><div className="font-bold" style={{ color: C.ink, fontSize: 15 }}>{toSuper == null ? "достигнут — держите планку" : `не хватает ${toSuper} п.п. SLA`}</div></div>
+          <div>
+            <div style={{ fontSize: 12.5, color: C.faint }}>Текущая премия</div>
+            <div
+              className="font-extrabold"
+              style={{ color: bonus ? C.ok : C.faint, fontSize: 24 }}
+            >
+              +{bonus}%{" "}
+              <span style={{ fontSize: 14, color: C.sub, fontWeight: 600 }}>
+                к окладу
+              </span>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12.5, color: C.faint }}>
+              До супер-бонуса (+20%)
+            </div>
+            <div className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+              {toSuper == null
+                ? "достигнут — держите планку"
+                : `не хватает ${toSuper} п.п. SLA`}
+            </div>
+          </div>
         </div>
-        <div className="rounded-full" style={{ height: 14, background: C.line }}>
-          <div className="rounded-full" style={{ width: Math.min(100, slaRate) + "%", height: 14, background: `linear-gradient(90deg, ${C.brandA}, ${C.brandB})`, transition: "width .5s" }} />
+        <div
+          className="rounded-full"
+          style={{ height: 14, background: C.line }}
+        >
+          <div
+            className="rounded-full"
+            style={{
+              width: Math.min(100, slaRate) + "%",
+              height: 14,
+              background: `linear-gradient(90deg, ${C.brandA}, ${C.brandB})`,
+              transition: "width .5s",
+            }}
+          />
         </div>
-        <div className="mt-2 inline-flex items-center gap-1.5" style={{ fontSize: 13, color: C.sub }}>
-          <Sparkles size={14} color={C.violet} /> Подсказка: держите SLA выше 95% — и премия будет максимальной.
+        <div
+          className="mt-2 inline-flex items-center gap-1.5"
+          style={{ fontSize: 13, color: C.sub }}
+        >
+          <Sparkles size={14} color={C.violet} /> Подсказка: держите SLA выше
+          95% — и премия будет максимальной.
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* скорость */}
-        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-          <div className="flex items-center gap-2 mb-3"><TrendingUp size={18} color={C.brandA} /><h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>Моя скорость работы</h3></div>
+        <div
+          className="rounded-2xl bg-white p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp size={18} color={C.brandA} />
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>
+              Моя скорость работы
+            </h3>
+          </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={speedData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EDF1F7" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 12.5, fill: C.sub }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} width={28} />
-              <Tooltip formatter={(v) => v + " мин/задача"} cursor={{ fill: "#F1F5F9" }} contentStyle={{ borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 13 }} />
+            <BarChart
+              data={speedData}
+              margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#EDF1F7"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 12.5, fill: C.sub }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: C.faint }}
+                axisLine={false}
+                tickLine={false}
+                width={28}
+              />
+              <Tooltip
+                formatter={(v) => v + " мин/задача"}
+                cursor={{ fill: "#F1F5F9" }}
+                contentStyle={{
+                  borderRadius: 12,
+                  border: `1px solid ${C.border}`,
+                  fontSize: 13,
+                }}
+              />
               <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                <Cell fill="#CBD5E1" /><Cell fill={C.ok} /><Cell fill="#FCA5A5" />
+                <Cell fill="#CBD5E1" />
+                <Cell fill={C.ok} />
+                <Cell fill="#FCA5A5" />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          <div style={{ fontSize: 12.5, color: C.sub, marginTop: 4 }}>Сравнение с вашим прошлым результатом и нормативом компании.</div>
+          <div style={{ fontSize: 12.5, color: C.sub, marginTop: 4 }}>
+            Сравнение с вашим прошлым результатом и нормативом компании.
+          </div>
         </div>
 
         {/* зона роста */}
-        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid #FED7AA`, background: "#FFFBF5" }}>
-          <div className="flex items-center gap-2 mb-2"><AlertCircle size={18} color={C.warn} /><h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>Зона роста (без сюрпризов в зарплате)</h3></div>
+        <div
+          className="rounded-2xl bg-white p-5"
+          style={{ border: `1px solid #FED7AA`, background: "#FFFBF5" }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle size={18} color={C.warn} />
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 17 }}>
+              Зона роста (без сюрпризов в зарплате)
+            </h3>
+          </div>
           <ul className="space-y-2" style={{ fontSize: 14, color: C.ink }}>
-            <li>• Зависание на старте: <b>{lingered}</b> задач(и) висели в «Просмотрено» дольше 2 часов до начала работы.</li>
-            <li>• Возвраты на доработку: <b>{returns}</b> (контролёр вернул из-за качества/отчёта).</li>
+            <li>
+              • Зависание на старте: <b>{lingered}</b> задач(и) висели в
+              «Просмотрено» дольше 2 часов до начала работы.
+            </li>
+            <li>
+              • Возвраты на доработку: <b>{returns}</b> (контролёр вернул из-за
+              качества/отчёта).
+            </li>
           </ul>
-          <div className="mt-3 rounded-xl px-3 py-2.5" style={{ background: "#fff", border: `1px solid ${C.border}` }}>
-            <div className="flex items-center gap-1.5 font-bold mb-1" style={{ fontSize: 13, color: C.violet }}><Bot size={15} /> Совет от ИИ</div>
-            <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>Вы быстро делаете саму работу. Нажимайте «В работу» и «Выполнено» сразу на месте через Telegram-бот — и KPI вырастет, а просрочки исчезнут.</div>
+          <div
+            className="mt-3 rounded-xl px-3 py-2.5"
+            style={{ background: "#fff", border: `1px solid ${C.border}` }}
+          >
+            <div
+              className="flex items-center gap-1.5 font-bold mb-1"
+              style={{ fontSize: 13, color: C.violet }}
+            >
+              <Bot size={15} /> Совет от ИИ
+            </div>
+            <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>
+              Вы быстро делаете саму работу. Нажимайте «В работу» и «Выполнено»
+              сразу на месте через Telegram-бот — и KPI вырастет, а просрочки
+              исчезнут.
+            </div>
           </div>
         </div>
       </div>
 
       {/* достижения */}
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>Достижения месяца</h3>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>
+          Достижения месяца
+        </h3>
         <div className="flex flex-wrap gap-3">
-          {[["🥇", "Гроза аварий", "быстрый перевод критичных задач в работу"],
+          {[
+            ["🥇", "Гроза аварий", "быстрый перевод критичных задач в работу"],
             ["⏱️", "Железный SLA", "недели без просрочек"],
-            ["🤝", "Мастер отчётов", "работы принимают с первого раза"]].map(([emo, name, desc]) => (
-            <div key={name} className="rounded-xl px-4 py-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}`, minWidth: 180 }}>
+            ["🤝", "Мастер отчётов", "работы принимают с первого раза"],
+          ].map(([emo, name, desc]) => (
+            <div
+              key={name}
+              className="rounded-xl px-4 py-3"
+              style={{
+                background: "#FBFCFE",
+                border: `1px solid ${C.border}`,
+                minWidth: 180,
+              }}
+            >
               <div style={{ fontSize: 24 }}>{emo}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{name}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>
+                {name}
+              </div>
               <div style={{ fontSize: 12, color: C.sub }}>{desc}</div>
             </div>
           ))}
@@ -1648,45 +4030,105 @@ function OrgStructure() {
   return (
     <div className="space-y-5">
       {ORG.companies.map((co) => (
-        <div key={co.id} className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
+        <div
+          key={co.id}
+          className="rounded-2xl bg-white p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           <div className="flex items-center gap-2 mb-1">
             <Building2 size={18} color={C.brandA} />
-            <h3 className="font-extrabold" style={{ color: C.ink, fontSize: 18 }}>{co.name}</h3>
+            <h3
+              className="font-extrabold"
+              style={{ color: C.ink, fontSize: 18 }}
+            >
+              {co.name}
+            </h3>
             <Badge>ИНН {co.inn}</Badge>
           </div>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {ORG.branches.filter((b) => b.companyId === co.id).map((b) => {
-              const staff = ORG.users.filter((u) => u.branchId === b.id && u.active !== false).sort((a, z) => a.level - z.level);
-              return (
-                <div key={b.id} className="rounded-xl p-4" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-bold" style={{ color: C.ink, fontSize: 15 }}>Филиал «{b.name}»</div>
-                    <Badge color={C.violet} bg="#F5F0FE">Бюджет: {fmtMoney(budgetFor(b.id))}/мес</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {staff.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>Без сотрудников</div>}
-                    {staff.map((u) => (
-                      <div key={u.id} className="flex items-center gap-2.5 min-w-0" style={{ paddingLeft: (u.level - 1) * 12 }}>
-                        <Avatar id={u.id} size={28} />
-                        <div className="min-w-0"><div style={{ fontSize: 13.5, color: C.ink, fontWeight: 600 }}>{u.name}</div><div style={{ fontSize: 12, color: C.sub }}>{u.pos}</div></div>
+            {ORG.branches
+              .filter((b) => b.companyId === co.id)
+              .map((b) => {
+                const staff = ORG.users
+                  .filter((u) => u.branchId === b.id && u.active !== false)
+                  .sort((a, z) => a.level - z.level);
+                return (
+                  <div
+                    key={b.id}
+                    className="rounded-xl p-4"
+                    style={{
+                      background: "#FBFCFE",
+                      border: `1px solid ${C.border}`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div
+                        className="font-bold"
+                        style={{ color: C.ink, fontSize: 15 }}
+                      >
+                        Филиал «{b.name}»
                       </div>
-                    ))}
+                      <Badge color={C.violet} bg="#F5F0FE">
+                        Бюджет: {fmtMoney(budgetFor(b.id))}/мес
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      {staff.length === 0 && (
+                        <div style={{ fontSize: 13, color: C.faint }}>
+                          Без сотрудников
+                        </div>
+                      )}
+                      {staff.map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2.5 min-w-0"
+                          style={{ paddingLeft: (u.level - 1) * 12 }}
+                        >
+                          <Avatar id={u.id} size={28} />
+                          <div className="min-w-0">
+                            <div
+                              style={{
+                                fontSize: 13.5,
+                                color: C.ink,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {u.name}
+                            </div>
+                            <div style={{ fontSize: 12, color: C.sub }}>
+                              {u.pos}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
       ))}
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <div className="font-bold mb-2" style={{ color: C.ink, fontSize: 15 }}>Руководство (видит все филиалы)</div>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div className="font-bold mb-2" style={{ color: C.ink, fontSize: 15 }}>
+          Руководство (видит все филиалы)
+        </div>
         <div className="flex flex-wrap gap-4">
-          {ORG.users.filter((u) => u.branchId === null && u.active !== false).map((u) => (
-            <div key={u.id} className="flex items-center gap-2.5">
-              <Avatar id={u.id} size={32} />
-              <div><div style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>{u.name}</div><div style={{ fontSize: 12.5, color: C.sub }}>{u.pos}</div></div>
-            </div>
-          ))}
+          {ORG.users
+            .filter((u) => u.branchId === null && u.active !== false)
+            .map((u) => (
+              <div key={u.id} className="flex items-center gap-2.5">
+                <Avatar id={u.id} size={32} />
+                <div>
+                  <div style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>
+                    {u.name}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.sub }}>{u.pos}</div>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
     </div>
@@ -1695,20 +4137,59 @@ function OrgStructure() {
 
 /* -------------------------------- архив ------------------------------------ */
 function ArchiveView({ tasks, onOpen }) {
-  const done = tasks.filter((t) => t.phase >= 5).sort((a, z) => z.createdAt - a.createdAt);
+  const done = tasks
+    .filter((t) => t.phase >= 5)
+    .sort((a, z) => z.createdAt - a.createdAt);
   return (
-    <div className="rounded-2xl bg-white p-3" style={{ border: `1px solid ${C.border}` }}>
-      {done.length === 0 && <div className="py-10 text-center" style={{ color: C.faint }}>В архиве пока нет завершённых задач.</div>}
+    <div
+      className="rounded-2xl bg-white p-3"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      {done.length === 0 && (
+        <div className="py-10 text-center" style={{ color: C.faint }}>
+          В архиве пока нет завершённых задач.
+        </div>
+      )}
       {done.map((t) => (
-        <button key={t.id} onClick={() => onOpen(t.id)} className="w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl"
+        <button
+          key={t.id}
+          onClick={() => onOpen(t.id)}
+          className="w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl"
           style={{ borderBottom: `1px solid ${C.line}` }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-          <CheckCircle2 size={18} color={C.ok} className="shrink-0" style={{ marginTop: 2 }} />
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "transparent")
+          }
+        >
+          <CheckCircle2
+            size={18}
+            color={C.ok}
+            className="shrink-0"
+            style={{ marginTop: 2 }}
+          />
           <div className="flex-1 min-w-0">
-            <div className="font-semibold" style={{ color: C.ink, fontSize: 14.5, overflowWrap: "break-word" }}>{t.title}</div>
-            <div className="truncate" style={{ fontSize: 12.5, color: C.sub, marginTop: 1 }}>{branchById(t.branchId)?.name} • {t.cat}{t.amount ? ` • ${fmtMoney(t.amount)}` : ""}</div>
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>{new Date(t.createdAt).toLocaleDateString("ru-RU", { timeZone: TZ })}</div>
+            <div
+              className="font-semibold"
+              style={{
+                color: C.ink,
+                fontSize: 14.5,
+                overflowWrap: "break-word",
+              }}
+            >
+              {t.title}
+            </div>
+            <div
+              className="truncate"
+              style={{ fontSize: 12.5, color: C.sub, marginTop: 1 }}
+            >
+              {branchById(t.branchId)?.name} • {t.cat}
+              {t.amount ? ` • ${fmtMoney(t.amount)}` : ""}
+            </div>
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>
+              {new Date(t.createdAt).toLocaleDateString("ru-RU", {
+                timeZone: TZ,
+              })}
+            </div>
           </div>
         </button>
       ))}
@@ -1718,9 +4199,15 @@ function ArchiveView({ tasks, onOpen }) {
 
 /* ------------------------------ о системе ---------------------------------- */
 function StatusBadge({ ok }) {
-  return ok
-    ? <Badge color={C.ok} bg="#E9F9EF">Работает в прототипе</Badge>
-    : <Badge color={C.brandA} bg="#EFF4FF">Бэкенд · дорожная карта</Badge>;
+  return ok ? (
+    <Badge color={C.ok} bg="#E9F9EF">
+      Работает в прототипе
+    </Badge>
+  ) : (
+    <Badge color={C.brandA} bg="#EFF4FF">
+      Бэкенд · дорожная карта
+    </Badge>
+  );
 }
 function AboutView() {
   const rows = [
@@ -1740,32 +4227,69 @@ function AboutView() {
   ];
   return (
     <div className="space-y-5 max-w-3xl">
-      <div className="rounded-2xl p-6 text-white" style={{ background: `linear-gradient(135deg, ${C.brandA}, #5A2113)` }}>
-        <div className="flex items-center gap-3 mb-2"><Logo size={40} radius={11} /><h2 className="font-extrabold" style={{ fontSize: 22 }}>Avesto Group CRM System</h2></div>
-        <p style={{ fontSize: 14.5, lineHeight: 1.55, opacity: .95 }}>
-          Это рабочий интерактивный прототип (MVP) на основе вашего ТЗ. Логика, интерфейс и ИИ-сценарии работают прямо здесь;
-          данные сохраняются между сессиями. Серверные модули ниже спроектированы в ТЗ и подключаются на этапе бэкенда.
+      <div
+        className="rounded-2xl p-6 text-white"
+        style={{ background: `linear-gradient(135deg, ${C.brandA}, #5A2113)` }}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <Logo size={40} radius={11} />
+          <h2 className="font-extrabold" style={{ fontSize: 22 }}>
+            Avesto Group CRM System
+          </h2>
+        </div>
+        <p style={{ fontSize: 14.5, lineHeight: 1.55, opacity: 0.95 }}>
+          Это рабочий интерактивный прототип (MVP) на основе вашего ТЗ. Логика,
+          интерфейс и ИИ-сценарии работают прямо здесь; данные сохраняются между
+          сессиями. Серверные модули ниже спроектированы в ТЗ и подключаются на
+          этапе бэкенда.
         </p>
       </div>
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>Карта возможностей</h3>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>
+          Карта возможностей
+        </h3>
         <div className="space-y-2">
           {rows.map(([label, ok], i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-              <span className="flex items-center gap-2" style={{ fontSize: 14, color: C.ink }}>
-                {ok ? <CheckCircle2 size={16} color={C.ok} /> : <Server size={16} color={C.brandA} />} {label}
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-xl px-3 py-2.5"
+              style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+            >
+              <span
+                className="flex items-center gap-2"
+                style={{ fontSize: 14, color: C.ink }}
+              >
+                {ok ? (
+                  <CheckCircle2 size={16} color={C.ok} />
+                ) : (
+                  <Server size={16} color={C.brandA} />
+                )}{" "}
+                {label}
               </span>
               <StatusBadge ok={ok} />
             </div>
           ))}
         </div>
       </div>
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <div className="flex items-center gap-2 mb-2"><Lock size={17} color={C.ink} /><h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>Как развивать дальше</h3></div>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Lock size={17} color={C.ink} />
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+            Как развивать дальше
+          </h3>
+        </div>
         <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.55 }}>
-          Спринт 1 — БД (PostgreSQL) + смены. Спринт 2 — движок 5 фаз + Telegram-бот. Спринт 3 — ИИ (голос, ревизор аномалий, бюджеты).
-          Спринт 4 — кабина директора, личная аналитика, безопасность (RLS, шифрование, водяные знаки) и DevOps.
-          Архитектура модульная: дизайн, функции и роли расширяются без переписывания ядра.
+          Спринт 1 — БД (PostgreSQL) + смены. Спринт 2 — движок 5 фаз +
+          Telegram-бот. Спринт 3 — ИИ (голос, ревизор аномалий, бюджеты). Спринт
+          4 — кабина директора, личная аналитика, безопасность (RLS, шифрование,
+          водяные знаки) и DevOps. Архитектура модульная: дизайн, функции и роли
+          расширяются без переписывания ядра.
         </p>
       </div>
     </div>
@@ -1774,24 +4298,45 @@ function AboutView() {
 
 /* --------------------------- учёт рабочего времени ------------------------- */
 function TimesheetView({ s, me, now, branchScope }) {
-  const ds = new Date(now); ds.setHours(0, 0, 0, 0);
+  const ds = new Date(now);
+  ds.setHours(0, 0, 0, 0);
   const dayStart = ds.getTime();
   const weekStart = dayStart - ((ds.getDay() + 6) % 7) * D;
   const ts = s.timesheet || [];
   const shifts = s.shifts || {};
   const ov = (a, b, s0, e0) => Math.max(0, Math.min(b, e0) - Math.max(a, s0));
   const calc = (id) => {
-    let today = 0, week = 0;
-    ts.forEach((x) => { if (x.userId === id) { today += ov(x.start, x.end, dayStart, now); week += ov(x.start, x.end, weekStart, now); } });
-    const sh = shifts[id]; let live = 0;
-    if (sh && sh.open && sh.openedAt) { live = now - sh.openedAt; today += ov(sh.openedAt, now, dayStart, now); week += ov(sh.openedAt, now, weekStart, now); }
+    let today = 0,
+      week = 0;
+    ts.forEach((x) => {
+      if (x.userId === id) {
+        today += ov(x.start, x.end, dayStart, now);
+        week += ov(x.start, x.end, weekStart, now);
+      }
+    });
+    const sh = shifts[id];
+    let live = 0;
+    if (sh && sh.open && sh.openedAt) {
+      live = now - sh.openedAt;
+      today += ov(sh.openedAt, now, dayStart, now);
+      week += ov(sh.openedAt, now, weekStart, now);
+    }
     return { today, week, open: !!(sh && sh.open), live };
   };
   const all = (s.users || []).filter((u) => u.active !== false);
-  let people = me.role === "manager"
-    ? all.filter((u) => u.branchId && me.branchId && u.branchId === me.branchId)
-    : (branchScope ? all.filter((u) => u.branchId === branchScope) : all);
-  people = [...people].sort((a, b) => { const A = calc(a.id), B = calc(b.id); return (B.open - A.open) || (B.week - A.week); });
+  let people =
+    me.role === "manager"
+      ? all.filter(
+          (u) => u.branchId && me.branchId && u.branchId === me.branchId,
+        )
+      : branchScope
+        ? all.filter((u) => u.branchId === branchScope)
+        : all;
+  people = [...people].sort((a, b) => {
+    const A = calc(a.id),
+      B = calc(b.id);
+    return B.open - A.open || B.week - A.week;
+  });
   const onNow = all.filter((u) => calc(u.id).open).length;
   const sumToday = people.reduce((a, u) => a + calc(u.id).today, 0);
   const sumWeek = people.reduce((a, u) => a + calc(u.id).week, 0);
@@ -1800,52 +4345,156 @@ function TimesheetView({ s, me, now, branchScope }) {
 
   const Stat = ({ label, value, strong }) => (
     <div style={{ textAlign: "right", minWidth: 78 }}>
-      <div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 14, color: strong ? C.ink : C.sub, fontWeight: 700, whiteSpace: "nowrap" }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          color: strong ? C.ink : C.sub,
+          fontWeight: 700,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 
   return (
     <div className="space-y-5 max-w-4xl">
       {/* моё время */}
-      <div className="rounded-2xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${C.brandA}, #5A2113)` }}>
-        <div className="flex items-center gap-2 mb-3"><Clock size={18} /><span className="font-bold" style={{ fontSize: 15 }}>{tr("Моё рабочее время")}</span></div>
+      <div
+        className="rounded-2xl p-5 text-white"
+        style={{ background: `linear-gradient(135deg, ${C.brandA}, #5A2113)` }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <Clock size={18} />
+          <span className="font-bold" style={{ fontSize: 15 }}>
+            {tr("Моё рабочее время")}
+          </span>
+        </div>
         <div className="flex items-end gap-6 flex-wrap">
-          <div><div style={{ fontSize: 12, opacity: .85 }}>{tr("Сегодня")}</div><div className="font-extrabold" style={{ fontSize: 26, lineHeight: 1.1 }}>{fmtWork(mine.today)}</div></div>
-          <div><div style={{ fontSize: 12, opacity: .85 }}>{tr("За неделю")}</div><div className="font-extrabold" style={{ fontSize: 26, lineHeight: 1.1 }}>{fmtWork(mine.week)}</div></div>
-          <div className="ml-auto rounded-full px-3 py-1.5" style={{ background: "rgba(255,255,255,.2)", fontSize: 13, fontWeight: 700 }}>
-            {mine.open ? `● ${tr("На смене")} · ${fmtWork(mine.live)}` : tr("Не на смене")}
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>{tr("Сегодня")}</div>
+            <div
+              className="font-extrabold"
+              style={{ fontSize: 26, lineHeight: 1.1 }}
+            >
+              {fmtWork(mine.today)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>{tr("За неделю")}</div>
+            <div
+              className="font-extrabold"
+              style={{ fontSize: 26, lineHeight: 1.1 }}
+            >
+              {fmtWork(mine.week)}
+            </div>
+          </div>
+          <div
+            className="ml-auto rounded-full px-3 py-1.5"
+            style={{
+              background: "rgba(255,255,255,.2)",
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            {mine.open
+              ? `● ${tr("На смене")} · ${fmtWork(mine.live)}`
+              : tr("Не на смене")}
           </div>
         </div>
       </div>
 
       {/* сводка */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
-        {[[tr("На смене сейчас"), `${onNow}`, C.ok], [tr("Часов за сегодня"), fmtWorkH(sumToday), C.brandA], [tr("Часов за неделю"), fmtWorkH(sumWeek), C.violet]].map(([l, v, col], i) => (
-          <div key={i} className="rounded-2xl bg-white p-4" style={{ border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>{l}</div>
-            <div className="font-extrabold mt-0.5" style={{ fontSize: 19, color: col, lineHeight: 1.1, overflowWrap: "break-word" }}>{v}</div>
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}
+      >
+        {[
+          [tr("На смене сейчас"), `${onNow}`, C.ok],
+          [tr("Часов за сегодня"), fmtWorkH(sumToday), C.brandA],
+          [tr("Часов за неделю"), fmtWorkH(sumWeek), C.violet],
+        ].map(([l, v, col], i) => (
+          <div
+            key={i}
+            className="rounded-2xl bg-white p-4"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>
+              {l}
+            </div>
+            <div
+              className="font-extrabold mt-0.5"
+              style={{
+                fontSize: 19,
+                color: col,
+                lineHeight: 1.1,
+                overflowWrap: "break-word",
+              }}
+            >
+              {v}
+            </div>
           </div>
         ))}
       </div>
 
       {/* сотрудники */}
-      <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Сотрудники")}</h3>
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>
+          {tr("Сотрудники")}
+        </h3>
         <div className="space-y-2">
           {people.map((u) => {
             const r = calc(u.id);
             return (
-              <div key={u.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 flex-wrap" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-                <div className="shrink-0"><Avatar id={u.id} size={36} /></div>
+              <div
+                key={u.id}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 flex-wrap"
+                style={{
+                  background: "#FBFCFE",
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <div className="shrink-0">
+                  <Avatar id={u.id} size={36} />
+                </div>
                 <div className="min-w-0" style={{ flex: "1 1 150px" }}>
-                  <div className="truncate" style={{ fontSize: 14, color: C.ink, fontWeight: 700 }}>{u.name}</div>
-                  <div className="truncate" style={{ fontSize: 12, color: C.faint }}>{u.pos}{branchById(u.branchId) ? ` · ${branchById(u.branchId).name}` : ""}</div>
+                  <div
+                    className="truncate"
+                    style={{ fontSize: 14, color: C.ink, fontWeight: 700 }}
+                  >
+                    {u.name}
+                  </div>
+                  <div
+                    className="truncate"
+                    style={{ fontSize: 12, color: C.faint }}
+                  >
+                    {u.pos}
+                    {branchById(u.branchId)
+                      ? ` · ${branchById(u.branchId).name}`
+                      : ""}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="rounded-full font-semibold" style={{ fontSize: 11.5, padding: "3px 10px", whiteSpace: "nowrap",
-                    background: r.open ? "#E9F9EF" : C.line, color: r.open ? C.ok : C.faint }}>
-                    {r.open ? `● ${tr("На смене")} · ${fmtWork(r.live)}` : tr("Не на смене")}
+                  <span
+                    className="rounded-full font-semibold"
+                    style={{
+                      fontSize: 11.5,
+                      padding: "3px 10px",
+                      whiteSpace: "nowrap",
+                      background: r.open ? "#E9F9EF" : C.line,
+                      color: r.open ? C.ok : C.faint,
+                    }}
+                  >
+                    {r.open
+                      ? `● ${tr("На смене")} · ${fmtWork(r.live)}`
+                      : tr("Не на смене")}
                   </span>
                   <Stat label={tr("Сегодня")} value={fmtWork(r.today)} strong />
                   <Stat label={tr("За неделю")} value={fmtWork(r.week)} />
@@ -1857,18 +4506,63 @@ function TimesheetView({ s, me, now, branchScope }) {
       </div>
 
       {/* последние смены */}
-      <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Последние смены")}</h3>
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>
+          {tr("Последние смены")}
+        </h3>
         <div className="space-y-1.5">
-          {recent.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{tr("Пока нет закрытых смен")}</div>}
+          {recent.length === 0 && (
+            <div style={{ fontSize: 13, color: C.faint }}>
+              {tr("Пока нет закрытых смен")}
+            </div>
+          )}
           {recent.map((x) => {
             const u = userById(x.userId);
             return (
-              <div key={x.id} className="flex items-center gap-2 flex-wrap py-1.5" style={{ borderBottom: `1px solid ${C.line}` }}>
-                <div className="shrink-0"><Avatar id={x.userId} size={24} /></div>
-                <span className="min-w-0 truncate" style={{ fontSize: 13, color: C.ink, fontWeight: 600, flex: "1 1 120px" }}>{u?.name}</span>
-                <span style={{ fontSize: 12, color: C.sub, whiteSpace: "nowrap" }}>{fmtDateTime(x.start)} → {new Date(x.end).toLocaleTimeString("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })}</span>
-                <span className="rounded-full font-semibold shrink-0" style={{ fontSize: 12, padding: "2px 9px", background: C.line, color: C.ink, whiteSpace: "nowrap" }}>{fmtWork(x.durationMs)}</span>
+              <div
+                key={x.id}
+                className="flex items-center gap-2 flex-wrap py-1.5"
+                style={{ borderBottom: `1px solid ${C.line}` }}
+              >
+                <div className="shrink-0">
+                  <Avatar id={x.userId} size={24} />
+                </div>
+                <span
+                  className="min-w-0 truncate"
+                  style={{
+                    fontSize: 13,
+                    color: C.ink,
+                    fontWeight: 600,
+                    flex: "1 1 120px",
+                  }}
+                >
+                  {u?.name}
+                </span>
+                <span
+                  style={{ fontSize: 12, color: C.sub, whiteSpace: "nowrap" }}
+                >
+                  {fmtDateTime(x.start)} →{" "}
+                  {new Date(x.end).toLocaleTimeString("ru-RU", {
+                    timeZone: TZ,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span
+                  className="rounded-full font-semibold shrink-0"
+                  style={{
+                    fontSize: 12,
+                    padding: "2px 9px",
+                    background: C.line,
+                    color: C.ink,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {fmtWork(x.durationMs)}
+                </span>
               </div>
             );
           })}
@@ -1881,62 +4575,163 @@ function TimesheetView({ s, me, now, branchScope }) {
 /* ------------------------------ кассы филиалов ----------------------------- */
 const cashCalc = (r) => {
   const cash = (r.fiscal || 0) + (r.nonFiscal || 0);
-  const acq = (r.humo || 0) + (r.uzcard || 0) + (r.click || 0) + (r.payme || 0) + (r.uzumTezkor || 0) + (r.yandex || 0);
+  const acq =
+    (r.humo || 0) +
+    (r.uzcard || 0) +
+    (r.click || 0) +
+    (r.payme || 0) +
+    (r.uzumTezkor || 0) +
+    (r.yandex || 0);
   const total = cash + acq + (r.transfer || 0);
   return { cash, acq, total, diff: total - (r.iiko || 0) };
 };
 // «Сегодня» по Ташкенту (UTC+5) — не зависит от часового пояса устройства.
-const ymdNow = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
+const ymdNow = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 const ymNow = () => ymdNow().slice(0, 7);
 // ВАЖНО: поле объявлено на уровне модуля (не внутри CashRegisterView),
 // иначе React пересоздаёт input на каждый символ и он теряет фокус.
 // сжатие фото чека/товара до ~900px jpeg (для хранения в прототипе)
-const compressPhoto = (file) => new Promise((resolve, reject) => {
-  const rd = new FileReader();
-  rd.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const max = 900; let w = img.width, h = img.height;
-        if (Math.max(w, h) > max) { const k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
-        const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-        cv.getContext("2d").drawImage(img, 0, 0, w, h);
-        resolve(cv.toDataURL("image/jpeg", 0.55));
-      } catch (e) { reject(e); }
+const compressPhoto = (file) =>
+  new Promise((resolve, reject) => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const max = 900;
+          let w = img.width,
+            h = img.height;
+          if (Math.max(w, h) > max) {
+            const k = max / Math.max(w, h);
+            w = Math.round(w * k);
+            h = Math.round(h * k);
+          }
+          const cv = document.createElement("canvas");
+          cv.width = w;
+          cv.height = h;
+          cv.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(cv.toDataURL("image/jpeg", 0.55));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = reject;
+      img.src = rd.result;
     };
-    img.onerror = reject; img.src = rd.result;
-  };
-  rd.onerror = reject; rd.readAsDataURL(file);
-});
+    rd.onerror = reject;
+    rd.readAsDataURL(file);
+  });
 
 // Стандартный дропдаун системы (нативный <select> нельзя стилизовать внутри —
 // список рисует ОС, поэтому ключевые места используют этот компонент).
-function NiceSelect({ label, value, options, onChange, disabled, width, placeholder }) {
+function NiceSelect({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+  width,
+  placeholder,
+}) {
   const [open, setOpen] = useState(false);
   const cur = options.find((o) => String(o.value) === String(value));
   return (
     <div style={{ position: "relative", width: width || "auto" }}>
-      {label && <label style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, display: "block", marginBottom: 4 }}>{label}</label>}
-      <button type="button" disabled={disabled} onClick={() => setOpen((o) => !o)}
+      {label && (
+        <label
+          style={{
+            fontSize: 11.5,
+            color: C.sub,
+            fontWeight: 600,
+            display: "block",
+            marginBottom: 4,
+          }}
+        >
+          {label}
+        </label>
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
         className="w-full inline-flex items-center justify-between gap-2 rounded-xl px-3"
-        style={{ height: 40, border: `1px solid ${C.border}`, background: disabled ? "#F1F5F9" : "#fff", color: disabled ? C.sub : C.ink, fontSize: 13.5, fontWeight: 600, minWidth: 120, cursor: disabled ? "default" : "pointer" }}>
-        <span className="truncate">{cur ? cur.label : (placeholder || "—")}</span>
-        <ChevronDown size={16} color={C.faint} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+        style={{
+          height: 40,
+          border: `1px solid ${C.border}`,
+          background: disabled ? "#F1F5F9" : "#fff",
+          color: disabled ? C.sub : C.ink,
+          fontSize: 13.5,
+          fontWeight: 600,
+          minWidth: 120,
+          cursor: disabled ? "default" : "pointer",
+        }}
+      >
+        <span className="truncate">{cur ? cur.label : placeholder || "—"}</span>
+        <ChevronDown
+          size={16}
+          color={C.faint}
+          style={{
+            flexShrink: 0,
+            transform: open ? "rotate(180deg)" : "none",
+            transition: "transform .15s",
+          }}
+        />
       </button>
       {open && !disabled && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 59 }} />
-          <div className="rounded-2xl bg-white py-1.5" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, minWidth: "100%", width: "max-content", maxWidth: "min(280px, calc(100vw - 32px))", zIndex: 60, border: `1px solid ${C.border}`, boxShadow: "0 14px 36px rgba(15,23,42,.16)", maxHeight: 320, overflowY: "auto" }}>
+          <div
+            onClick={() => setOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 59 }}
+          />
+          <div
+            className="rounded-2xl bg-white py-1.5"
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              minWidth: "100%",
+              width: "max-content",
+              maxWidth: "min(280px, calc(100vw - 32px))",
+              zIndex: 60,
+              border: `1px solid ${C.border}`,
+              boxShadow: "0 14px 36px rgba(15,23,42,.16)",
+              maxHeight: 320,
+              overflowY: "auto",
+            }}
+          >
             {options.map((o) => {
               const act = String(o.value) === String(value);
               return (
-                <button key={String(o.value)} type="button" onClick={() => { onChange(o.value); setOpen(false); }}
+                <button
+                  key={String(o.value)}
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
                   className="w-full text-left px-3.5 py-2 flex items-center justify-between gap-2.5"
-                  style={{ fontSize: 13.5, fontWeight: act ? 700 : 500, color: act ? C.brandA : C.ink, background: act ? "#EFF4FF" : "transparent" }}
-                  onMouseEnter={(e) => { if (!act) e.currentTarget.style.background = C.line; }}
-                  onMouseLeave={(e) => { if (!act) e.currentTarget.style.background = "transparent"; }}>
+                  style={{
+                    fontSize: 13.5,
+                    fontWeight: act ? 700 : 500,
+                    color: act ? C.brandA : C.ink,
+                    background: act ? "#EFF4FF" : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!act) e.currentTarget.style.background = C.line;
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!act) e.currentTarget.style.background = "transparent";
+                  }}
+                >
                   <span className="truncate">{o.label}</span>
-                  {act && <CheckCircle2 size={15} color={C.brandA} style={{ flexShrink: 0 }} />}
+                  {act && (
+                    <CheckCircle2
+                      size={15}
+                      color={C.brandA}
+                      style={{ flexShrink: 0 }}
+                    />
+                  )}
                 </button>
               );
             })}
@@ -1948,52 +4743,190 @@ function NiceSelect({ label, value, options, onChange, disabled, width, placehol
 }
 
 // Стандартный календарь системы (нативный date-пикер рисует ОС — заменяем своим)
-const CAL_MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+const CAL_MONTHS = [
+  "Январь",
+  "Февраль",
+  "Март",
+  "Апрель",
+  "Май",
+  "Июнь",
+  "Июль",
+  "Август",
+  "Сентябрь",
+  "Октябрь",
+  "Ноябрь",
+  "Декабрь",
+];
 const CAL_DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 function NiceDate({ label, value, onChange, min, max, disabled, width }) {
   const [open, setOpen] = useState(false);
   const [vy, setVy] = useState(+(value || ymdNow()).slice(0, 4));
   const [vm, setVm] = useState(+(value || ymdNow()).slice(5, 7) - 1);
-  useEffect(() => { if (open && value) { setVy(+value.slice(0, 4)); setVm(+value.slice(5, 7) - 1); } }, [open, value]);
+  useEffect(() => {
+    if (open && value) {
+      setVy(+value.slice(0, 4));
+      setVm(+value.slice(5, 7) - 1);
+    }
+  }, [open, value]);
   const p2 = (n) => String(n).padStart(2, "0");
   const daysIn = new Date(vy, vm + 1, 0).getDate();
   const firstDow = (new Date(vy, vm, 1).getDay() + 6) % 7;
-  const cells = [...Array(firstDow).fill(null), ...Array.from({ length: daysIn }, (_, i) => i + 1)];
+  const cells = [
+    ...Array(firstDow).fill(null),
+    ...Array.from({ length: daysIn }, (_, i) => i + 1),
+  ];
   const today = ymdNow();
   const inRange = (ds) => (!min || ds >= min) && (!max || ds <= max);
-  const nav = (d) => { let m = vm + d, y = vy; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } setVm(m); setVy(y); };
+  const nav = (d) => {
+    let m = vm + d,
+      y = vy;
+    if (m < 0) {
+      m = 11;
+      y--;
+    }
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+    setVm(m);
+    setVy(y);
+  };
   return (
     <div style={{ position: "relative", width: width || "auto" }}>
-      {label && <label style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, display: "block", marginBottom: 4 }}>{label}</label>}
-      <button type="button" disabled={disabled} onClick={() => setOpen((o) => !o)}
+      {label && (
+        <label
+          style={{
+            fontSize: 11.5,
+            color: C.sub,
+            fontWeight: 600,
+            display: "block",
+            marginBottom: 4,
+          }}
+        >
+          {label}
+        </label>
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
         className="w-full inline-flex items-center justify-between gap-2 rounded-xl px-3"
-        style={{ height: 40, border: `1px solid ${C.border}`, background: disabled ? "#F1F5F9" : "#fff", color: disabled ? C.sub : C.ink, fontSize: 13.5, fontWeight: 600, minWidth: 128, cursor: disabled ? "default" : "pointer" }}>
+        style={{
+          height: 40,
+          border: `1px solid ${C.border}`,
+          background: disabled ? "#F1F5F9" : "#fff",
+          color: disabled ? C.sub : C.ink,
+          fontSize: 13.5,
+          fontWeight: 600,
+          minWidth: 128,
+          cursor: disabled ? "default" : "pointer",
+        }}
+      >
         <span>{value ? value.split("-").reverse().join(".") : "—"}</span>
         <CalendarDays size={15} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
       {open && !disabled && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 59 }} />
-          <div className="rounded-2xl bg-white p-3" style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 60, width: 268, maxWidth: "calc(100vw - 32px)", border: `1px solid ${C.border}`, boxShadow: "0 14px 36px rgba(15,23,42,.16)" }}>
+          <div
+            onClick={() => setOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 59 }}
+          />
+          <div
+            className="rounded-2xl bg-white p-3"
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              zIndex: 60,
+              width: 268,
+              maxWidth: "calc(100vw - 32px)",
+              border: `1px solid ${C.border}`,
+              boxShadow: "0 14px 36px rgba(15,23,42,.16)",
+            }}
+          >
             <div className="flex items-center justify-between mb-2">
-              <button type="button" onClick={() => nav(-1)} className="rounded-lg p-1.5" style={{ background: C.line }}><ChevronRight size={15} color={C.sub} style={{ transform: "rotate(180deg)" }} /></button>
-              <div className="font-bold" style={{ color: C.ink, fontSize: 13.5 }}>{tr(CAL_MONTHS[vm])} {vy}</div>
-              <button type="button" onClick={() => nav(1)} className="rounded-lg p-1.5" style={{ background: C.line }}><ChevronRight size={15} color={C.sub} /></button>
+              <button
+                type="button"
+                onClick={() => nav(-1)}
+                className="rounded-lg p-1.5"
+                style={{ background: C.line }}
+              >
+                <ChevronRight
+                  size={15}
+                  color={C.sub}
+                  style={{ transform: "rotate(180deg)" }}
+                />
+              </button>
+              <div
+                className="font-bold"
+                style={{ color: C.ink, fontSize: 13.5 }}
+              >
+                {tr(CAL_MONTHS[vm])} {vy}
+              </div>
+              <button
+                type="button"
+                onClick={() => nav(1)}
+                className="rounded-lg p-1.5"
+                style={{ background: C.line }}
+              >
+                <ChevronRight size={15} color={C.sub} />
+              </button>
             </div>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
-              {CAL_DOW.map((d) => <div key={d} className="text-center" style={{ fontSize: 10.5, color: C.faint, fontWeight: 700, padding: "2px 0" }}>{tr(d)}</div>)}
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}
+            >
+              {CAL_DOW.map((d) => (
+                <div
+                  key={d}
+                  className="text-center"
+                  style={{
+                    fontSize: 10.5,
+                    color: C.faint,
+                    fontWeight: 700,
+                    padding: "2px 0",
+                  }}
+                >
+                  {tr(d)}
+                </div>
+              ))}
               {cells.map((d, i) => {
                 if (d === null) return <div key={"e" + i} />;
                 const ds = `${vy}-${p2(vm + 1)}-${p2(d)}`;
-                const sel = ds === value, isToday = ds === today, ok = inRange(ds);
+                const sel = ds === value,
+                  isToday = ds === today,
+                  ok = inRange(ds);
                 return (
-                  <button key={ds} type="button" disabled={!ok} onClick={() => { onChange(ds); setOpen(false); }}
+                  <button
+                    key={ds}
+                    type="button"
+                    disabled={!ok}
+                    onClick={() => {
+                      onChange(ds);
+                      setOpen(false);
+                    }}
                     className="flex items-center justify-center rounded-full mx-auto"
-                    style={{ width: 30, height: 30, fontSize: 12.5, fontWeight: sel ? 800 : 600,
-                      background: sel ? C.brandA : "transparent", color: sel ? "#fff" : (!ok ? "#CBD5E1" : C.ink),
-                      border: isToday && !sel ? `1.5px solid ${C.brandA}` : "1.5px solid transparent", cursor: ok ? "pointer" : "default" }}
-                    onMouseEnter={(e) => { if (!sel && ok) e.currentTarget.style.background = C.line; }}
-                    onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = "transparent"; }}>
+                    style={{
+                      width: 30,
+                      height: 30,
+                      fontSize: 12.5,
+                      fontWeight: sel ? 800 : 600,
+                      background: sel ? C.brandA : "transparent",
+                      color: sel ? "#fff" : !ok ? "#CBD5E1" : C.ink,
+                      border:
+                        isToday && !sel
+                          ? `1.5px solid ${C.brandA}`
+                          : "1.5px solid transparent",
+                      cursor: ok ? "pointer" : "default",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!sel && ok) e.currentTarget.style.background = C.line;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!sel)
+                        e.currentTarget.style.background = "transparent";
+                    }}
+                  >
                     {d}
                   </button>
                 );
@@ -2009,11 +4942,25 @@ function NiceDate({ label, value, onChange, min, max, disabled, width }) {
 function CashNumField({ label, value, disabled, onChange }) {
   return (
     <div>
-      <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>{label}</label>
-      <input type="text" inputMode="numeric" disabled={disabled}
-        value={value ? String(value) : ""} onChange={(e) => onChange(e.target.value)} placeholder="0"
+      <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+        {label}
+      </label>
+      <input
+        type="text"
+        inputMode="numeric"
+        disabled={disabled}
+        value={value ? String(value) : ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
         className="w-full rounded-xl px-3 py-2 mt-1"
-        style={{ border: `1px solid ${C.border}`, fontSize: 14, textAlign: "right", background: disabled ? "#F1F5F9" : "#fff", color: disabled ? C.sub : C.ink }} />
+        style={{
+          border: `1px solid ${C.border}`,
+          fontSize: 14,
+          textAlign: "right",
+          background: disabled ? "#F1F5F9" : "#fff",
+          color: disabled ? C.sub : C.ink,
+        }}
+      />
     </div>
   );
 }
@@ -2021,62 +4968,169 @@ function CashNumField({ label, value, disabled, onChange }) {
 function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
   const branches = s.branches || [];
   const isMgr = me.role === "manager";
-  const isController = ["director", "finance", "sysadmin"].includes(me.role);   // контролёр / аудитор — все филиалы, подтверждение
+  const isController = ["director", "finance", "sysadmin"].includes(me.role); // контролёр / аудитор — все филиалы, подтверждение
   const canEditForm = isMgr || isController;
   const myBranch = me.branchId || (branches[0] && branches[0].id) || 1;
-  const fBranch = isMgr ? myBranch : (branchScope || 0);   // 0 = все (общий охват из шапки)
+  const fBranch = isMgr ? myBranch : branchScope || 0; // 0 = все (общий охват из шапки)
   const H24 = 24 * H;
-  const deadlineTs = (dateStr) => { const d = new Date(dateStr + "T00:00:00"); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0); return d.getTime(); };
+  const deadlineTs = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + 1);
+    d.setHours(12, 0, 0, 0);
+    return d.getTime();
+  };
   const pad = (n) => String(n).padStart(2, "0");
-  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const ymd = (d) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const dm = (s0) => s0.split("-").reverse().join(".");
 
   // ---------- период просмотра (как в iiko: пресеты + с/по) ----------
-  const shiftD = (base, days) => { const d = new Date(base + "T00:00:00"); d.setDate(d.getDate() + days); return ymd(d); };
-  const monday = (base) => { const d = new Date(base + "T00:00:00"); const wd = (d.getDay() + 6) % 7; d.setDate(d.getDate() - wd); return ymd(d); };
+  const shiftD = (base, days) => {
+    const d = new Date(base + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return ymd(d);
+  };
+  const monday = (base) => {
+    const d = new Date(base + "T00:00:00");
+    const wd = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - wd);
+    return ymd(d);
+  };
   const presetRange = (p) => {
-    const today = ymdNow(); const y = today.slice(0, 4); const m = today.slice(0, 7);
+    const today = ymdNow();
+    const y = today.slice(0, 4);
+    const m = today.slice(0, 7);
     if (p === "open") return { from: "2000-01-01", to: today };
     if (p === "today") return { from: today, to: today };
-    if (p === "yesterday") { const d = shiftD(today, -1); return { from: d, to: d }; }
-    if (p === "curWeek") return { from: monday(today), to: shiftD(monday(today), 6) };
-    if (p === "prevWeek") { const mo = shiftD(monday(today), -7); return { from: mo, to: shiftD(mo, 6) }; }
-    if (p === "curMonth") { const last = new Date(+y, +m.slice(5, 7), 0).getDate(); return { from: `${m}-01`, to: `${m}-${pad(last)}` }; }
-    if (p === "prevMonth") { const d = new Date(+y, +m.slice(5, 7) - 2, 1); const mm = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return { from: `${mm}-01`, to: `${mm}-${pad(last)}` }; }
+    if (p === "yesterday") {
+      const d = shiftD(today, -1);
+      return { from: d, to: d };
+    }
+    if (p === "curWeek")
+      return { from: monday(today), to: shiftD(monday(today), 6) };
+    if (p === "prevWeek") {
+      const mo = shiftD(monday(today), -7);
+      return { from: mo, to: shiftD(mo, 6) };
+    }
+    if (p === "curMonth") {
+      const last = new Date(+y, +m.slice(5, 7), 0).getDate();
+      return { from: `${m}-01`, to: `${m}-${pad(last)}` };
+    }
+    if (p === "prevMonth") {
+      const d = new Date(+y, +m.slice(5, 7) - 2, 1);
+      const mm = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return { from: `${mm}-01`, to: `${mm}-${pad(last)}` };
+    }
     if (p === "curYear") return { from: `${y}-01-01`, to: `${y}-12-31` };
-    if (p === "prevYear") { const py = +y - 1; return { from: `${py}-01-01`, to: `${py}-12-31` }; }
+    if (p === "prevYear") {
+      const py = +y - 1;
+      return { from: `${py}-01-01`, to: `${py}-12-31` };
+    }
     return null; // custom
   };
-  const PERIOD_PRESETS = [["open", "Открытый период"], ["today", "Сегодня"], ["curWeek", "Текущая неделя"], ["curMonth", "Текущий месяц"], ["curYear", "Текущий год"], ["yesterday", "Вчера"], ["prevWeek", "Прошлая неделя"], ["prevMonth", "Прошлый месяц"], ["prevYear", "Прошлый год"], ["custom", "Другой…"]];
+  const PERIOD_PRESETS = [
+    ["open", "Открытый период"],
+    ["today", "Сегодня"],
+    ["curWeek", "Текущая неделя"],
+    ["curMonth", "Текущий месяц"],
+    ["curYear", "Текущий год"],
+    ["yesterday", "Вчера"],
+    ["prevWeek", "Прошлая неделя"],
+    ["prevMonth", "Прошлый месяц"],
+    ["prevYear", "Прошлый год"],
+    ["custom", "Другой…"],
+  ];
   const [preset, setPreset] = useState("curMonth");
   const initR = presetRange("curMonth");
   const [from, setFrom] = useState(initR.from);
   const [to, setTo] = useState(initR.to);
-  const pickPreset = (p) => { setPreset(p); const r = presetRange(p); if (r) { setFrom(r.from); setTo(r.to); } };
+  const pickPreset = (p) => {
+    setPreset(p);
+    const r = presetRange(p);
+    if (r) {
+      setFrom(r.from);
+      setTo(r.to);
+    }
+  };
 
   const range = { from, to };
 
-  const scope = (s.cashReports || []).filter((r) => r.date >= range.from && r.date <= range.to && (isMgr ? r.branchId === myBranch : (fBranch ? r.branchId === fBranch : true)));
-  const sorted = [...scope].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.branchId - b.branchId));
+  const scope = (s.cashReports || []).filter(
+    (r) =>
+      r.date >= range.from &&
+      r.date <= range.to &&
+      (isMgr
+        ? r.branchId === myBranch
+        : fBranch
+          ? r.branchId === fBranch
+          : true),
+  );
+  const sorted = [...scope].sort((a, b) =>
+    a.date < b.date ? 1 : a.date > b.date ? -1 : a.branchId - b.branchId,
+  );
   const sum = (f) => scope.reduce((a, r) => a + (r[f] || 0), 0);
-  const agg = scope.reduce((o, r) => { const c = cashCalc(r); o.total += c.total; o.cash += c.cash; o.acq += c.acq; o.diff += c.diff; return o; }, { total: 0, cash: 0, acq: 0, diff: 0 });
+  const agg = scope.reduce(
+    (o, r) => {
+      const c = cashCalc(r);
+      o.total += c.total;
+      o.cash += c.cash;
+      o.acq += c.acq;
+      o.diff += c.diff;
+      return o;
+    },
+    { total: 0, cash: 0, acq: 0, diff: 0 },
+  );
 
   const periodLabel = `${tr((PERIOD_PRESETS.find(([k]) => k === preset) || [])[1] || "Период")}: ${dm(from)} — ${dm(to)}`;
-  const branchLabel = isMgr ? (branchById(myBranch)?.name || "") : (fBranch ? (branchById(fBranch)?.name || "") : tr("Все филиалы"));
+  const branchLabel = isMgr
+    ? branchById(myBranch)?.name || ""
+    : fBranch
+      ? branchById(fBranch)?.name || ""
+      : tr("Все филиалы");
 
   // ---------- форма отчёта (управляющие) ----------
-  const blank = { date: ymdNow(), branchId: myBranch, transfer: 0, transferCount: 0, fiscal: 0, nonFiscal: 0, humo: 0, uzcard: 0, click: 0, payme: 0, uzumTezkor: 0, yandex: 0, debt: 0, noPay: 0, expenses: 0, iiko: 0, comment: "", expensesNote: "", expensePhotos: [] };
+  const blank = {
+    date: ymdNow(),
+    branchId: myBranch,
+    transfer: 0,
+    transferCount: 0,
+    fiscal: 0,
+    nonFiscal: 0,
+    humo: 0,
+    uzcard: 0,
+    click: 0,
+    payme: 0,
+    uzumTezkor: 0,
+    yandex: 0,
+    debt: 0,
+    noPay: 0,
+    expenses: 0,
+    iiko: 0,
+    comment: "",
+    expensesNote: "",
+    expensePhotos: [],
+  };
   const [form, setForm] = useState({ ...blank });
-  const existing = (s.cashReports || []).find((r) => r.date === form.date && r.branchId === form.branchId);
+  const existing = (s.cashReports || []).find(
+    (r) => r.date === form.date && r.branchId === form.branchId,
+  );
   useEffect(() => {
-    const ex = (s.cashReports || []).find((r) => r.date === form.date && r.branchId === form.branchId);
-    if (ex) setForm((f) => ({ ...blank, ...ex, date: f.date, branchId: f.branchId }));
+    const ex = (s.cashReports || []).find(
+      (r) => r.date === form.date && r.branchId === form.branchId,
+    );
+    if (ex)
+      setForm((f) => ({ ...blank, ...ex, date: f.date, branchId: f.branchId }));
     else setForm((f) => ({ ...blank, date: f.date, branchId: f.branchId }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.date, form.branchId, s.cashReports]);
   // при смене пользователя/роли синхронизируем филиал формы со своим
   useEffect(() => {
-    if (isMgr) { setForm((f) => (f.branchId === myBranch ? f : { ...f, branchId: myBranch })); }
+    if (isMgr) {
+      setForm((f) =>
+        f.branchId === myBranch ? f : { ...f, branchId: myBranch },
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.id]);
 
@@ -2084,47 +5138,119 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
   const pastDeadline = Date.now() > dl;
   const isConfirmed = !!existing && existing.status === "confirmed";
   const editable = !isConfirmed && (isController || (isMgr && !pastDeadline));
-  const dlStr = new Date(dl).toLocaleString("ru-RU", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const setNum = (k, v) => { if (!editable) return; setForm((f) => ({ ...f, [k]: Math.max(0, parseInt(String(v).replace(/[^\d]/g, "") || "0", 10)) })); };
+  const dlStr = new Date(dl).toLocaleString("ru-RU", {
+    timeZone: TZ,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const setNum = (k, v) => {
+    if (!editable) return;
+    setForm((f) => ({
+      ...f,
+      [k]: Math.max(0, parseInt(String(v).replace(/[^\d]/g, "") || "0", 10)),
+    }));
+  };
   const live = cashCalc(form);
 
   const save = () => {
-    if (!editable) { notify(tr("Редактирование закрыто")); return; }
-    if (!form.branchId) { notify(tr("Выберите филиал")); return; }
-    if (live.diff !== 0 && !(form.comment || "").trim()) { notify(tr("Укажите комментарий к расхождению с iiko")); return; }
-    if ((form.expenses || 0) > 0 && !(form.expensesNote || "").trim()) { notify(tr("Укажите, на что были расходы")); return; }
+    if (!editable) {
+      notify(tr("Редактирование закрыто"));
+      return;
+    }
+    if (!form.branchId) {
+      notify(tr("Выберите филиал"));
+      return;
+    }
+    if (live.diff !== 0 && !(form.comment || "").trim()) {
+      notify(tr("Укажите комментарий к расхождению с iiko"));
+      return;
+    }
+    if ((form.expenses || 0) > 0 && !(form.expensesNote || "").trim()) {
+      notify(tr("Укажите, на что были расходы"));
+      return;
+    }
     dispatch({ type: "SAVE_CASH_REPORT", report: { ...form, userId: me.id } });
     notify(tr("Отчёт сдан и ожидает подтверждения"));
   };
-  const confirmReport = (id) => { dispatch({ type: "CONFIRM_CASH_REPORT", id, userId: me.id }); notify(tr("Отчёт подтверждён")); };
+  const confirmReport = (id) => {
+    dispatch({ type: "CONFIRM_CASH_REPORT", id, userId: me.id });
+    notify(tr("Отчёт подтверждён"));
+  };
 
   // ---------- сейф филиала и инкассация ----------
   const allHandovers = s.cashHandovers || [];
   const safeStat = (bId) => {
-    const cashIn = (s.cashReports || []).filter((r) => r.branchId === bId).reduce((a, r) => a + (r.fiscal || 0) + (r.nonFiscal || 0), 0);
+    const cashIn = (s.cashReports || [])
+      .filter((r) => r.branchId === bId)
+      .reduce((a, r) => a + (r.fiscal || 0) + (r.nonFiscal || 0), 0);
     const hs = allHandovers.filter((h) => h.branchId === bId);
     const sent = hs.reduce((a, h) => a + (h.amount || 0), 0);
-    const inTransit = hs.filter((h) => h.status === "sent").reduce((a, h) => a + (h.amount || 0), 0);
+    const inTransit = hs
+      .filter((h) => h.status === "sent")
+      .reduce((a, h) => a + (h.amount || 0), 0);
     return { cashIn, sent, inTransit, balance: cashIn - sent };
   };
-  const safeBranchId = isMgr ? myBranch : (fBranch || 0);
+  const safeBranchId = isMgr ? myBranch : fBranch || 0;
   const safe = safeBranchId ? safeStat(safeBranchId) : null;
-  const hoScope = allHandovers.filter((h) => h.date >= range.from && h.date <= range.to && (isMgr ? h.branchId === myBranch : (fBranch ? h.branchId === fBranch : true)));
-  const hoSorted = [...hoScope].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const hoWaiting = allHandovers.filter((h) => h.status === "sent" && (isMgr ? h.branchId === myBranch : true)).length;
+  const hoScope = allHandovers.filter(
+    (h) =>
+      h.date >= range.from &&
+      h.date <= range.to &&
+      (isMgr
+        ? h.branchId === myBranch
+        : fBranch
+          ? h.branchId === fBranch
+          : true),
+  );
+  const hoSorted = [...hoScope].sort((a, b) =>
+    a.date < b.date ? 1 : a.date > b.date ? -1 : 0,
+  );
+  const hoWaiting = allHandovers.filter(
+    (h) => h.status === "sent" && (isMgr ? h.branchId === myBranch : true),
+  ).length;
   const [ho, setHo] = useState({ amount: 0, via: "", note: "" });
   const sendHandover = () => {
     const amt = ho.amount || 0;
-    if (!safeBranchId) { notify(tr("Выберите филиал")); return; }
-    if (amt <= 0) { notify(tr("Укажите сумму передачи")); return; }
-    if (safe && amt > safe.balance) { notify(tr("Сумма больше остатка в сейфе")); return; }
-    if (!(ho.via || "").trim()) { notify(tr("Укажите, через кого переданы деньги")); return; }
-    dispatch({ type: "ADD_HANDOVER", handover: { branchId: safeBranchId, date: ymdNow(), amount: amt, via: ho.via.trim(), note: (ho.note || "").trim(), userId: me.id } });
+    if (!safeBranchId) {
+      notify(tr("Выберите филиал"));
+      return;
+    }
+    if (amt <= 0) {
+      notify(tr("Укажите сумму передачи"));
+      return;
+    }
+    if (safe && amt > safe.balance) {
+      notify(tr("Сумма больше остатка в сейфе"));
+      return;
+    }
+    if (!(ho.via || "").trim()) {
+      notify(tr("Укажите, через кого переданы деньги"));
+      return;
+    }
+    dispatch({
+      type: "ADD_HANDOVER",
+      handover: {
+        branchId: safeBranchId,
+        date: ymdNow(),
+        amount: amt,
+        via: ho.via.trim(),
+        note: (ho.note || "").trim(),
+        userId: me.id,
+      },
+    });
     setHo({ amount: 0, via: "", note: "" });
     notify(tr("Передача отправлена — ожидает подтверждения офиса"));
   };
-  const confirmHandover = (id) => { dispatch({ type: "CONFIRM_HANDOVER", id, userId: me.id }); notify(tr("Приём денег подтверждён")); };
-  const canDelHo = (h) => isController ? true : (isMgr && h.branchId === myBranch && h.status === "sent");
+  const confirmHandover = (id) => {
+    dispatch({ type: "CONFIRM_HANDOVER", id, userId: me.id });
+    notify(tr("Приём денег подтверждён"));
+  };
+  const canDelHo = (h) =>
+    isController
+      ? true
+      : isMgr && h.branchId === myBranch && h.status === "sent";
 
   // ---------- фото чеков к расходам ----------
   const [viewPhoto, setViewPhoto] = useState(null);
@@ -2133,57 +5259,237 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
     const cur = form.expensePhotos || [];
     const room = Math.max(0, 3 - cur.length);
     const list = Array.from(files || []).slice(0, room);
-    if (!list.length) { if (room === 0) notify(tr("Максимум 3 фото")); return; }
+    if (!list.length) {
+      if (room === 0) notify(tr("Максимум 3 фото"));
+      return;
+    }
     try {
       const added = [];
-      for (const f of list) added.push({ id: uid(), dataUrl: await compressPhoto(f) });
-      setForm((fm) => ({ ...fm, expensePhotos: [...(fm.expensePhotos || []), ...added] }));
+      for (const f of list)
+        added.push({ id: uid(), dataUrl: await compressPhoto(f) });
+      setForm((fm) => ({
+        ...fm,
+        expensePhotos: [...(fm.expensePhotos || []), ...added],
+      }));
       notify(tr("Фото добавлено"));
-    } catch (e) { notify(tr("Не удалось обработать фото")); }
+    } catch (e) {
+      notify(tr("Не удалось обработать фото"));
+    }
   };
-  const delPhoto = (id) => setForm((fm) => ({ ...fm, expensePhotos: (fm.expensePhotos || []).filter((x) => x.id !== id) }));
+  const delPhoto = (id) =>
+    setForm((fm) => ({
+      ...fm,
+      expensePhotos: (fm.expensePhotos || []).filter((x) => x.id !== id),
+    }));
 
   // ---------- печать ----------
   const printReport = () => {
-    const nf = (n) => (Math.round(n || 0)).toLocaleString("ru-RU");
-    const esc = (t) => String(t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const nf = (n) => Math.round(n || 0).toLocaleString("ru-RU");
+    const esc = (t) =>
+      String(t || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     const bcol = isMgr ? "" : "<th>" + tr("Филиал") + "</th>";
-    const head = "<tr><th>" + tr("Дата") + "</th>" + bcol + "<th class=n>" + tr("Выручка") + "</th><th class=n>" + tr("Наличные") + "</th><th class=n>" + tr("Эквайринг") + "</th><th class=n>" + tr("Перечисл.") + "</th><th class=n>" + tr("Долг") + "</th><th class=n>" + tr("Без оплат") + "</th><th class=n>" + tr("Расходы") + "</th><th class=n>" + tr("Разница") + "</th><th>" + tr("Примечание") + "</th></tr>";
-    const body = sorted.map((r) => {
-      const c = cashCalc(r);
-      const bc = isMgr ? "" : "<td>" + esc(branchById(r.branchId)?.name || "") + "</td>";
-      const note = [r.expensesNote ? tr("Расходы") + ": " + r.expensesNote : "", r.comment || ""].filter(Boolean).join("; ");
-      return "<tr><td>" + dm(r.date) + "</td>" + bc + "<td class=n>" + nf(c.total) + "</td><td class=n>" + nf(c.cash) + "</td><td class=n>" + nf(c.acq) + "</td><td class=n>" + (r.transfer ? nf(r.transfer) + (r.transferCount ? " (" + r.transferCount + ")" : "") : "—") + "</td><td class=n>" + (r.debt ? nf(r.debt) : "—") + "</td><td class=n>" + (r.noPay ? nf(r.noPay) : "—") + "</td><td class=n>" + nf(r.expenses) + "</td><td class=n>" + (c.diff === 0 ? "0" : (c.diff > 0 ? "+" : "") + nf(c.diff)) + "</td><td class=note>" + esc(note) + "</td></tr>";
-    }).join("");
+    const head =
+      "<tr><th>" +
+      tr("Дата") +
+      "</th>" +
+      bcol +
+      "<th class=n>" +
+      tr("Выручка") +
+      "</th><th class=n>" +
+      tr("Наличные") +
+      "</th><th class=n>" +
+      tr("Эквайринг") +
+      "</th><th class=n>" +
+      tr("Перечисл.") +
+      "</th><th class=n>" +
+      tr("Долг") +
+      "</th><th class=n>" +
+      tr("Без оплат") +
+      "</th><th class=n>" +
+      tr("Расходы") +
+      "</th><th class=n>" +
+      tr("Разница") +
+      "</th><th>" +
+      tr("Примечание") +
+      "</th></tr>";
+    const body = sorted
+      .map((r) => {
+        const c = cashCalc(r);
+        const bc = isMgr
+          ? ""
+          : "<td>" + esc(branchById(r.branchId)?.name || "") + "</td>";
+        const note = [
+          r.expensesNote ? tr("Расходы") + ": " + r.expensesNote : "",
+          r.comment || "",
+        ]
+          .filter(Boolean)
+          .join("; ");
+        return (
+          "<tr><td>" +
+          dm(r.date) +
+          "</td>" +
+          bc +
+          "<td class=n>" +
+          nf(c.total) +
+          "</td><td class=n>" +
+          nf(c.cash) +
+          "</td><td class=n>" +
+          nf(c.acq) +
+          "</td><td class=n>" +
+          (r.transfer
+            ? nf(r.transfer) +
+              (r.transferCount ? " (" + r.transferCount + ")" : "")
+            : "—") +
+          "</td><td class=n>" +
+          (r.debt ? nf(r.debt) : "—") +
+          "</td><td class=n>" +
+          (r.noPay ? nf(r.noPay) : "—") +
+          "</td><td class=n>" +
+          nf(r.expenses) +
+          "</td><td class=n>" +
+          (c.diff === 0 ? "0" : (c.diff > 0 ? "+" : "") + nf(c.diff)) +
+          "</td><td class=note>" +
+          esc(note) +
+          "</td></tr>"
+        );
+      })
+      .join("");
     const totCol = isMgr ? "" : "<td></td>";
-    const tot = "<tr class=tot><td>" + tr("Итого") + "</td>" + totCol + "<td class=n>" + nf(agg.total) + "</td><td class=n>" + nf(agg.cash) + "</td><td class=n>" + nf(agg.acq) + "</td><td class=n>" + nf(sum("transfer")) + "</td><td class=n>" + nf(sum("debt")) + "</td><td class=n>" + nf(sum("noPay")) + "</td><td class=n>" + nf(sum("expenses")) + "</td><td class=n>" + nf(agg.diff) + "</td><td></td></tr>";
-    const html = "<html><head><meta charset='utf-8'><title>" + tr("Отчёт по кассам филиалов") + "</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0}.meta{color:#555;font-size:13px;margin:6px 0 2px}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}td.n,th.n{text-align:right;white-space:nowrap}td.note{font-size:11px;color:#444;max-width:220px}tr.tot td{font-weight:bold;background:#f3f4f6}</style></head><body><h1>" + tr("Отчёт по кассам филиалов") + "</h1><div class=meta>" + periodLabel + " · " + branchLabel + "</div><div class=meta>" + tr("(суммы в сум)") + "</div><table><thead>" + head + "</thead><tbody>" + body + tot + "</tbody></table></body></html>";
+    const tot =
+      "<tr class=tot><td>" +
+      tr("Итого") +
+      "</td>" +
+      totCol +
+      "<td class=n>" +
+      nf(agg.total) +
+      "</td><td class=n>" +
+      nf(agg.cash) +
+      "</td><td class=n>" +
+      nf(agg.acq) +
+      "</td><td class=n>" +
+      nf(sum("transfer")) +
+      "</td><td class=n>" +
+      nf(sum("debt")) +
+      "</td><td class=n>" +
+      nf(sum("noPay")) +
+      "</td><td class=n>" +
+      nf(sum("expenses")) +
+      "</td><td class=n>" +
+      nf(agg.diff) +
+      "</td><td></td></tr>";
+    const html =
+      "<html><head><meta charset='utf-8'><title>" +
+      tr("Отчёт по кассам филиалов") +
+      "</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0}.meta{color:#555;font-size:13px;margin:6px 0 2px}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}td.n,th.n{text-align:right;white-space:nowrap}td.note{font-size:11px;color:#444;max-width:220px}tr.tot td{font-weight:bold;background:#f3f4f6}</style></head><body><h1>" +
+      tr("Отчёт по кассам филиалов") +
+      "</h1><div class=meta>" +
+      periodLabel +
+      " · " +
+      branchLabel +
+      "</div><div class=meta>" +
+      tr("(суммы в сум)") +
+      "</div><table><thead>" +
+      head +
+      "</thead><tbody>" +
+      body +
+      tot +
+      "</tbody></table></body></html>";
     try {
       const w = window.open("", "_blank");
-      if (!w) { notify(tr("Разрешите всплывающие окна для печати")); return; }
-      w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
-    } catch (e) { notify(tr("Печать недоступна в этом окне")); }
+      if (!w) {
+        notify(tr("Разрешите всплывающие окна для печати"));
+        return;
+      }
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => {
+        try {
+          w.print();
+        } catch (e) {}
+      }, 350);
+    } catch (e) {
+      notify(tr("Печать недоступна в этом окне"));
+    }
   };
 
   // ---------- ui-хелперы ----------
   const inpCls = "w-full rounded-xl px-3 py-2 mt-1";
-  const inpSt = { border: `1px solid ${C.border}`, fontSize: 14, background: "#fff", color: C.ink };
-  const inp = (label, k) => <CashNumField key={k} label={label} value={form[k]} disabled={!editable} onChange={(v) => setNum(k, v)} />;
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 14,
+    background: "#fff",
+    color: C.ink,
+  };
+  const inp = (label, k) => (
+    <CashNumField
+      key={k}
+      label={label}
+      value={form[k]}
+      disabled={!editable}
+      onChange={(v) => setNum(k, v)}
+    />
+  );
   const Box = ({ label, value, color, bg }) => (
-    <div className="rounded-xl px-3 py-2.5" style={{ background: bg || "#F8FAFC", border: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{label}</div>
-      <div className="font-extrabold" style={{ fontSize: 15, color: color || C.ink, overflowWrap: "break-word", lineHeight: 1.15 }}>{fmtSum(value)}</div>
+    <div
+      className="rounded-xl px-3 py-2.5"
+      style={{ background: bg || "#F8FAFC", border: `1px solid ${C.border}` }}
+    >
+      <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>
+        {label}
+      </div>
+      <div
+        className="font-extrabold"
+        style={{
+          fontSize: 15,
+          color: color || C.ink,
+          overflowWrap: "break-word",
+          lineHeight: 1.15,
+        }}
+      >
+        {fmtSum(value)}
+      </div>
     </div>
   );
   const KPI = ({ label, value, color }) => (
-    <div className="rounded-2xl bg-white p-4" style={{ border: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>{label}</div>
-      <div className="font-extrabold mt-0.5" style={{ fontSize: 18, color: color || C.ink, overflowWrap: "break-word", lineHeight: 1.15 }}>{fmtSum(value)}</div>
+    <div
+      className="rounded-2xl bg-white p-4"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>
+        {label}
+      </div>
+      <div
+        className="font-extrabold mt-0.5"
+        style={{
+          fontSize: 18,
+          color: color || C.ink,
+          overflowWrap: "break-word",
+          lineHeight: 1.15,
+        }}
+      >
+        {fmtSum(value)}
+      </div>
     </div>
   );
-  const canDelete = (r) => r.status !== "confirmed" && (isController || (isMgr && r.branchId === myBranch && Date.now() <= deadlineTs(r.date)));
+  const canDelete = (r) =>
+    r.status !== "confirmed" &&
+    (isController ||
+      (isMgr && r.branchId === myBranch && Date.now() <= deadlineTs(r.date)));
   const StatusBadge = ({ st }) => (
-    <span className="rounded-full font-semibold" style={{ fontSize: 11, padding: "2px 8px", whiteSpace: "nowrap", background: st === "confirmed" ? "#E9F9EF" : "#FEF3C7", color: st === "confirmed" ? C.ok : "#92400E" }}>
+    <span
+      className="rounded-full font-semibold"
+      style={{
+        fontSize: 11,
+        padding: "2px 8px",
+        whiteSpace: "nowrap",
+        background: st === "confirmed" ? "#E9F9EF" : "#FEF3C7",
+        color: st === "confirmed" ? C.ok : "#92400E",
+      }}
+    >
       {st === "confirmed" ? `✓ ${tr("Принято")}` : tr("Ожидает")}
     </span>
   );
@@ -2192,96 +5498,341 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
   return (
     <div className="space-y-5 max-w-5xl">
       {/* период + фильтры + печать (как в iiko) */}
-      <div className="rounded-2xl bg-white p-3.5" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-3.5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-          <NiceSelect label={tr("За период")} value={preset} onChange={(v) => pickPreset(v)} width={188}
-            options={PERIOD_PRESETS.map(([k, l]) => ({ value: k, label: tr(l) }))} />
-          <NiceDate label={tr("с")} value={from} onChange={(v) => { setFrom(v); setPreset("custom"); }} width={134} />
-          <NiceDate label={tr("по")} value={to} onChange={(v) => { setTo(v); setPreset("custom"); }} width={134} />
-          <button onClick={printReport} className="inline-flex items-center gap-2 rounded-xl px-4 font-semibold" style={{ border: `1px solid ${C.border}`, color: C.ink, fontSize: 13, background: "#fff", height: 40 }}>
+          <NiceSelect
+            label={tr("За период")}
+            value={preset}
+            onChange={(v) => pickPreset(v)}
+            width={188}
+            options={PERIOD_PRESETS.map(([k, l]) => ({
+              value: k,
+              label: tr(l),
+            }))}
+          />
+          <NiceDate
+            label={tr("с")}
+            value={from}
+            onChange={(v) => {
+              setFrom(v);
+              setPreset("custom");
+            }}
+            width={134}
+          />
+          <NiceDate
+            label={tr("по")}
+            value={to}
+            onChange={(v) => {
+              setTo(v);
+              setPreset("custom");
+            }}
+            width={134}
+          />
+          <button
+            onClick={printReport}
+            className="inline-flex items-center gap-2 rounded-xl px-4 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.ink,
+              fontSize: 13,
+              background: "#fff",
+              height: 40,
+            }}
+          >
             <Printer size={16} /> {tr("Печать")}
           </button>
         </div>
-        {isMgr && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>{tr("Ваш филиал")}: <b style={{ color: C.sub }}>{branchById(myBranch)?.name}</b></div>}
+        {isMgr && (
+          <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
+            {tr("Ваш филиал")}:{" "}
+            <b style={{ color: C.sub }}>{branchById(myBranch)?.name}</b>
+          </div>
+        )}
       </div>
 
       {/* итоги за период */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+      >
         <KPI label={tr("Выручка за период")} value={agg.total} color={C.ink} />
         <KPI label={tr("Наличные")} value={agg.cash} color={C.brandA} />
-        <KPI label={tr("Эквайринг (в банк)")} value={agg.acq} color={C.violet} />
-        <KPI label={tr("Перечисление")} value={sum("transfer")} color={C.brandB} />
+        <KPI
+          label={tr("Эквайринг (в банк)")}
+          value={agg.acq}
+          color={C.violet}
+        />
+        <KPI
+          label={tr("Перечисление")}
+          value={sum("transfer")}
+          color={C.brandB}
+        />
         <KPI label={tr("Расходы")} value={sum("expenses")} color={C.bad} />
       </div>
 
       {/* сейф филиала и инкассация */}
-      <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <Lock size={17} color={C.brandA} />
-          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("Сейф филиала и передача денег")}</h3>
-          {!isMgr && !fBranch && <span style={{ fontSize: 12, color: C.faint }}>{tr("выберите филиал вверху, чтобы видеть сейф и передавать деньги")}</span>}
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+            {tr("Сейф филиала и передача денег")}
+          </h3>
+          {!isMgr && !fBranch && (
+            <span style={{ fontSize: 12, color: C.faint }}>
+              {tr(
+                "выберите филиал вверху, чтобы видеть сейф и передавать деньги",
+              )}
+            </span>
+          )}
         </div>
 
         {safe && (
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-            <div className="rounded-xl px-3 py-2.5" style={{ background: "#EFF4FF", border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{tr("Остаток в сейфе")}</div>
-              <div className="font-extrabold" style={{ fontSize: 16, color: safe.balance >= 0 ? C.ink : C.bad, overflowWrap: "break-word" }}>{fmtSum(safe.balance)}</div>
+          <div
+            className="grid gap-3 mb-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+            }}
+          >
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: "#EFF4FF", border: `1px solid ${C.border}` }}
+            >
+              <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>
+                {tr("Остаток в сейфе")}
+              </div>
+              <div
+                className="font-extrabold"
+                style={{
+                  fontSize: 16,
+                  color: safe.balance >= 0 ? C.ink : C.bad,
+                  overflowWrap: "break-word",
+                }}
+              >
+                {fmtSum(safe.balance)}
+              </div>
             </div>
-            <div className="rounded-xl px-3 py-2.5" style={{ background: "#FEF3C7", border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 11, color: "#92400E", fontWeight: 600 }}>{tr("В пути / на подтверждении")}</div>
-              <div className="font-extrabold" style={{ fontSize: 16, color: "#92400E", overflowWrap: "break-word" }}>{fmtSum(safe.inTransit)}</div>
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: "#FEF3C7", border: `1px solid ${C.border}` }}
+            >
+              <div style={{ fontSize: 11, color: "#92400E", fontWeight: 600 }}>
+                {tr("В пути / на подтверждении")}
+              </div>
+              <div
+                className="font-extrabold"
+                style={{
+                  fontSize: 16,
+                  color: "#92400E",
+                  overflowWrap: "break-word",
+                }}
+              >
+                {fmtSum(safe.inTransit)}
+              </div>
             </div>
-            <div className="rounded-xl px-3 py-2.5" style={{ background: "#F8FAFC", border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>{tr("Наличных поступило (всего)")}</div>
-              <div className="font-extrabold" style={{ fontSize: 16, color: C.sub, overflowWrap: "break-word" }}>{fmtSum(safe.cashIn)}</div>
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: "#F8FAFC", border: `1px solid ${C.border}` }}
+            >
+              <div style={{ fontSize: 11, color: C.faint, fontWeight: 600 }}>
+                {tr("Наличных поступило (всего)")}
+              </div>
+              <div
+                className="font-extrabold"
+                style={{
+                  fontSize: 16,
+                  color: C.sub,
+                  overflowWrap: "break-word",
+                }}
+              >
+                {fmtSum(safe.cashIn)}
+              </div>
             </div>
-            <div className="rounded-xl px-3 py-2.5" style={{ background: "#E9F9EF", border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 11, color: "#065F46", fontWeight: 600 }}>{tr("Передано в офис (всего)")}</div>
-              <div className="font-extrabold" style={{ fontSize: 16, color: C.ok, overflowWrap: "break-word" }}>{fmtSum(safe.sent)}</div>
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{ background: "#E9F9EF", border: `1px solid ${C.border}` }}
+            >
+              <div style={{ fontSize: 11, color: "#065F46", fontWeight: 600 }}>
+                {tr("Передано в офис (всего)")}
+              </div>
+              <div
+                className="font-extrabold"
+                style={{
+                  fontSize: 16,
+                  color: C.ok,
+                  overflowWrap: "break-word",
+                }}
+              >
+                {fmtSum(safe.sent)}
+              </div>
             </div>
           </div>
         )}
 
         {safe && (isMgr || isController) && (
-          <div className="rounded-xl p-3 mb-4" style={{ background: "#FBFCFE", border: `1px dashed ${C.border}` }}>
-            <div className="font-bold mb-2" style={{ color: C.sub, fontSize: 13 }}>{tr("Передать в головной офис")}</div>
+          <div
+            className="rounded-xl p-3 mb-4"
+            style={{ background: "#FBFCFE", border: `1px dashed ${C.border}` }}
+          >
+            <div
+              className="font-bold mb-2"
+              style={{ color: C.sub, fontSize: 13 }}
+            >
+              {tr("Передать в головной офис")}
+            </div>
             <div className="flex flex-wrap items-end gap-2.5">
               <div style={{ width: 160 }}>
-                <CashNumField label={tr("Сумма")} value={ho.amount} disabled={false} onChange={(v) => setHo((o) => ({ ...o, amount: Math.max(0, parseInt(String(v).replace(/[^\d]/g, "") || "0", 10)) }))} />
+                <CashNumField
+                  label={tr("Сумма")}
+                  value={ho.amount}
+                  disabled={false}
+                  onChange={(v) =>
+                    setHo((o) => ({
+                      ...o,
+                      amount: Math.max(
+                        0,
+                        parseInt(String(v).replace(/[^\d]/g, "") || "0", 10),
+                      ),
+                    }))
+                  }
+                />
               </div>
               <div style={{ flex: "1 1 180px", minWidth: 150 }}>
-                <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>{tr("Через кого")}</label>
-                <input value={ho.via} onChange={(e) => setHo((o) => ({ ...o, via: e.target.value }))} placeholder={tr("инкассатор, водитель, директор…")}
-                  className="w-full rounded-xl px-3 py-2 mt-1" style={inpSt} />
+                <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+                  {tr("Через кого")}
+                </label>
+                <input
+                  value={ho.via}
+                  onChange={(e) =>
+                    setHo((o) => ({ ...o, via: e.target.value }))
+                  }
+                  placeholder={tr("инкассатор, водитель, директор…")}
+                  className="w-full rounded-xl px-3 py-2 mt-1"
+                  style={inpSt}
+                />
               </div>
               <div style={{ flex: "1 1 180px", minWidth: 150 }}>
-                <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>{tr("Примечание")}</label>
-                <input value={ho.note} onChange={(e) => setHo((o) => ({ ...o, note: e.target.value }))} placeholder="—"
-                  className="w-full rounded-xl px-3 py-2 mt-1" style={inpSt} />
+                <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+                  {tr("Примечание")}
+                </label>
+                <input
+                  value={ho.note}
+                  onChange={(e) =>
+                    setHo((o) => ({ ...o, note: e.target.value }))
+                  }
+                  placeholder="—"
+                  className="w-full rounded-xl px-3 py-2 mt-1"
+                  style={inpSt}
+                />
               </div>
-              <button onClick={sendHandover} className="inline-flex items-center gap-2 rounded-xl px-4 font-bold text-white" style={{ background: C.brandA, fontSize: 13.5, height: 40 }}>
+              <button
+                onClick={sendHandover}
+                className="inline-flex items-center gap-2 rounded-xl px-4 font-bold text-white"
+                style={{ background: C.brandA, fontSize: 13.5, height: 40 }}
+              >
                 <Send size={15} /> {tr("Передать")}
               </button>
             </div>
-            {safe && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>{tr("Доступно к передаче")}: <b style={{ color: C.sub }}>{fmtSum(safe.balance)}</b></div>}
+            {safe && (
+              <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
+                {tr("Доступно к передаче")}:{" "}
+                <b style={{ color: C.sub }}>{fmtSum(safe.balance)}</b>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="font-bold mb-2" style={{ color: C.sub, fontSize: 13 }}>{tr("Передачи за период")}</div>
-        {hoSorted.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{tr("Передач за период нет")}</div>}
+        <div className="font-bold mb-2" style={{ color: C.sub, fontSize: 13 }}>
+          {tr("Передачи за период")}
+        </div>
+        {hoSorted.length === 0 && (
+          <div style={{ fontSize: 13, color: C.faint }}>
+            {tr("Передач за период нет")}
+          </div>
+        )}
         <div className="space-y-1.5">
           {hoSorted.map((h) => (
-            <div key={h.id} className="flex items-center gap-2 flex-wrap py-1.5" style={{ borderBottom: `1px solid ${C.line}` }}>
-              <span style={{ fontSize: 13, color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{dm(h.date)}</span>
-              {!isMgr && <span className="truncate" style={{ fontSize: 12.5, color: C.sub, maxWidth: 90 }}>{branchById(h.branchId)?.name}</span>}
-              <span style={{ fontSize: 13.5, color: C.ink, fontWeight: 800, whiteSpace: "nowrap" }}>{fmtSum(h.amount)}</span>
-              <span className="min-w-0 truncate" style={{ fontSize: 12.5, color: C.sub, flex: "1 1 120px" }}>{tr("через")}: {h.via}{h.note ? ` · ${h.note}` : ""}</span>
-              <span className="rounded-full font-semibold shrink-0" style={{ fontSize: 11, padding: "2px 8px", whiteSpace: "nowrap", background: h.status === "received" ? "#E9F9EF" : "#FEF3C7", color: h.status === "received" ? C.ok : "#92400E" }}>
-                {h.status === "received" ? `✓ ${tr("Принято офисом")}` : tr("В пути")}
+            <div
+              key={h.id}
+              className="flex items-center gap-2 flex-wrap py-1.5"
+              style={{ borderBottom: `1px solid ${C.line}` }}
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  color: C.ink,
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {dm(h.date)}
               </span>
-              {isController && h.status === "sent" && <button onClick={() => confirmHandover(h.id)} className="rounded-lg px-2 py-1 font-semibold shrink-0" style={{ background: C.ok, color: "#fff", fontSize: 11 }}>{tr("Подтвердить приём")}</button>}
-              {canDelHo(h) && <button onClick={() => { dispatch({ type: "DELETE_HANDOVER", id: h.id }); notify(tr("Передача удалена")); }} className="p-1 rounded-lg shrink-0" style={{ color: C.bad }} title={tr("Удалить")}><X size={14} /></button>}
+              {!isMgr && (
+                <span
+                  className="truncate"
+                  style={{ fontSize: 12.5, color: C.sub, maxWidth: 90 }}
+                >
+                  {branchById(h.branchId)?.name}
+                </span>
+              )}
+              <span
+                style={{
+                  fontSize: 13.5,
+                  color: C.ink,
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {fmtSum(h.amount)}
+              </span>
+              <span
+                className="min-w-0 truncate"
+                style={{ fontSize: 12.5, color: C.sub, flex: "1 1 120px" }}
+              >
+                {tr("через")}: {h.via}
+                {h.note ? ` · ${h.note}` : ""}
+              </span>
+              <span
+                className="rounded-full font-semibold shrink-0"
+                style={{
+                  fontSize: 11,
+                  padding: "2px 8px",
+                  whiteSpace: "nowrap",
+                  background: h.status === "received" ? "#E9F9EF" : "#FEF3C7",
+                  color: h.status === "received" ? C.ok : "#92400E",
+                }}
+              >
+                {h.status === "received"
+                  ? `✓ ${tr("Принято офисом")}`
+                  : tr("В пути")}
+              </span>
+              {isController && h.status === "sent" && (
+                <button
+                  onClick={() => confirmHandover(h.id)}
+                  className="rounded-lg px-2 py-1 font-semibold shrink-0"
+                  style={{ background: C.ok, color: "#fff", fontSize: 11 }}
+                >
+                  {tr("Подтвердить приём")}
+                </button>
+              )}
+              {canDelHo(h) && (
+                <button
+                  onClick={() => {
+                    dispatch({ type: "DELETE_HANDOVER", id: h.id });
+                    notify(tr("Передача удалена"));
+                  }}
+                  className="p-1 rounded-lg shrink-0"
+                  style={{ color: C.bad }}
+                  title={tr("Удалить")}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -2289,32 +5840,117 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
 
       {/* форма — только управляющие */}
       {canEditForm && (
-        <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Wallet size={18} color={C.brandA} />
-            <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("Отчёт по кассе за день")}</h3>
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+              {tr("Отчёт по кассе за день")}
+            </h3>
           </div>
-          {isConfirmed
-            ? <div className="rounded-xl px-3 py-2 mb-4 flex items-start gap-2" style={{ background: "#E9F9EF", border: "1px solid #A7F3D0" }}><CheckCircle2 size={15} color={C.ok} style={{ marginTop: 1 }} /><span style={{ fontSize: 12.5, color: "#065F46" }}>{tr("Отчёт принят контролёром — редактирование закрыто.")}{existing?.confirmedBy ? ` ${tr("Принял")}: ${userById(existing.confirmedBy)?.name || ""}` : ""}</span></div>
-            : (isMgr && pastDeadline)
-              ? <div className="rounded-xl px-3 py-2 mb-4 flex items-start gap-2" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}><Lock size={15} color={C.bad} style={{ marginTop: 1 }} /><span style={{ fontSize: 12.5, color: "#991B1B" }}>{tr("Срок сдачи истёк (после 12:00 следующего дня). Изменения может внести только контролёр.")}</span></div>
-              : <div className="mb-4 flex items-start gap-2" style={{ fontSize: 12.5, color: C.faint }}><Clock size={14} style={{ marginTop: 1 }} /><span>{existing ? tr("Отчёт сдан. ") : tr("Новый отчёт. ")}{isController ? tr("Вы контролёр — правки без ограничения по сроку.") : `${tr("Правки принимаются до")} ${dlStr}`}</span></div>}
+          {isConfirmed ? (
+            <div
+              className="rounded-xl px-3 py-2 mb-4 flex items-start gap-2"
+              style={{ background: "#E9F9EF", border: "1px solid #A7F3D0" }}
+            >
+              <CheckCircle2 size={15} color={C.ok} style={{ marginTop: 1 }} />
+              <span style={{ fontSize: 12.5, color: "#065F46" }}>
+                {tr("Отчёт принят контролёром — редактирование закрыто.")}
+                {existing?.confirmedBy
+                  ? ` ${tr("Принял")}: ${userById(existing.confirmedBy)?.name || ""}`
+                  : ""}
+              </span>
+            </div>
+          ) : isMgr && pastDeadline ? (
+            <div
+              className="rounded-xl px-3 py-2 mb-4 flex items-start gap-2"
+              style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}
+            >
+              <Lock size={15} color={C.bad} style={{ marginTop: 1 }} />
+              <span style={{ fontSize: 12.5, color: "#991B1B" }}>
+                {tr(
+                  "Срок сдачи истёк (после 12:00 следующего дня). Изменения может внести только контролёр.",
+                )}
+              </span>
+            </div>
+          ) : (
+            <div
+              className="mb-4 flex items-start gap-2"
+              style={{ fontSize: 12.5, color: C.faint }}
+            >
+              <Clock size={14} style={{ marginTop: 1 }} />
+              <span>
+                {existing ? tr("Отчёт сдан. ") : tr("Новый отчёт. ")}
+                {isController
+                  ? tr("Вы контролёр — правки без ограничения по сроку.")
+                  : `${tr("Правки принимаются до")} ${dlStr}`}
+              </span>
+            </div>
+          )}
 
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-            <NiceDate label={tr("Дата")} value={form.date} max={ymdNow()} onChange={(v) => setForm((f) => ({ ...f, date: v }))} />
-            <div><label style={{ fontSize: 12, color: C.sub, fontWeight: 600, display: "block", marginBottom: 4 }}>{tr("Филиал")}</label>
-              <NiceSelect value={form.branchId} disabled={isMgr} onChange={(v) => setForm((f) => ({ ...f, branchId: +v }))}
-                options={branches.map((b) => ({ value: b.id, label: b.name }))} /></div>
+          <div
+            className="grid gap-3 mb-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+            }}
+          >
+            <NiceDate
+              label={tr("Дата")}
+              value={form.date}
+              max={ymdNow()}
+              onChange={(v) => setForm((f) => ({ ...f, date: v }))}
+            />
+            <div>
+              <label
+                style={{
+                  fontSize: 12,
+                  color: C.sub,
+                  fontWeight: 600,
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                {tr("Филиал")}
+              </label>
+              <NiceSelect
+                value={form.branchId}
+                disabled={isMgr}
+                onChange={(v) => setForm((f) => ({ ...f, branchId: +v }))}
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+              />
+            </div>
           </div>
 
-          <div className="font-bold mb-2" style={{ color: C.sub, fontSize: 13 }}>{tr("Наличные")}</div>
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+          <div
+            className="font-bold mb-2"
+            style={{ color: C.sub, fontSize: 13 }}
+          >
+            {tr("Наличные")}
+          </div>
+          <div
+            className="grid gap-3 mb-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+            }}
+          >
             {inp(tr("Фискальная выручка"), "fiscal")}
             {inp(tr("Нефискальная сумма"), "nonFiscal")}
           </div>
 
-          <div className="font-bold mb-2" style={{ color: C.sub, fontSize: 13 }}>{tr("Карты и онлайн")}</div>
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+          <div
+            className="font-bold mb-2"
+            style={{ color: C.sub, fontSize: 13 }}
+          >
+            {tr("Карты и онлайн")}
+          </div>
+          <div
+            className="grid gap-3 mb-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+            }}
+          >
             {inp("Humo Card", "humo")}
             {inp("Uzcard", "uzcard")}
             {inp("Click", "click")}
@@ -2323,8 +5959,18 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
             {inp("Yandex Еда", "yandex")}
           </div>
 
-          <div className="font-bold mb-2" style={{ color: C.sub, fontSize: 13 }}>{tr("Перечисление и прочее")}</div>
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+          <div
+            className="font-bold mb-2"
+            style={{ color: C.sub, fontSize: 13 }}
+          >
+            {tr("Перечисление и прочее")}
+          </div>
+          <div
+            className="grid gap-3 mb-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+            }}
+          >
             {inp(tr("Перечисление"), "transfer")}
             {inp(tr("Чеков перечислением"), "transferCount")}
             {inp(tr("Долг"), "debt")}
@@ -2335,116 +5981,477 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
 
           {(form.expenses || 0) > 0 && (
             <div className="mb-4">
-              <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>{tr("Расходы — на что потрачено")} <span style={{ color: C.bad }}>*</span></label>
-              <textarea value={form.expensesNote || ""} disabled={!editable} rows={2} onChange={(e) => setForm((f) => ({ ...f, expensesNote: e.target.value }))}
-                placeholder={tr("Например: закупка продуктов, хозтовары, мелкий ремонт")} className="w-full rounded-xl px-3 py-2 mt-1"
-                style={{ ...inpSt, resize: "vertical", background: editable ? "#fff" : "#F1F5F9", color: editable ? C.ink : C.sub }} />
-              {!(form.expensesNote || "").trim() && <div style={{ fontSize: 12, color: C.bad, marginTop: 4 }}>{tr("При расходах комментарий обязателен")}</div>}
+              <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+                {tr("Расходы — на что потрачено")}{" "}
+                <span style={{ color: C.bad }}>*</span>
+              </label>
+              <textarea
+                value={form.expensesNote || ""}
+                disabled={!editable}
+                rows={2}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, expensesNote: e.target.value }))
+                }
+                placeholder={tr(
+                  "Например: закупка продуктов, хозтовары, мелкий ремонт",
+                )}
+                className="w-full rounded-xl px-3 py-2 mt-1"
+                style={{
+                  ...inpSt,
+                  resize: "vertical",
+                  background: editable ? "#fff" : "#F1F5F9",
+                  color: editable ? C.ink : C.sub,
+                }}
+              />
+              {!(form.expensesNote || "").trim() && (
+                <div style={{ fontSize: 12, color: C.bad, marginTop: 4 }}>
+                  {tr("При расходах комментарий обязателен")}
+                </div>
+              )}
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 {(form.expensePhotos || []).map((ph) => (
                   <div key={ph.id} className="relative">
-                    <img src={ph.dataUrl} alt="" onClick={() => setViewPhoto(ph.dataUrl)}
-                      style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 10, border: `1px solid ${C.border}`, cursor: "zoom-in" }} />
-                    {editable && <button onClick={() => delPhoto(ph.id)} className="absolute flex items-center justify-center"
-                      style={{ top: -6, right: -6, width: 18, height: 18, borderRadius: 99, background: C.bad, color: "#fff", fontSize: 11, lineHeight: 1 }}>×</button>}
+                    <img
+                      src={ph.dataUrl}
+                      alt=""
+                      onClick={() => setViewPhoto(ph.dataUrl)}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        objectFit: "cover",
+                        borderRadius: 10,
+                        border: `1px solid ${C.border}`,
+                        cursor: "zoom-in",
+                      }}
+                    />
+                    {editable && (
+                      <button
+                        onClick={() => delPhoto(ph.id)}
+                        className="absolute flex items-center justify-center"
+                        style={{
+                          top: -6,
+                          right: -6,
+                          width: 18,
+                          height: 18,
+                          borderRadius: 99,
+                          background: C.bad,
+                          color: "#fff",
+                          fontSize: 11,
+                          lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                 ))}
                 {editable && (form.expensePhotos || []).length < 3 && (
-                  <label className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold" style={{ border: `1px dashed ${C.border}`, color: C.sub, fontSize: 12.5, cursor: "pointer" }}>
+                  <label
+                    className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
+                    style={{
+                      border: `1px dashed ${C.border}`,
+                      color: C.sub,
+                      fontSize: 12.5,
+                      cursor: "pointer",
+                    }}
+                  >
                     <Camera size={15} /> {tr("Фото чека / товара")}
-                    <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        addPhotos(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
                   </label>
                 )}
-                <span style={{ fontSize: 11.5, color: C.faint }}>{tr("по желанию, до 3 фото — доказательство расхода")}</span>
+                <span style={{ fontSize: 11.5, color: C.faint }}>
+                  {tr("по желанию, до 3 фото — доказательство расхода")}
+                </span>
               </div>
             </div>
           )}
 
-          <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-            <Box label={tr("Наличными всего")} value={live.cash} color={C.brandA} />
-            <Box label={tr("Эквайринг (в банк)")} value={live.acq} color={C.violet} />
-            <Box label={tr("Итого выручка")} value={live.total} color={C.ink} bg="#EFF4FF" />
-            <Box label={tr("Разница с iiko")} value={live.diff} color={live.diff === 0 ? C.ok : C.bad} bg={live.diff === 0 ? "#E9F9EF" : "#FEF2F2"} />
+          <div
+            className="grid gap-3 mb-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+            }}
+          >
+            <Box
+              label={tr("Наличными всего")}
+              value={live.cash}
+              color={C.brandA}
+            />
+            <Box
+              label={tr("Эквайринг (в банк)")}
+              value={live.acq}
+              color={C.violet}
+            />
+            <Box
+              label={tr("Итого выручка")}
+              value={live.total}
+              color={C.ink}
+              bg="#EFF4FF"
+            />
+            <Box
+              label={tr("Разница с iiko")}
+              value={live.diff}
+              color={live.diff === 0 ? C.ok : C.bad}
+              bg={live.diff === 0 ? "#E9F9EF" : "#FEF2F2"}
+            />
           </div>
 
           <div className="mb-4">
-            <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>{tr("Комментарий")} {live.diff !== 0 && <span style={{ color: C.bad }}>*</span>}</label>
-            <textarea value={form.comment || ""} disabled={!editable} rows={2} onChange={(e) => setForm((f) => ({ ...f, comment: e.target.value }))}
-              placeholder={tr("Причина расхождения с iiko, если есть")} className="w-full rounded-xl px-3 py-2 mt-1"
-              style={{ ...inpSt, resize: "vertical", background: editable ? "#fff" : "#F1F5F9", color: editable ? C.ink : C.sub }} />
-            {live.diff !== 0 && !(form.comment || "").trim() && <div style={{ fontSize: 12, color: C.bad, marginTop: 4 }}>{tr("При расхождении с iiko комментарий обязателен")}</div>}
+            <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+              {tr("Комментарий")}{" "}
+              {live.diff !== 0 && <span style={{ color: C.bad }}>*</span>}
+            </label>
+            <textarea
+              value={form.comment || ""}
+              disabled={!editable}
+              rows={2}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, comment: e.target.value }))
+              }
+              placeholder={tr("Причина расхождения с iiko, если есть")}
+              className="w-full rounded-xl px-3 py-2 mt-1"
+              style={{
+                ...inpSt,
+                resize: "vertical",
+                background: editable ? "#fff" : "#F1F5F9",
+                color: editable ? C.ink : C.sub,
+              }}
+            />
+            {live.diff !== 0 && !(form.comment || "").trim() && (
+              <div style={{ fontSize: 12, color: C.bad, marginTop: 4 }}>
+                {tr("При расхождении с iiko комментарий обязателен")}
+              </div>
+            )}
           </div>
 
-          <button onClick={save} disabled={!editable} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
-            style={{ background: editable ? C.brandA : C.line, color: editable ? "#fff" : C.faint, fontSize: 14, cursor: editable ? "pointer" : "not-allowed" }}>
-            <CheckCircle2 size={16} /> {existing ? tr("Обновить отчёт") : tr("Сдать отчёт")}
+          <button
+            onClick={save}
+            disabled={!editable}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{
+              background: editable ? C.brandA : C.line,
+              color: editable ? "#fff" : C.faint,
+              fontSize: 14,
+              cursor: editable ? "pointer" : "not-allowed",
+            }}
+          >
+            <CheckCircle2 size={16} />{" "}
+            {existing ? tr("Обновить отчёт") : tr("Сдать отчёт")}
           </button>
         </div>
       )}
 
       {/* отчёты за период */}
-      <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("Отчёты за период")}</h3>
-          <span style={{ fontSize: 12.5, color: C.faint }}>{periodLabel} · {branchLabel}</span>
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+            {tr("Отчёты за период")}
+          </h3>
+          <span style={{ fontSize: 12.5, color: C.faint }}>
+            {periodLabel} · {branchLabel}
+          </span>
         </div>
         {isController && (waiting > 0 || hoWaiting > 0) && (
-          <div className="rounded-xl px-3 py-2 mb-3 flex items-center gap-2" style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}>
+          <div
+            className="rounded-xl px-3 py-2 mb-3 flex items-center gap-2"
+            style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}
+          >
             <AlertTriangle size={15} color="#92400E" />
-            <span style={{ fontSize: 12.5, color: "#92400E", fontWeight: 600 }}>{waiting} {tr("отчётов ожидают подтверждения")}{hoWaiting > 0 ? ` · ${hoWaiting} ${tr("передач денег в пути")}` : ""}</span>
+            <span style={{ fontSize: 12.5, color: "#92400E", fontWeight: 600 }}>
+              {waiting} {tr("отчётов ожидают подтверждения")}
+              {hoWaiting > 0
+                ? ` · ${hoWaiting} ${tr("передач денег в пути")}`
+                : ""}
+            </span>
           </div>
         )}
-        {sorted.length === 0 && <div style={{ fontSize: 13, color: C.faint }}>{tr("Нет отчётов за выбранный период")}</div>}
+        {sorted.length === 0 && (
+          <div style={{ fontSize: 13, color: C.faint }}>
+            {tr("Нет отчётов за выбранный период")}
+          </div>
+        )}
 
         {sorted.length > 0 && (
           <div className="hidden lg:block">
-            <table className="w-full" style={{ borderCollapse: "collapse", fontSize: 13 }}>
+            <table
+              className="w-full"
+              style={{ borderCollapse: "collapse", fontSize: 13 }}
+            >
               <thead>
                 <tr style={{ color: C.faint, textAlign: "right" }}>
-                  <th className="py-2" style={{ textAlign: "left" }}>{tr("Дата")}</th>
-                  {!isMgr && <th style={{ textAlign: "left" }}>{tr("Филиал")}</th>}
-                  <th>{tr("Выручка")}</th><th>{tr("Наличные")}</th><th>{tr("Эквайринг")}</th>
-                  <th>{tr("Перечисл.")}</th><th>{tr("Долг")}</th><th>{tr("Без оплат")}</th><th>{tr("Расходы")}</th><th>{tr("Разница")}</th><th style={{ textAlign: "left" }}>{tr("Статус")}</th>
+                  <th className="py-2" style={{ textAlign: "left" }}>
+                    {tr("Дата")}
+                  </th>
+                  {!isMgr && (
+                    <th style={{ textAlign: "left" }}>{tr("Филиал")}</th>
+                  )}
+                  <th>{tr("Выручка")}</th>
+                  <th>{tr("Наличные")}</th>
+                  <th>{tr("Эквайринг")}</th>
+                  <th>{tr("Перечисл.")}</th>
+                  <th>{tr("Долг")}</th>
+                  <th>{tr("Без оплат")}</th>
+                  <th>{tr("Расходы")}</th>
+                  <th>{tr("Разница")}</th>
+                  <th style={{ textAlign: "left" }}>{tr("Статус")}</th>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((r) => {
                   const c = cashCalc(r);
                   return (
-                    <tr key={r.id} style={{ borderTop: `1px solid ${C.line}`, textAlign: "right" }}>
-                      <td className="py-2" style={{ textAlign: "left", color: C.ink, fontWeight: 600, whiteSpace: "nowrap" }}>{dm(r.date)}</td>
-                      {!isMgr && <td style={{ textAlign: "left", color: C.sub, whiteSpace: "nowrap" }}>{branchById(r.branchId)?.name}</td>}
-                      <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(c.total)}</td>
-                      <td style={{ color: C.sub, whiteSpace: "nowrap" }}>{fmtSum(c.cash)}</td>
-                      <td style={{ color: C.sub, whiteSpace: "nowrap" }}>{fmtSum(c.acq)}</td>
-                      <td style={{ color: C.sub, whiteSpace: "nowrap" }}>{r.transfer ? `${fmtSum(r.transfer)}${r.transferCount ? ` (${r.transferCount})` : ""}` : "—"}</td>
-                      <td style={{ color: r.debt ? C.warn : C.faint, whiteSpace: "nowrap" }}>{r.debt ? fmtSum(r.debt) : "—"}</td>
-                      <td style={{ color: r.noPay ? C.warn : C.faint, whiteSpace: "nowrap" }}>{r.noPay ? fmtSum(r.noPay) : "—"}</td>
-                      <td title={r.expensesNote || ""} style={{ color: C.bad, whiteSpace: "nowrap", textDecoration: r.expensesNote ? "underline dotted" : "none", textUnderlineOffset: 3, cursor: r.expensesNote ? "help" : "default" }}>{fmtSum(r.expenses)}</td>
-                      <td style={{ color: c.diff === 0 ? C.ok : C.bad, fontWeight: 700, whiteSpace: "nowrap" }}>{c.diff === 0 ? "✓ 0" : (c.diff > 0 ? "+" : "") + fmtSum(c.diff)}</td>
+                    <tr
+                      key={r.id}
+                      style={{
+                        borderTop: `1px solid ${C.line}`,
+                        textAlign: "right",
+                      }}
+                    >
+                      <td
+                        className="py-2"
+                        style={{
+                          textAlign: "left",
+                          color: C.ink,
+                          fontWeight: 600,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {dm(r.date)}
+                      </td>
+                      {!isMgr && (
+                        <td
+                          style={{
+                            textAlign: "left",
+                            color: C.sub,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {branchById(r.branchId)?.name}
+                        </td>
+                      )}
+                      <td
+                        style={{
+                          color: C.ink,
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {fmtSum(c.total)}
+                      </td>
+                      <td style={{ color: C.sub, whiteSpace: "nowrap" }}>
+                        {fmtSum(c.cash)}
+                      </td>
+                      <td style={{ color: C.sub, whiteSpace: "nowrap" }}>
+                        {fmtSum(c.acq)}
+                      </td>
+                      <td style={{ color: C.sub, whiteSpace: "nowrap" }}>
+                        {r.transfer
+                          ? `${fmtSum(r.transfer)}${r.transferCount ? ` (${r.transferCount})` : ""}`
+                          : "—"}
+                      </td>
+                      <td
+                        style={{
+                          color: r.debt ? C.warn : C.faint,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.debt ? fmtSum(r.debt) : "—"}
+                      </td>
+                      <td
+                        style={{
+                          color: r.noPay ? C.warn : C.faint,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.noPay ? fmtSum(r.noPay) : "—"}
+                      </td>
+                      <td
+                        title={r.expensesNote || ""}
+                        style={{
+                          color: C.bad,
+                          whiteSpace: "nowrap",
+                          textDecoration: r.expensesNote
+                            ? "underline dotted"
+                            : "none",
+                          textUnderlineOffset: 3,
+                          cursor: r.expensesNote ? "help" : "default",
+                        }}
+                      >
+                        {fmtSum(r.expenses)}
+                      </td>
+                      <td
+                        style={{
+                          color: c.diff === 0 ? C.ok : C.bad,
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {c.diff === 0
+                          ? "✓ 0"
+                          : (c.diff > 0 ? "+" : "") + fmtSum(c.diff)}
+                      </td>
                       <td style={{ textAlign: "left", whiteSpace: "nowrap" }}>
                         <div className="flex items-center gap-1.5">
                           <StatusBadge st={r.status} />
-                          {r.comment ? <span title={r.comment} style={{ display: "inline-flex" }}><MessageSquare size={13} color={C.warn} /></span> : null}
-                          {(r.expensePhotos || []).length > 0 && <button onClick={() => setViewPhoto(r.expensePhotos[0].dataUrl)} className="inline-flex items-center gap-0.5" style={{ color: C.brandA, fontSize: 11, fontWeight: 700 }} title={tr("Фото чека / товара")}><Camera size={13} />{r.expensePhotos.length}</button>}
-                          {isController && r.status !== "confirmed" && <button onClick={() => confirmReport(r.id)} className="rounded-lg px-2 py-1 font-semibold" style={{ background: C.ok, color: "#fff", fontSize: 11 }}>{tr("Принять")}</button>}
-                          {canDelete(r) && <button onClick={() => { dispatch({ type: "DELETE_CASH_REPORT", id: r.id }); notify(tr("Отчёт удалён")); }} className="p-1 rounded-lg" style={{ color: C.bad }} title={tr("Удалить")}><X size={15} /></button>}
+                          {r.comment ? (
+                            <span
+                              title={r.comment}
+                              style={{ display: "inline-flex" }}
+                            >
+                              <MessageSquare size={13} color={C.warn} />
+                            </span>
+                          ) : null}
+                          {(r.expensePhotos || []).length > 0 && (
+                            <button
+                              onClick={() =>
+                                setViewPhoto(r.expensePhotos[0].dataUrl)
+                              }
+                              className="inline-flex items-center gap-0.5"
+                              style={{
+                                color: C.brandA,
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                              title={tr("Фото чека / товара")}
+                            >
+                              <Camera size={13} />
+                              {r.expensePhotos.length}
+                            </button>
+                          )}
+                          {isController && r.status !== "confirmed" && (
+                            <button
+                              onClick={() => confirmReport(r.id)}
+                              className="rounded-lg px-2 py-1 font-semibold"
+                              style={{
+                                background: C.ok,
+                                color: "#fff",
+                                fontSize: 11,
+                              }}
+                            >
+                              {tr("Принять")}
+                            </button>
+                          )}
+                          {canDelete(r) && (
+                            <button
+                              onClick={() => {
+                                dispatch({
+                                  type: "DELETE_CASH_REPORT",
+                                  id: r.id,
+                                });
+                                notify(tr("Отчёт удалён"));
+                              }}
+                              className="p-1 rounded-lg"
+                              style={{ color: C.bad }}
+                              title={tr("Удалить")}
+                            >
+                              <X size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
-                <tr style={{ borderTop: `2px solid ${C.border}`, textAlign: "right", background: "#F8FAFC" }}>
-                  <td className="py-2" style={{ textAlign: "left", color: C.ink, fontWeight: 800 }}>{tr("Итого")}</td>
+                <tr
+                  style={{
+                    borderTop: `2px solid ${C.border}`,
+                    textAlign: "right",
+                    background: "#F8FAFC",
+                  }}
+                >
+                  <td
+                    className="py-2"
+                    style={{ textAlign: "left", color: C.ink, fontWeight: 800 }}
+                  >
+                    {tr("Итого")}
+                  </td>
                   {!isMgr && <td></td>}
-                  <td style={{ color: C.ink, fontWeight: 800, whiteSpace: "nowrap" }}>{fmtSum(agg.total)}</td>
-                  <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(agg.cash)}</td>
-                  <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(agg.acq)}</td>
-                  <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(sum("transfer"))}</td>
-                  <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(sum("debt"))}</td>
-                  <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(sum("noPay"))}</td>
-                  <td style={{ color: C.bad, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(sum("expenses"))}</td>
-                  <td style={{ color: agg.diff === 0 ? C.ok : C.bad, fontWeight: 800, whiteSpace: "nowrap" }}>{agg.diff === 0 ? "✓ 0" : (agg.diff > 0 ? "+" : "") + fmtSum(agg.diff)}</td>
+                  <td
+                    style={{
+                      color: C.ink,
+                      fontWeight: 800,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(agg.total)}
+                  </td>
+                  <td
+                    style={{
+                      color: C.ink,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(agg.cash)}
+                  </td>
+                  <td
+                    style={{
+                      color: C.ink,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(agg.acq)}
+                  </td>
+                  <td
+                    style={{
+                      color: C.ink,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(sum("transfer"))}
+                  </td>
+                  <td
+                    style={{
+                      color: C.ink,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(sum("debt"))}
+                  </td>
+                  <td
+                    style={{
+                      color: C.ink,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(sum("noPay"))}
+                  </td>
+                  <td
+                    style={{
+                      color: C.bad,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {fmtSum(sum("expenses"))}
+                  </td>
+                  <td
+                    style={{
+                      color: agg.diff === 0 ? C.ok : C.bad,
+                      fontWeight: 800,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {agg.diff === 0
+                      ? "✓ 0"
+                      : (agg.diff > 0 ? "+" : "") + fmtSum(agg.diff)}
+                  </td>
                   <td></td>
                 </tr>
               </tbody>
@@ -2456,47 +6463,217 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
         <div className="lg:hidden space-y-2.5">
           {sorted.map((r) => {
             const c = cashCalc(r);
-            const cell = (l, v, col) => <div><div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>{l}</div><div style={{ fontSize: 13, color: col || C.ink, fontWeight: 700, overflowWrap: "break-word" }}>{v}</div></div>;
+            const cell = (l, v, col) => (
+              <div>
+                <div
+                  style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}
+                >
+                  {l}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: col || C.ink,
+                    fontWeight: 700,
+                    overflowWrap: "break-word",
+                  }}
+                >
+                  {v}
+                </div>
+              </div>
+            );
             return (
-              <div key={r.id} className="rounded-xl px-3 py-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
+              <div
+                key={r.id}
+                className="rounded-xl px-3 py-3"
+                style={{
+                  background: "#FBFCFE",
+                  border: `1px solid ${C.border}`,
+                }}
+              >
                 <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                  <div className="font-bold" style={{ color: C.ink, fontSize: 14 }}>{dm(r.date)} · {branchById(r.branchId)?.name}</div>
+                  <div
+                    className="font-bold"
+                    style={{ color: C.ink, fontSize: 14 }}
+                  >
+                    {dm(r.date)} · {branchById(r.branchId)?.name}
+                  </div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <StatusBadge st={r.status} />
-                    <span className="rounded-full font-semibold" style={{ fontSize: 11.5, padding: "2px 9px", whiteSpace: "nowrap", background: c.diff === 0 ? "#E9F9EF" : "#FEF2F2", color: c.diff === 0 ? C.ok : C.bad }}>
-                      {tr("Разница")}: {c.diff === 0 ? "0" : (c.diff > 0 ? "+" : "") + fmtSum(c.diff)}
+                    <span
+                      className="rounded-full font-semibold"
+                      style={{
+                        fontSize: 11.5,
+                        padding: "2px 9px",
+                        whiteSpace: "nowrap",
+                        background: c.diff === 0 ? "#E9F9EF" : "#FEF2F2",
+                        color: c.diff === 0 ? C.ok : C.bad,
+                      }}
+                    >
+                      {tr("Разница")}:{" "}
+                      {c.diff === 0
+                        ? "0"
+                        : (c.diff > 0 ? "+" : "") + fmtSum(c.diff)}
                     </span>
-                    {isController && r.status !== "confirmed" && <button onClick={() => confirmReport(r.id)} className="rounded-lg px-2 py-1 font-semibold" style={{ background: C.ok, color: "#fff", fontSize: 11 }}>{tr("Принять")}</button>}
-                    {canDelete(r) && <button onClick={() => { dispatch({ type: "DELETE_CASH_REPORT", id: r.id }); notify(tr("Отчёт удалён")); }} className="p-1 rounded-lg" style={{ color: C.bad }}><X size={15} /></button>}
+                    {isController && r.status !== "confirmed" && (
+                      <button
+                        onClick={() => confirmReport(r.id)}
+                        className="rounded-lg px-2 py-1 font-semibold"
+                        style={{
+                          background: C.ok,
+                          color: "#fff",
+                          fontSize: 11,
+                        }}
+                      >
+                        {tr("Принять")}
+                      </button>
+                    )}
+                    {canDelete(r) && (
+                      <button
+                        onClick={() => {
+                          dispatch({ type: "DELETE_CASH_REPORT", id: r.id });
+                          notify(tr("Отчёт удалён"));
+                        }}
+                        className="p-1 rounded-lg"
+                        style={{ color: C.bad }}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
+                <div
+                  className="grid gap-2"
+                  style={{
+                    gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+                  }}
+                >
                   {cell(tr("Выручка"), fmtSum(c.total))}
                   {cell(tr("Наличные"), fmtSum(c.cash), C.brandA)}
                   {cell(tr("Эквайринг"), fmtSum(c.acq), C.violet)}
-                  {r.transfer ? cell(tr("Перечисл."), fmtSum(r.transfer) + (r.transferCount ? ` (${r.transferCount})` : "")) : null}
+                  {r.transfer
+                    ? cell(
+                        tr("Перечисл."),
+                        fmtSum(r.transfer) +
+                          (r.transferCount ? ` (${r.transferCount})` : ""),
+                      )
+                    : null}
                   {r.debt ? cell(tr("Долг"), fmtSum(r.debt), C.warn) : null}
-                  {r.noPay ? cell(tr("Без оплат"), fmtSum(r.noPay), C.warn) : null}
+                  {r.noPay
+                    ? cell(tr("Без оплат"), fmtSum(r.noPay), C.warn)
+                    : null}
                   {cell(tr("Расходы"), fmtSum(r.expenses), C.bad)}
                 </div>
-                {r.expensesNote ? <div className="flex items-start gap-1.5" style={{ fontSize: 12, color: C.sub, marginTop: 8 }}><Wallet size={13} style={{ marginTop: 1, flexShrink: 0 }} /><span>{tr("Расходы")}: {r.expensesNote}</span></div> : null}
-                {r.comment ? <div className="flex items-start gap-1.5" style={{ fontSize: 12, color: C.warn, marginTop: r.expensesNote ? 4 : 8 }}><MessageSquare size={13} style={{ marginTop: 1, flexShrink: 0 }} /><span>{r.comment}</span></div> : null}
+                {r.expensesNote ? (
+                  <div
+                    className="flex items-start gap-1.5"
+                    style={{ fontSize: 12, color: C.sub, marginTop: 8 }}
+                  >
+                    <Wallet size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+                    <span>
+                      {tr("Расходы")}: {r.expensesNote}
+                    </span>
+                  </div>
+                ) : null}
+                {r.comment ? (
+                  <div
+                    className="flex items-start gap-1.5"
+                    style={{
+                      fontSize: 12,
+                      color: C.warn,
+                      marginTop: r.expensesNote ? 4 : 8,
+                    }}
+                  >
+                    <MessageSquare
+                      size={13}
+                      style={{ marginTop: 1, flexShrink: 0 }}
+                    />
+                    <span>{r.comment}</span>
+                  </div>
+                ) : null}
                 {(r.expensePhotos || []).length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap" style={{ marginTop: 6 }}>
-                    {r.expensePhotos.map((ph) => <img key={ph.id} src={ph.dataUrl} alt="" onClick={() => setViewPhoto(ph.dataUrl)} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: `1px solid ${C.border}`, cursor: "zoom-in" }} />)}
+                  <div
+                    className="flex gap-1.5 flex-wrap"
+                    style={{ marginTop: 6 }}
+                  >
+                    {r.expensePhotos.map((ph) => (
+                      <img
+                        key={ph.id}
+                        src={ph.dataUrl}
+                        alt=""
+                        onClick={() => setViewPhoto(ph.dataUrl)}
+                        style={{
+                          width: 44,
+                          height: 44,
+                          objectFit: "cover",
+                          borderRadius: 8,
+                          border: `1px solid ${C.border}`,
+                          cursor: "zoom-in",
+                        }}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
             );
           })}
           {sorted.length > 0 && (
-            <div className="rounded-xl px-3 py-3" style={{ background: "#EFF4FF", border: `1px solid ${C.border}` }}>
-              <div className="font-extrabold mb-2" style={{ color: C.ink, fontSize: 14 }}>{tr("Итого за период")}</div>
-              <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}>
-                <div><div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>{tr("Выручка")}</div><div style={{ fontSize: 13, color: C.ink, fontWeight: 800 }}>{fmtSum(agg.total)}</div></div>
-                <div><div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>{tr("Наличные")}</div><div style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>{fmtSum(agg.cash)}</div></div>
-                <div><div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>{tr("Эквайринг")}</div><div style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>{fmtSum(agg.acq)}</div></div>
-                <div><div style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}>{tr("Расходы")}</div><div style={{ fontSize: 13, color: C.bad, fontWeight: 700 }}>{fmtSum(sum("expenses"))}</div></div>
+            <div
+              className="rounded-xl px-3 py-3"
+              style={{ background: "#EFF4FF", border: `1px solid ${C.border}` }}
+            >
+              <div
+                className="font-extrabold mb-2"
+                style={{ color: C.ink, fontSize: 14 }}
+              >
+                {tr("Итого за период")}
+              </div>
+              <div
+                className="grid gap-2"
+                style={{
+                  gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+                }}
+              >
+                <div>
+                  <div
+                    style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}
+                  >
+                    {tr("Выручка")}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.ink, fontWeight: 800 }}>
+                    {fmtSum(agg.total)}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}
+                  >
+                    {tr("Наличные")}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
+                    {fmtSum(agg.cash)}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}
+                  >
+                    {tr("Эквайринг")}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
+                    {fmtSum(agg.acq)}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: 10.5, color: C.faint, fontWeight: 600 }}
+                  >
+                    {tr("Расходы")}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.bad, fontWeight: 700 }}>
+                    {fmtSum(sum("expenses"))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2504,12 +6681,31 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
       </div>
 
       <p style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5 }}>
-        {tr("«Наличными всего» = фискальная + нефискальная. «Эквайринг» = Humo + Uzcard + Click + Payme + Uzum Tezkor + Yandex. «Итого выручка» = наличные + эквайринг + перечисление. «Разница с iiko» = итог минус сумма по iiko.")}
+        {tr(
+          "«Наличными всего» = фискальная + нефискальная. «Эквайринг» = Humo + Uzcard + Click + Payme + Uzum Tezkor + Yandex. «Итого выручка» = наличные + эквайринг + перечисление. «Разница с iiko» = итог минус сумма по iiko.",
+        )}
       </p>
 
       {viewPhoto && (
-        <div onClick={() => setViewPhoto(null)} className="fixed inset-0 flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,.8)", zIndex: 90, cursor: "zoom-out" }}>
-          <img src={viewPhoto} alt="" style={{ maxWidth: "94vw", maxHeight: "88vh", borderRadius: 14, boxShadow: "0 20px 60px rgba(0,0,0,.5)" }} />
+        <div
+          onClick={() => setViewPhoto(null)}
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{
+            background: "rgba(15,23,42,.8)",
+            zIndex: 90,
+            cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={viewPhoto}
+            alt=""
+            style={{
+              maxWidth: "94vw",
+              maxHeight: "88vh",
+              borderRadius: 14,
+              boxShadow: "0 20px 60px rgba(0,0,0,.5)",
+            }}
+          />
         </div>
       )}
     </div>
@@ -2536,23 +6732,61 @@ const PRODUCT_CATALOG = [
   { id: "p15", name: "Смузи", cat: "Напитки", price: 28000, w: 3 },
   { id: "p16", name: "Свежий сок", cat: "Напитки", price: 24000, w: 4 },
 ];
-function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function rand01(seed) { let x = hashStr(seed); x = (Math.imul(x, 1103515245) + 12345) >>> 0; return (x % 100000) / 100000; }
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function rand01(seed) {
+  let x = hashStr(seed);
+  x = (Math.imul(x, 1103515245) + 12345) >>> 0;
+  return (x % 100000) / 100000;
+}
 // продажи товаров за конкретный день+филиал, распределённые из дневной выручки
 function dayProductSales(dateStr, branchId, revenue) {
   if (!revenue || revenue <= 0) return [];
-  const j = PRODUCT_CATALOG.map((p) => p.w * (0.55 + 0.9 * rand01(dateStr + "|" + branchId + "|" + p.id)));
+  const j = PRODUCT_CATALOG.map(
+    (p) => p.w * (0.55 + 0.9 * rand01(dateStr + "|" + branchId + "|" + p.id)),
+  );
   const tw = j.reduce((a, b) => a + b, 0) || 1;
   return PRODUCT_CATALOG.map((p, i) => {
-    const qty = Math.max(0, Math.round((j[i] / tw) * revenue / p.price));
+    const qty = Math.max(0, Math.round(((j[i] / tw) * revenue) / p.price));
     return { id: p.id, name: p.name, cat: p.cat, qty, sum: qty * p.price };
   }).filter((x) => x.qty > 0);
 }
 // количество чеков за день+филиал (детерминированно; средний чек ~45–75к)
 function dayChecks(dateStr, branchId, revenue) {
   if (!revenue || revenue <= 0) return 0;
-  const avg = 45000 + Math.round(rand01("chk|" + dateStr + "|" + branchId) * 30000);
+  const avg =
+    45000 + Math.round(rand01("chk|" + dateStr + "|" + branchId) * 30000);
   return Math.max(1, Math.round(revenue / avg));
+}
+
+// Состояние, сохраняемое в localStorage — переживает обновление страницы.
+function usePersisted(key, initial) {
+  const [v, setV] = useState(() => {
+    try {
+      if (typeof localStorage !== "undefined") {
+        const raw = localStorage.getItem(key);
+        if (raw != null) return JSON.parse(raw);
+      }
+    } catch {
+      /* игнорируем битые значения */
+    }
+    return initial;
+  });
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== "undefined")
+        localStorage.setItem(key, JSON.stringify(v));
+    } catch {
+      /* приватный режим и т.п. — просто не сохраняем */
+    }
+  }, [key, v]);
+  return [v, setV];
 }
 
 // Живые продажи из iiko (OLAP) за период [from,to], опц. по филиалу (department).
@@ -2589,7 +6823,11 @@ function useIikoSales({ from, to, department }) {
         });
         const days = Object.keys(dayMap)
           .sort()
-          .map((d) => ({ date: d, revenue: dayMap[d].revenue, qty: dayMap[d].qty }));
+          .map((d) => ({
+            date: d,
+            revenue: dayMap[d].revenue,
+            qty: dayMap[d].qty,
+          }));
         const total = days.reduce((a, d) => a + d.revenue, 0);
         // Количество чеков — сумма уникальных заказов по всем строкам.
         const checks = byDay.reduce((a, r) => a + num(r["UniqOrderId"]), 0);
@@ -2666,77 +6904,202 @@ function SalesAnalytics({ s, me, branchScope }) {
   const isMgr = me.role === "manager";
   const myBranch = me.branchId || (branches[0] && branches[0].id) || 1;
   const pad = (n) => String(n).padStart(2, "0");
-  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const ymd = (d) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const toD = (x) => new Date(x + "T00:00:00");
-  const addDays = (x, n) => { const d = toD(x); d.setDate(d.getDate() + n); return ymd(d); };
-  const monday = (x) => { const d = toD(x); const wd = (d.getDay() + 6) % 7; d.setDate(d.getDate() - wd); return ymd(d); };
+  const addDays = (x, n) => {
+    const d = toD(x);
+    d.setDate(d.getDate() + n);
+    return ymd(d);
+  };
+  const monday = (x) => {
+    const d = toD(x);
+    const wd = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - wd);
+    return ymd(d);
+  };
   const dm = (x) => x.split("-").reverse().join(".");
   const today = ymdNow();
 
-  const PRESETS = [["today", "Сегодня"], ["yesterday", "Вчера"], ["curWeek", "Текущая неделя"], ["prevWeek", "Прошлая неделя"], ["curMonth", "Текущий месяц"], ["prevMonth", "Прошлый месяц"], ["curYear", "Текущий год"], ["custom", "Другой…"]];
+  const PRESETS = [
+    ["today", "Сегодня"],
+    ["yesterday", "Вчера"],
+    ["curWeek", "Текущая неделя"],
+    ["prevWeek", "Прошлая неделя"],
+    ["curMonth", "Текущий месяц"],
+    ["prevMonth", "Прошлый месяц"],
+    ["curYear", "Текущий год"],
+    ["custom", "Другой…"],
+  ];
   const rangeOf = (p) => {
-    const y = today.slice(0, 4), m = today.slice(0, 7);
+    const y = today.slice(0, 4),
+      m = today.slice(0, 7);
     if (p === "today") return { from: today, to: today };
-    if (p === "yesterday") { const d = addDays(today, -1); return { from: d, to: d }; }
-    if (p === "curWeek") return { from: monday(today), to: addDays(monday(today), 6) };
-    if (p === "prevWeek") { const mo = addDays(monday(today), -7); return { from: mo, to: addDays(mo, 6) }; }
-    if (p === "curMonth") { const last = new Date(+y, +m.slice(5, 7), 0).getDate(); return { from: `${m}-01`, to: `${m}-${pad(last)}` }; }
-    if (p === "prevMonth") { const d = new Date(+y, +m.slice(5, 7) - 2, 1); const mm = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return { from: `${mm}-01`, to: `${mm}-${pad(last)}` }; }
+    if (p === "yesterday") {
+      const d = addDays(today, -1);
+      return { from: d, to: d };
+    }
+    if (p === "curWeek")
+      return { from: monday(today), to: addDays(monday(today), 6) };
+    if (p === "prevWeek") {
+      const mo = addDays(monday(today), -7);
+      return { from: mo, to: addDays(mo, 6) };
+    }
+    if (p === "curMonth") {
+      const last = new Date(+y, +m.slice(5, 7), 0).getDate();
+      return { from: `${m}-01`, to: `${m}-${pad(last)}` };
+    }
+    if (p === "prevMonth") {
+      const d = new Date(+y, +m.slice(5, 7) - 2, 1);
+      const mm = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return { from: `${mm}-01`, to: `${mm}-${pad(last)}` };
+    }
     if (p === "curYear") return { from: `${y}-01-01`, to: `${y}-12-31` };
     return null;
   };
-  const [preset, setPreset] = useState("prevMonth");
   const init = rangeOf("prevMonth");
-  const [from, setFrom] = useState(init.from);
-  const [to, setTo] = useState(init.to);
-  const fBranch = isMgr ? myBranch : (branchScope || 0);
+  // Фильтры аналитики запоминаются между обновлениями страницы.
+  const [preset, setPreset] = usePersisted("avesto.sales.preset", "prevMonth");
+  const [from, setFrom] = usePersisted("avesto.sales.from", init.from);
+  const [to, setTo] = usePersisted("avesto.sales.to", init.to);
+  const fBranch = isMgr ? myBranch : branchScope || 0;
   // Живые продажи из iiko: по выбранному филиалу (его Department) или по всем.
   const selBranchObj = branchById(fBranch || 0);
   const selDept = fBranch && selBranchObj ? selBranchObj.iikoDept : null;
   const live = useIikoSales({ from, to, department: selDept });
   const liveOn = live.status === "ok";
-  const pick = (p) => { setPreset(p); const r = rangeOf(p); if (r) { setFrom(r.from); setTo(r.to); } };
+  const pick = (p) => {
+    setPreset(p);
+    const r = rangeOf(p);
+    if (r) {
+      setFrom(r.from);
+      setTo(r.to);
+    }
+  };
   // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
-  const REPORTS = [["revenue", "Динамика выручки"], ["pay", "Оплаты"], ["dishes", "Блюда"], ["abc", "ABC"], ["insights", "Выводы"]];
-  const [tab, setTab] = useState("revenue");
-  const [abcMode, setAbcMode] = useState("dish"); // dish | g1 | g2 | g3
+  const REPORTS = [
+    ["revenue", "Динамика выручки"],
+    ["pay", "Оплаты"],
+    ["dishes", "Блюда"],
+    ["abc", "ABC"],
+    ["insights", "Выводы"],
+  ];
+  const [tab, setTab] = usePersisted("avesto.sales.tab", "revenue");
+  const [abcMode, setAbcMode] = usePersisted("avesto.sales.abcMode", "dish"); // dish | g1 | g2 | g3
   const [abcDrill, setAbcDrill] = useState(null); // раскрытая группа (имя)
 
-  const inScope = (r, a, b) => r.date >= a && r.date <= b && (isMgr ? r.branchId === myBranch : (fBranch ? r.branchId === fBranch : true));
+  const inScope = (r, a, b) =>
+    r.date >= a &&
+    r.date <= b &&
+    (isMgr ? r.branchId === myBranch : fBranch ? r.branchId === fBranch : true);
   const reports = (s.cashReports || []).filter((r) => inScope(r, from, to));
   const nDays = Math.max(1, Math.round((toD(to) - toD(from)) / 86400000) + 1);
-  const prevTo = addDays(from, -1), prevFrom = addDays(from, -nDays);
-  const prevReports = (s.cashReports || []).filter((r) => inScope(r, prevFrom, prevTo));
+  const prevTo = addDays(from, -1),
+    prevFrom = addDays(from, -nDays);
+  const prevReports = (s.cashReports || []).filter((r) =>
+    inScope(r, prevFrom, prevTo),
+  );
 
   const rev = (list) => list.reduce((a, r) => a + cashCalc(r).total, 0);
-  const revenue = rev(reports), prevRevenue = rev(prevReports);
-  const growth = prevRevenue ? ((revenue - prevRevenue) / prevRevenue) * 100 : null;
-  const checksOf = (list) => list.reduce((a, r) => a + dayChecks(r.date, r.branchId, cashCalc(r).total), 0);
-  const checks = checksOf(reports), prevChecks = checksOf(prevReports);
+  const revenue = rev(reports),
+    prevRevenue = rev(prevReports);
+  const growth = prevRevenue
+    ? ((revenue - prevRevenue) / prevRevenue) * 100
+    : null;
+  const checksOf = (list) =>
+    list.reduce(
+      (a, r) => a + dayChecks(r.date, r.branchId, cashCalc(r).total),
+      0,
+    );
+  const checks = checksOf(reports),
+    prevChecks = checksOf(prevReports);
   const avgCheck = checks ? Math.round(revenue / checks) : 0;
   const prevAvg = prevChecks ? Math.round(prevRevenue / prevChecks) : 0;
   const avgGrowth = prevAvg ? ((avgCheck - prevAvg) / prevAvg) * 100 : null;
 
-  const pay = reports.reduce((o, r) => {
-    o.cash += (r.fiscal || 0) + (r.nonFiscal || 0); o.humo += r.humo || 0; o.uzcard += r.uzcard || 0;
-    o.click += r.click || 0; o.payme += r.payme || 0; o.uzum += r.uzumTezkor || 0; o.yandex += r.yandex || 0; o.transfer += r.transfer || 0;
-    return o;
-  }, { cash: 0, humo: 0, uzcard: 0, click: 0, payme: 0, uzum: 0, yandex: 0, transfer: 0 });
+  const pay = reports.reduce(
+    (o, r) => {
+      o.cash += (r.fiscal || 0) + (r.nonFiscal || 0);
+      o.humo += r.humo || 0;
+      o.uzcard += r.uzcard || 0;
+      o.click += r.click || 0;
+      o.payme += r.payme || 0;
+      o.uzum += r.uzumTezkor || 0;
+      o.yandex += r.yandex || 0;
+      o.transfer += r.transfer || 0;
+      return o;
+    },
+    {
+      cash: 0,
+      humo: 0,
+      uzcard: 0,
+      click: 0,
+      payme: 0,
+      uzum: 0,
+      yandex: 0,
+      transfer: 0,
+    },
+  );
   // Цвет для типа оплаты: по известным названиям, иначе — из палитры по кругу.
-  const PAY_COLORS = { "налич": C.brandA, "humo": "#7C3AED", "uzcard": C.violet, "click": C.brandB, "payme": "#0EA5E9", "uzum": C.ok, "yandex": "#F59E0B", "перечисл": C.warn, "карт": C.violet };
-  const PAY_FALLBACK = [C.brandA, C.brandB, C.violet, C.ok, C.warn, "#0EA5E9", "#7C3AED", "#F59E0B", C.faint];
-  const payColor = (name, i) => { const k = String(name).toLowerCase(); for (const key in PAY_COLORS) if (k.includes(key)) return PAY_COLORS[key]; return PAY_FALLBACK[i % PAY_FALLBACK.length]; };
-  const demoPayRows = [["Наличные", pay.cash, C.brandA], ["Humo", pay.humo, "#7C3AED"], ["Uzcard", pay.uzcard, C.violet], ["Click", pay.click, C.brandB], ["Payme", pay.payme, "#0EA5E9"], ["Uzum Tezkor", pay.uzum, C.ok], ["Yandex Еда", pay.yandex, "#F59E0B"], ["Перечисление", pay.transfer, C.warn]].filter((r) => r[1] > 0).sort((a, b) => b[1] - a[1]);
+  const PAY_COLORS = {
+    налич: C.brandA,
+    humo: "#7C3AED",
+    uzcard: C.violet,
+    click: C.brandB,
+    payme: "#0EA5E9",
+    uzum: C.ok,
+    yandex: "#F59E0B",
+    перечисл: C.warn,
+    карт: C.violet,
+  };
+  const PAY_FALLBACK = [
+    C.brandA,
+    C.brandB,
+    C.violet,
+    C.ok,
+    C.warn,
+    "#0EA5E9",
+    "#7C3AED",
+    "#F59E0B",
+    C.faint,
+  ];
+  const payColor = (name, i) => {
+    const k = String(name).toLowerCase();
+    for (const key in PAY_COLORS) if (k.includes(key)) return PAY_COLORS[key];
+    return PAY_FALLBACK[i % PAY_FALLBACK.length];
+  };
+  const demoPayRows = [
+    ["Наличные", pay.cash, C.brandA],
+    ["Humo", pay.humo, "#7C3AED"],
+    ["Uzcard", pay.uzcard, C.violet],
+    ["Click", pay.click, C.brandB],
+    ["Payme", pay.payme, "#0EA5E9"],
+    ["Uzum Tezkor", pay.uzum, C.ok],
+    ["Yandex Еда", pay.yandex, "#F59E0B"],
+    ["Перечисление", pay.transfer, C.warn],
+  ]
+    .filter((r) => r[1] > 0)
+    .sort((a, b) => b[1] - a[1]);
   // Живые оплаты из iiko (если есть) — иначе демо.
-  const payRows = liveOn && live.pay && live.pay.length
-    ? live.pay.map((p, i) => [p.name, p.value, payColor(p.name, i)])
-    : demoPayRows;
+  const payRows =
+    liveOn && live.pay && live.pay.length
+      ? live.pay.map((p, i) => [p.name, p.value, payColor(p.name, i)])
+      : demoPayRows;
   const payTotal = payRows.reduce((a, r) => a + r[1], 0) || 1;
 
   // динамика по дням
   const dayMap = {};
-  reports.forEach((r) => { dayMap[r.date] = (dayMap[r.date] || 0) + cashCalc(r).total; });
-  const series = Object.keys(dayMap).sort().map((d) => ({ label: d.slice(8) + "." + d.slice(5, 7), day: d, revenue: dayMap[d] }));
+  reports.forEach((r) => {
+    dayMap[r.date] = (dayMap[r.date] || 0) + cashCalc(r).total;
+  });
+  const series = Object.keys(dayMap)
+    .sort()
+    .map((d) => ({
+      label: d.slice(8) + "." + d.slice(5, 7),
+      day: d,
+      revenue: dayMap[d],
+    }));
 
   // Если iiko отдал живые продажи — показываем их вместо демо-данных.
   const displayRevenue = liveOn ? live.total : revenue;
@@ -2747,35 +7110,65 @@ function SalesAnalytics({ s, me, branchScope }) {
       : 0
     : avgCheck;
   const displaySeries = liveOn
-    ? live.days.map((d) => ({ label: d.date.slice(8) + "." + d.date.slice(5, 7), day: d.date, revenue: d.revenue }))
+    ? live.days.map((d) => ({
+        label: d.date.slice(8) + "." + d.date.slice(5, 7),
+        day: d.date,
+        revenue: d.revenue,
+      }))
     : series;
 
   // товары + ABC
   const pm = {};
-  reports.forEach((r) => dayProductSales(r.date, r.branchId, cashCalc(r).total).forEach((ps) => {
-    if (!pm[ps.id]) pm[ps.id] = { name: ps.name, cat: ps.cat, qty: 0, sum: 0 };
-    pm[ps.id].qty += ps.qty; pm[ps.id].sum += ps.sum;
-  }));
+  reports.forEach((r) =>
+    dayProductSales(r.date, r.branchId, cashCalc(r).total).forEach((ps) => {
+      if (!pm[ps.id])
+        pm[ps.id] = { name: ps.name, cat: ps.cat, qty: 0, sum: 0 };
+      pm[ps.id].qty += ps.qty;
+      pm[ps.id].sum += ps.sum;
+    }),
+  );
   const demoProducts = Object.values(pm).sort((a, b) => b.sum - a.sum);
   // Живые блюда из iiko (если есть) — иначе демо.
-  const products = liveOn && live.products && live.products.length
-    ? live.products.map((p) => ({ name: p.name, cat: "", qty: p.qty, sum: p.sum }))
-    : demoProducts;
+  const products =
+    liveOn && live.products && live.products.length
+      ? live.products.map((p) => ({
+          name: p.name,
+          cat: "",
+          qty: p.qty,
+          sum: p.sum,
+        }))
+      : demoProducts;
   // Раскладка ABC (доля, накопит., группа) на любом списке {name,qty,sum}.
   const withAbc = (list) => {
     const total = list.reduce((a, p) => a + p.sum, 0) || 1;
     let c = 0;
-    return list.map((p) => { const share = p.sum / total; c += share; return { ...p, share, cum: c, abc: c <= 0.8 ? "A" : c <= 0.95 ? "B" : "C" }; });
+    return list.map((p) => {
+      const share = p.sum / total;
+      c += share;
+      return {
+        ...p,
+        share,
+        cum: c,
+        abc: c <= 0.8 ? "A" : c <= 0.95 ? "B" : "C",
+      };
+    });
   };
   const abcProducts = withAbc(products);
   const top = abcProducts.slice(0, 5);
   const bottom = abcProducts.slice(-5).reverse();
-  const abcColor = (g) => g === "A" ? { bg: "#E9F9EF", fg: C.ok } : g === "B" ? { bg: "#FEF3C7", fg: "#92400E" } : { bg: "#F1F5F9", fg: C.faint };
+  const abcColor = (g) =>
+    g === "A"
+      ? { bg: "#E9F9EF", fg: C.ok }
+      : g === "B"
+        ? { bg: "#FEF3C7", fg: "#92400E" }
+        : { bg: "#F1F5F9", fg: C.faint };
   // ABC можно смотреть по блюдам или по группам блюд 1/2/3 (если iiko отдал их).
   const groupLists = liveOn
     ? { g1: live.group1, g2: live.group2, g3: live.group3 }
     : {};
-  const hasGroups = ["g1", "g2", "g3"].some((k) => groupLists[k] && groupLists[k].length);
+  const hasGroups = ["g1", "g2", "g3"].some(
+    (k) => groupLists[k] && groupLists[k].length,
+  );
   const isGroupMode = abcMode !== "dish";
   // Раскрытие группы (drill-down) до блюд внутри неё.
   let abcSource;
@@ -2799,29 +7192,88 @@ function SalesAnalytics({ s, me, branchScope }) {
   const abcClickable = isGroupMode && !abcDrill;
   const abcTotal = abcRows.reduce((a, p) => a + p.sum, 0) || 1;
   const abcCount = (g) => abcRows.filter((p) => p.abc === g).length;
-  const abcSum = (g) => abcRows.filter((p) => p.abc === g).reduce((a, p) => a + p.sum, 0);
+  const abcSum = (g) =>
+    abcRows.filter((p) => p.abc === g).reduce((a, p) => a + p.sum, 0);
 
   // рекомендации
   const insights = [];
-  if (!liveOn && growth != null) insights.push(growth >= 0
-    ? `Выручка выросла на ${growth.toFixed(1)}% к прошлому периоду — держим темп.`
-    : `Выручка снизилась на ${Math.abs(growth).toFixed(1)}% — стоит усилить продвижение.`);
-  if (liveOn) insights.push(`Выручка за период: ${fmtSum(displayRevenue)}${displayChecks ? ` · ${displayChecks.toLocaleString("ru-RU")} чеков` : ""} (данные из iiko).`);
-  if (top[0]) insights.push(`Лидер продаж: ${top[0].name} — ${fmtSum(top[0].sum)} (${(top[0].share * 100).toFixed(0)}% выручки).`);
+  if (!liveOn && growth != null)
+    insights.push(
+      growth >= 0
+        ? `Выручка выросла на ${growth.toFixed(1)}% к прошлому периоду — держим темп.`
+        : `Выручка снизилась на ${Math.abs(growth).toFixed(1)}% — стоит усилить продвижение.`,
+    );
+  if (liveOn)
+    insights.push(
+      `Выручка за период: ${fmtSum(displayRevenue)}${displayChecks ? ` · ${displayChecks.toLocaleString("ru-RU")} чеков` : ""} (данные из iiko).`,
+    );
+  if (top[0])
+    insights.push(
+      `Лидер продаж: ${top[0].name} — ${fmtSum(top[0].sum)} (${(top[0].share * 100).toFixed(0)}% выручки).`,
+    );
   const cItems = abcProducts.filter((p) => p.abc === "C");
-  if (cItems.length) insights.push(`Аутсайдеры (группа C): ${cItems.slice(0, 4).map((p) => p.name).join(", ")} — рассмотрите акции или замену в меню.`);
-  if (displayAvg) insights.push(`Средний чек ${fmtSum(displayAvg)}${!liveOn && avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`);
-  if (payRows[0]) insights.push(`Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / payTotal) * 100).toFixed(0)}% оплат.`);
+  if (cItems.length)
+    insights.push(
+      `Аутсайдеры (группа C): ${cItems
+        .slice(0, 4)
+        .map((p) => p.name)
+        .join(", ")} — рассмотрите акции или замену в меню.`,
+    );
+  if (displayAvg)
+    insights.push(
+      `Средний чек ${fmtSum(displayAvg)}${!liveOn && avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`,
+    );
+  if (payRows[0])
+    insights.push(
+      `Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / payTotal) * 100).toFixed(0)}% оплат.`,
+    );
 
-  const inpSt = { border: `1px solid ${C.border}`, fontSize: 13.5, background: "#fff", color: C.ink };
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 13.5,
+    background: "#fff",
+    color: C.ink,
+  };
   const KPI = ({ label, value, sub, tone }) => (
-    <div className="rounded-2xl bg-white p-4" style={{ border: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>{label}</div>
-      <div className="font-extrabold mt-0.5" style={{ fontSize: 19, color: C.ink, overflowWrap: "break-word", lineHeight: 1.15 }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, marginTop: 2, fontWeight: 700, color: tone === "up" ? C.ok : tone === "down" ? C.bad : C.faint }}>{sub}</div>}
+    <div
+      className="rounded-2xl bg-white p-4"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>
+        {label}
+      </div>
+      <div
+        className="font-extrabold mt-0.5"
+        style={{
+          fontSize: 19,
+          color: C.ink,
+          overflowWrap: "break-word",
+          lineHeight: 1.15,
+        }}
+      >
+        {value}
+      </div>
+      {sub != null && (
+        <div
+          style={{
+            fontSize: 12,
+            marginTop: 2,
+            fontWeight: 700,
+            color: tone === "up" ? C.ok : tone === "down" ? C.bad : C.faint,
+          }}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
-  const growthSub = (g) => g == null ? { s: tr("нет данных за прошлый период"), t: "flat" } : { s: `${g >= 0 ? "▲ +" : "▼ "}${g.toFixed(1)}% ${tr("к прошлому периоду")}`, t: g >= 0 ? "up" : "down" };
+  const growthSub = (g) =>
+    g == null
+      ? { s: tr("нет данных за прошлый период"), t: "flat" }
+      : {
+          s: `${g >= 0 ? "▲ +" : "▼ "}${g.toFixed(1)}% ${tr("к прошлому периоду")}`,
+          t: g >= 0 ? "up" : "down",
+        };
   const gr = growthSub(growth);
   const agr = growthSub(avgGrowth);
 
@@ -2831,59 +7283,202 @@ function SalesAnalytics({ s, me, branchScope }) {
       <IikoPanel />
 
       {/* период + филиал */}
-      <div className="rounded-2xl bg-white p-3.5" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-3.5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-          <NiceSelect label={tr("За период")} value={preset} onChange={(v) => pick(v)} width={180}
-            options={PRESETS.map(([k, l]) => ({ value: k, label: tr(l) }))} />
-          <NiceDate label={tr("с")} value={from} onChange={(v) => { setFrom(v); setPreset("custom"); }} width={134} />
-          <NiceDate label={tr("по")} value={to} onChange={(v) => { setTo(v); setPreset("custom"); }} width={134} />
+          <NiceSelect
+            label={tr("За период")}
+            value={preset}
+            onChange={(v) => pick(v)}
+            width={180}
+            options={PRESETS.map(([k, l]) => ({ value: k, label: tr(l) }))}
+          />
+          <NiceDate
+            label={tr("с")}
+            value={from}
+            onChange={(v) => {
+              setFrom(v);
+              setPreset("custom");
+            }}
+            width={134}
+          />
+          <NiceDate
+            label={tr("по")}
+            value={to}
+            onChange={(v) => {
+              setTo(v);
+              setPreset("custom");
+            }}
+            width={134}
+          />
         </div>
-        {isMgr && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>{tr("Ваш филиал")}: <b style={{ color: C.sub }}>{branchById(myBranch)?.name}</b></div>}
+        {isMgr && (
+          <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
+            {tr("Ваш филиал")}:{" "}
+            <b style={{ color: C.sub }}>{branchById(myBranch)?.name}</b>
+          </div>
+        )}
         {/* статус живых данных iiko */}
-        {live.status === "loading" && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>Загрузка данных из iiko…</div>}
-        {live.status === "ok" && <div className="mt-2" style={{ fontSize: 12, color: C.ok, fontWeight: 700 }}>● Данные из iiko{selDept ? ` · ${selBranchObj?.name}` : " · все точки"}</div>}
-        {live.status === "empty" && <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>iiko: продаж за период нет — показаны демо-данные.</div>}
-        {live.status === "error" && <div className="mt-2" style={{ fontSize: 12, color: C.warn }}>iiko недоступен ({live.error}) — показаны демо-данные.</div>}
+        {live.status === "loading" && (
+          <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
+            Загрузка данных из iiko…
+          </div>
+        )}
+        {live.status === "ok" && (
+          <div
+            className="mt-2"
+            style={{ fontSize: 12, color: C.ok, fontWeight: 700 }}
+          >
+            ● Данные из iiko
+            {selDept ? ` · ${selBranchObj?.name}` : " · все точки"}
+          </div>
+        )}
+        {live.status === "empty" && (
+          <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
+            iiko: продаж за период нет — показаны демо-данные.
+          </div>
+        )}
+        {live.status === "error" && (
+          <div className="mt-2" style={{ fontSize: 12, color: C.warn }}>
+            iiko недоступен ({live.error}) — показаны демо-данные.
+          </div>
+        )}
       </div>
 
       {/* KPI */}
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-        <KPI label={tr("Выручка за период")} value={fmtSum(displayRevenue)} sub={liveOn ? "● данные из iiko" : gr.s} tone={liveOn ? "up" : gr.t} />
-        <KPI label={tr("Средний чек")} value={fmtSum(displayAvg)} sub={liveOn ? "● данные из iiko" : agr.s} tone={liveOn ? "up" : agr.t} />
-        <KPI label={tr("Количество чеков")} value={displayChecks.toLocaleString("ru-RU")} sub={liveOn ? "● данные из iiko" : (prevChecks ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}` : null)} tone={liveOn ? "up" : (checks - prevChecks >= 0 ? "up" : "down")} />
-        <KPI label={tr("Прошлый период")} value={fmtSum(prevRevenue)} sub={`${dm(prevFrom)} — ${dm(prevTo)}`} />
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+      >
+        <KPI
+          label={tr("Выручка за период")}
+          value={fmtSum(displayRevenue)}
+          sub={liveOn ? "● данные из iiko" : gr.s}
+          tone={liveOn ? "up" : gr.t}
+        />
+        <KPI
+          label={tr("Средний чек")}
+          value={fmtSum(displayAvg)}
+          sub={liveOn ? "● данные из iiko" : agr.s}
+          tone={liveOn ? "up" : agr.t}
+        />
+        <KPI
+          label={tr("Количество чеков")}
+          value={displayChecks.toLocaleString("ru-RU")}
+          sub={
+            liveOn
+              ? "● данные из iiko"
+              : prevChecks
+                ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}`
+                : null
+          }
+          tone={liveOn ? "up" : checks - prevChecks >= 0 ? "up" : "down"}
+        />
+        <KPI
+          label={tr("Прошлый период")}
+          value={fmtSum(prevRevenue)}
+          sub={`${dm(prevFrom)} — ${dm(prevTo)}`}
+        />
       </div>
 
       {/* переключатель отчётов */}
-      <div className="rounded-2xl bg-white p-1.5 flex gap-1 overflow-x-auto" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-1.5 flex gap-1 overflow-x-auto"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         {REPORTS.map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} className="rounded-xl px-3.5 py-2 font-bold whitespace-nowrap shrink-0" style={{ fontSize: 13.5, background: tab === k ? C.brandA : "transparent", color: tab === k ? "#fff" : C.sub }}>
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className="rounded-xl px-3.5 py-2 font-bold whitespace-nowrap shrink-0"
+            style={{
+              fontSize: 13.5,
+              background: tab === k ? C.brandA : "transparent",
+              color: tab === k ? "#fff" : C.sub,
+            }}
+          >
             {tr(l)}
           </button>
         ))}
       </div>
 
       {/* пустое состояние активной вкладки */}
-      {((tab === "revenue" && !displaySeries.length) || (tab === "pay" && !payRows.length) || (tab === "dishes" && !products.length) || (tab === "insights" && !insights.length)) && (
-        <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}`, fontSize: 13, color: C.faint }}>{tr("Нет данных за выбранный период")}</div>
+      {((tab === "revenue" && !displaySeries.length) ||
+        (tab === "pay" && !payRows.length) ||
+        (tab === "dishes" && !products.length) ||
+        (tab === "insights" && !insights.length)) && (
+        <div
+          className="rounded-2xl bg-white p-5"
+          style={{
+            border: `1px solid ${C.border}`,
+            fontSize: 13,
+            color: C.faint,
+          }}
+        >
+          {tr("Нет данных за выбранный период")}
+        </div>
       )}
 
       {/* динамика выручки */}
       {tab === "revenue" && displaySeries.length > 0 && (
-        <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>
             {tr("Динамика выручки")}
-            {liveOn && <span style={{ fontSize: 12, color: C.ok, fontWeight: 700, marginLeft: 8 }}>● iiko</span>}
+            {liveOn && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: C.ok,
+                  fontWeight: 700,
+                  marginLeft: 8,
+                }}
+              >
+                ● iiko
+              </span>
+            )}
           </h3>
           <div style={{ width: "100%", height: 240 }}>
             <ResponsiveContainer>
-              <BarChart data={displaySeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={C.line} vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} tickLine={false} axisLine={{ stroke: C.line }} />
-                <YAxis tick={{ fontSize: 11, fill: C.faint }} tickLine={false} axisLine={false} width={54} tickFormatter={(v) => (v / 1000000).toFixed(1) + "M"} />
-                <Tooltip formatter={(v) => fmtSum(v)} labelStyle={{ color: C.ink }} contentStyle={{ borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 12 }} />
+              <BarChart
+                data={displaySeries}
+                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke={C.line}
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11, fill: C.faint }}
+                  tickLine={false}
+                  axisLine={{ stroke: C.line }}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: C.faint }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={54}
+                  tickFormatter={(v) => (v / 1000000).toFixed(1) + "M"}
+                />
+                <Tooltip
+                  formatter={(v) => fmtSum(v)}
+                  labelStyle={{ color: C.ink }}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${C.border}`,
+                    fontSize: 12,
+                  }}
+                />
                 <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
-                  {displaySeries.map((e, i) => <Cell key={i} fill={C.brandA} />)}
+                  {displaySeries.map((e, i) => (
+                    <Cell key={i} fill={C.brandA} />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2893,19 +7488,47 @@ function SalesAnalytics({ s, me, branchScope }) {
 
       {/* выручка по типам оплат */}
       {tab === "pay" && payRows.length > 0 && (
-        <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>{tr("Выручка по типам оплат")}</h3>
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 16 }}>
+            {tr("Выручка по типам оплат")}
+          </h3>
           <div className="space-y-2.5">
             {payRows.map(([name, val, col]) => {
               const share = (val / payTotal) * 100;
               return (
                 <div key={name}>
-                  <div className="flex items-center justify-between gap-2" style={{ fontSize: 13 }}>
-                    <span style={{ color: C.ink, fontWeight: 600 }}>{name}</span>
-                    <span style={{ color: C.sub, whiteSpace: "nowrap" }}>{fmtSum(val)} · <b style={{ color: C.ink }}>{share.toFixed(1)}%</b></span>
+                  <div
+                    className="flex items-center justify-between gap-2"
+                    style={{ fontSize: 13 }}
+                  >
+                    <span style={{ color: C.ink, fontWeight: 600 }}>
+                      {name}
+                    </span>
+                    <span style={{ color: C.sub, whiteSpace: "nowrap" }}>
+                      {fmtSum(val)} ·{" "}
+                      <b style={{ color: C.ink }}>{share.toFixed(1)}%</b>
+                    </span>
                   </div>
-                  <div style={{ height: 8, borderRadius: 6, background: C.line, marginTop: 4, overflow: "hidden" }}>
-                    <div style={{ width: `${share}%`, height: "100%", background: col, borderRadius: 6 }} />
+                  <div
+                    style={{
+                      height: 8,
+                      borderRadius: 6,
+                      background: C.line,
+                      marginTop: 4,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${share}%`,
+                        height: "100%",
+                        background: col,
+                        borderRadius: 6,
+                      }}
+                    />
                   </div>
                 </div>
               );
@@ -2916,101 +7539,315 @@ function SalesAnalytics({ s, me, branchScope }) {
 
       {/* ABC-анализ */}
       {tab === "abc" && (
-      <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-        <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("ABC-анализ")}</h3>
-          <span style={{ fontSize: 12, color: C.faint }}>{tr("A — основная выручка, C — аутсайдеры")}</span>
-        </div>
-        {/* переключатель разреза ABC: блюда / группы 1–3 (если iiko отдал группы) */}
-        {hasGroups && (
-          <div className="inline-flex rounded-xl p-1 mb-3 overflow-x-auto" style={{ border: `1px solid ${C.border}`, background: "#fff" }}>
-            {[["dish", "Блюда"], ["g1", "Группа 1"], ["g2", "Группа 2"], ["g3", "Группа 3"]].map(([k, l]) => (
-              <button key={k} onClick={() => { setAbcMode(k); setAbcDrill(null); }} className="rounded-lg px-3 py-1.5 font-bold whitespace-nowrap" style={{ fontSize: 12.5, background: abcMode === k ? C.brandA : "transparent", color: abcMode === k ? "#fff" : C.sub }}>
-                {tr(l)}
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+              {tr("ABC-анализ")}
+            </h3>
+            <span style={{ fontSize: 12, color: C.faint }}>
+              {tr("A — основная выручка, C — аутсайдеры")}
+            </span>
+          </div>
+          {/* переключатель разреза ABC: блюда / группы 1–3 (если iiko отдал группы) */}
+          {hasGroups && (
+            <div
+              className="inline-flex rounded-xl p-1 mb-3 overflow-x-auto"
+              style={{ border: `1px solid ${C.border}`, background: "#fff" }}
+            >
+              {[
+                ["dish", "Блюда"],
+                ["g1", "Группа 1"],
+                ["g2", "Группа 2"],
+                ["g3", "Группа 3"],
+              ].map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    setAbcMode(k);
+                    setAbcDrill(null);
+                  }}
+                  className="rounded-lg px-3 py-1.5 font-bold whitespace-nowrap"
+                  style={{
+                    fontSize: 12.5,
+                    background: abcMode === k ? C.brandA : "transparent",
+                    color: abcMode === k ? "#fff" : C.sub,
+                  }}
+                >
+                  {tr(l)}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* хлебные крошки / раскрытая группа */}
+          {isGroupMode && !abcDrill && hasGroups && (
+            <div className="mb-2" style={{ fontSize: 12, color: C.faint }}>
+              {tr("Нажмите на группу, чтобы раскрыть ABC блюд внутри неё")}
+            </div>
+          )}
+          {isGroupMode && abcDrill && (
+            <div className="mb-3 flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setAbcDrill(null)}
+                className="rounded-lg px-3 py-1.5 font-bold"
+                style={{
+                  fontSize: 12.5,
+                  border: `1px solid ${C.border}`,
+                  color: C.sub,
+                  background: "#fff",
+                }}
+              >
+                ← {tr("К группам")}
               </button>
-            ))}
-          </div>
-        )}
-        {/* хлебные крошки / раскрытая группа */}
-        {isGroupMode && !abcDrill && hasGroups && (
-          <div className="mb-2" style={{ fontSize: 12, color: C.faint }}>{tr("Нажмите на группу, чтобы раскрыть ABC блюд внутри неё")}</div>
-        )}
-        {isGroupMode && abcDrill && (
-          <div className="mb-3 flex items-center gap-2 flex-wrap">
-            <button onClick={() => setAbcDrill(null)} className="rounded-lg px-3 py-1.5 font-bold" style={{ fontSize: 12.5, border: `1px solid ${C.border}`, color: C.sub, background: "#fff" }}>← {tr("К группам")}</button>
-            <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>{tr("Группа")}: {abcDrill}</span>
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2 mb-3">
-          {["A", "B", "C"].map((g) => { const c = abcColor(g); return (
-            <div key={g} className="rounded-xl px-3 py-2" style={{ background: c.bg, minWidth: 128 }}>
-              <div style={{ fontSize: 12, color: c.fg, fontWeight: 800 }}>{tr("Группа")} {g} · {abcCount(g)} {abcMode !== "dish" ? tr("гр.") : tr("тов.")}</div>
-              <div style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}>{fmtSum(abcSum(g))} · {((abcSum(g) / abcTotal) * 100).toFixed(0)}%</div>
+              <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
+                {tr("Группа")}: {abcDrill}
+              </span>
             </div>
-          ); })}
-        </div>
-        {abcRows.length > 0 ? (
-          <div className="hidden md:block">
-            <table className="w-full" style={{ borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr style={{ color: C.faint, textAlign: "right" }}>
-                <th className="py-2" style={{ textAlign: "left" }}>{abcClickable ? tr("Группа") : tr("Товар")}</th>
-                <th style={{ textAlign: "left" }}>{tr("Категория")}</th>
-                <th>{tr("Кол-во")}</th><th>{tr("Выручка")}</th><th>{tr("Доля")}</th><th>{tr("Накопит.")}</th><th>ABC</th>
-              </tr></thead>
-              <tbody>
-                {abcRows.map((p, i) => { const c = abcColor(p.abc); return (
-                  <tr key={i} onClick={() => abcClickable && setAbcDrill(p.name)} style={{ borderTop: `1px solid ${C.line}`, textAlign: "right", cursor: abcClickable ? "pointer" : "default" }}>
-                    <td className="py-2" style={{ textAlign: "left", color: abcClickable ? C.brandA : C.ink, fontWeight: 600 }}>{abcClickable ? "▸ " : ""}{p.name}</td>
-                    <td style={{ textAlign: "left", color: C.sub }}>{p.cat || ""}</td>
-                    <td style={{ color: C.sub, whiteSpace: "nowrap" }}>{p.qty}</td>
-                    <td style={{ color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(p.sum)}</td>
-                    <td style={{ color: C.sub }}>{(p.share * 100).toFixed(1)}%</td>
-                    <td style={{ color: C.faint }}>{(p.cum * 100).toFixed(0)}%</td>
-                    <td><span className="rounded-full font-bold" style={{ fontSize: 11, padding: "2px 8px", background: c.bg, color: c.fg }}>{p.abc}</span></td>
+          )}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {["A", "B", "C"].map((g) => {
+              const c = abcColor(g);
+              return (
+                <div
+                  key={g}
+                  className="rounded-xl px-3 py-2"
+                  style={{ background: c.bg, minWidth: 128 }}
+                >
+                  <div style={{ fontSize: 12, color: c.fg, fontWeight: 800 }}>
+                    {tr("Группа")} {g} · {abcCount(g)}{" "}
+                    {abcMode !== "dish" ? tr("гр.") : tr("тов.")}
+                  </div>
+                  <div
+                    style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}
+                  >
+                    {fmtSum(abcSum(g))} ·{" "}
+                    {((abcSum(g) / abcTotal) * 100).toFixed(0)}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {abcRows.length > 0 ? (
+            <div className="hidden md:block">
+              <table
+                className="w-full"
+                style={{ borderCollapse: "collapse", fontSize: 13 }}
+              >
+                <thead>
+                  <tr style={{ color: C.faint, textAlign: "right" }}>
+                    <th className="py-2" style={{ textAlign: "left" }}>
+                      {abcClickable ? tr("Группа") : tr("Товар")}
+                    </th>
+                    <th style={{ textAlign: "left" }}>{tr("Категория")}</th>
+                    <th>{tr("Кол-во")}</th>
+                    <th>{tr("Выручка")}</th>
+                    <th>{tr("Доля")}</th>
+                    <th>{tr("Накопит.")}</th>
+                    <th>ABC</th>
                   </tr>
-                ); })}
-              </tbody>
-            </table>
-          </div>
-        ) : <div style={{ fontSize: 13, color: C.faint }}>{tr("Нет данных за выбранный период")}</div>}
-
-        {/* мобильные карточки */}
-        <div className="md:hidden space-y-2">
-          {abcRows.map((p, i) => { const c = abcColor(p.abc); return (
-            <div key={i} onClick={() => abcClickable && setAbcDrill(p.name)} className="flex items-center gap-2 rounded-xl px-3 py-2.5 flex-wrap" style={{ background: "#FBFCFE", border: `1px solid ${C.border}`, cursor: abcClickable ? "pointer" : "default" }}>
-              <span className="rounded-full font-bold shrink-0" style={{ fontSize: 11, padding: "2px 8px", background: c.bg, color: c.fg }}>{p.abc}</span>
-              <div className="min-w-0" style={{ flex: "1 1 120px" }}>
-                <div className="truncate" style={{ fontSize: 13.5, color: abcClickable ? C.brandA : C.ink, fontWeight: 700 }}>{abcClickable ? "▸ " : ""}{p.name}</div>
-                <div style={{ fontSize: 11.5, color: C.faint }}>{p.cat ? `${p.cat} · ` : ""}{p.qty} {tr("шт")}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 13, color: C.ink, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtSum(p.sum)}</div>
-                <div style={{ fontSize: 11.5, color: C.sub }}>{(p.share * 100).toFixed(1)}%</div>
-              </div>
+                </thead>
+                <tbody>
+                  {abcRows.map((p, i) => {
+                    const c = abcColor(p.abc);
+                    return (
+                      <tr
+                        key={i}
+                        onClick={() => abcClickable && setAbcDrill(p.name)}
+                        style={{
+                          borderTop: `1px solid ${C.line}`,
+                          textAlign: "right",
+                          cursor: abcClickable ? "pointer" : "default",
+                        }}
+                      >
+                        <td
+                          className="py-2"
+                          style={{
+                            textAlign: "left",
+                            color: abcClickable ? C.brandA : C.ink,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {abcClickable ? "▸ " : ""}
+                          {p.name}
+                        </td>
+                        <td style={{ textAlign: "left", color: C.sub }}>
+                          {p.cat || ""}
+                        </td>
+                        <td style={{ color: C.sub, whiteSpace: "nowrap" }}>
+                          {p.qty}
+                        </td>
+                        <td
+                          style={{
+                            color: C.ink,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {fmtSum(p.sum)}
+                        </td>
+                        <td style={{ color: C.sub }}>
+                          {(p.share * 100).toFixed(1)}%
+                        </td>
+                        <td style={{ color: C.faint }}>
+                          {(p.cum * 100).toFixed(0)}%
+                        </td>
+                        <td>
+                          <span
+                            className="rounded-full font-bold"
+                            style={{
+                              fontSize: 11,
+                              padding: "2px 8px",
+                              background: c.bg,
+                              color: c.fg,
+                            }}
+                          >
+                            {p.abc}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ); })}
+          ) : (
+            <div style={{ fontSize: 13, color: C.faint }}>
+              {tr("Нет данных за выбранный период")}
+            </div>
+          )}
+
+          {/* мобильные карточки */}
+          <div className="md:hidden space-y-2">
+            {abcRows.map((p, i) => {
+              const c = abcColor(p.abc);
+              return (
+                <div
+                  key={i}
+                  onClick={() => abcClickable && setAbcDrill(p.name)}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2.5 flex-wrap"
+                  style={{
+                    background: "#FBFCFE",
+                    border: `1px solid ${C.border}`,
+                    cursor: abcClickable ? "pointer" : "default",
+                  }}
+                >
+                  <span
+                    className="rounded-full font-bold shrink-0"
+                    style={{
+                      fontSize: 11,
+                      padding: "2px 8px",
+                      background: c.bg,
+                      color: c.fg,
+                    }}
+                  >
+                    {p.abc}
+                  </span>
+                  <div className="min-w-0" style={{ flex: "1 1 120px" }}>
+                    <div
+                      className="truncate"
+                      style={{
+                        fontSize: 13.5,
+                        color: abcClickable ? C.brandA : C.ink,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {abcClickable ? "▸ " : ""}
+                      {p.name}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.faint }}>
+                      {p.cat ? `${p.cat} · ` : ""}
+                      {p.qty} {tr("шт")}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: C.ink,
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {fmtSum(p.sum)}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.sub }}>
+                      {(p.share * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
       )}
 
       {/* топ и аутсайдеры */}
       {tab === "dishes" && products.length > 0 && (
-        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-          <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-            <h3 className="font-bold mb-2" style={{ color: C.ok, fontSize: 15 }}>▲ {tr("Лучше всего продаются")}</h3>
+        <div
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          }}
+        >
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <h3
+              className="font-bold mb-2"
+              style={{ color: C.ok, fontSize: 15 }}
+            >
+              ▲ {tr("Лучше всего продаются")}
+            </h3>
             {top.map((p, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 py-1.5" style={{ borderBottom: i < top.length - 1 ? `1px solid ${C.line}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>{i + 1}. {p.name}</span>
-                <span style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}>{fmtSum(p.sum)} · {p.qty} {tr("шт")}</span>
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2 py-1.5"
+                style={{
+                  borderBottom:
+                    i < top.length - 1 ? `1px solid ${C.line}` : "none",
+                }}
+              >
+                <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+                  {i + 1}. {p.name}
+                </span>
+                <span
+                  style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}
+                >
+                  {fmtSum(p.sum)} · {p.qty} {tr("шт")}
+                </span>
               </div>
             ))}
           </div>
-          <div className="rounded-2xl bg-white p-4 sm:p-5" style={{ border: `1px solid ${C.border}` }}>
-            <h3 className="font-bold mb-2" style={{ color: C.bad, fontSize: 15 }}>▼ {tr("Хуже всего продаются")}</h3>
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <h3
+              className="font-bold mb-2"
+              style={{ color: C.bad, fontSize: 15 }}
+            >
+              ▼ {tr("Хуже всего продаются")}
+            </h3>
             {bottom.map((p, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 py-1.5" style={{ borderBottom: i < bottom.length - 1 ? `1px solid ${C.line}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>{p.name}</span>
-                <span style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}>{fmtSum(p.sum)} · {p.qty} {tr("шт")}</span>
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2 py-1.5"
+                style={{
+                  borderBottom:
+                    i < bottom.length - 1 ? `1px solid ${C.line}` : "none",
+                }}
+              >
+                <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+                  {p.name}
+                </span>
+                <span
+                  style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}
+                >
+                  {fmtSum(p.sum)} · {p.qty} {tr("шт")}
+                </span>
               </div>
             ))}
           </div>
@@ -3019,16 +7856,36 @@ function SalesAnalytics({ s, me, branchScope }) {
 
       {/* рекомендации */}
       {tab === "insights" && insights.length > 0 && (
-        <div className="rounded-2xl p-4 sm:p-5" style={{ background: "linear-gradient(135deg, #EFF4FF, #F5F3FF)", border: `1px solid ${C.border}` }}>
-          <div className="flex items-center gap-2 mb-2"><Bot size={18} color={C.violet} /><h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{tr("Выводы и рекомендации")}</h3></div>
+        <div
+          className="rounded-2xl p-4 sm:p-5"
+          style={{
+            background: "linear-gradient(135deg, #EFF4FF, #F5F3FF)",
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Bot size={18} color={C.violet} />
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+              {tr("Выводы и рекомендации")}
+            </h3>
+          </div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {insights.map((t, i) => <li key={i} style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6 }}>{t}</li>)}
+            {insights.map((t, i) => (
+              <li
+                key={i}
+                style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6 }}
+              >
+                {t}
+              </li>
+            ))}
           </ul>
         </div>
       )}
 
       <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.5 }}>
-        {tr("Данные по товарам рассчитаны из дневной выручки касс. После подключения iiko здесь будет реальная номенклатура: блюда, количество и суммы по чекам.")}
+        {tr(
+          "Данные по товарам рассчитаны из дневной выручки касс. После подключения iiko здесь будет реальная номенклатура: блюда, количество и суммы по чекам.",
+        )}
       </p>
     </div>
   );
@@ -3038,15 +7895,38 @@ function SalesAnalytics({ s, me, branchScope }) {
 function SettingsView({ dispatch, notify }) {
   return (
     <div className="max-w-xl space-y-4">
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 17 }}>Системные настройки</h3>
-        <p style={{ fontSize: 13.5, color: C.sub }}>Раздел доступен только роли «Системный администратор»: конструктор шаблонов заявок, интеграции (Telegram-бот, ИИ), управление доступом и аудит.</p>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 17 }}>
+          Системные настройки
+        </h3>
+        <p style={{ fontSize: 13.5, color: C.sub }}>
+          Раздел доступен только роли «Системный администратор»: конструктор
+          шаблонов заявок, интеграции (Telegram-бот, ИИ), управление доступом и
+          аудит.
+        </p>
       </div>
-      <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 16 }}>Демо-данные</h3>
-        <p style={{ fontSize: 13.5, color: C.sub, marginBottom: 12 }}>Сбросить все задачи, журнал и смены к исходному демонстрационному состоянию.</p>
-        <button onClick={() => { dispatch({ type: "RESET" }); notify("Демо-данные сброшены"); }}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.bad, fontSize: 14 }}>
+      <div
+        className="rounded-2xl bg-white p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 16 }}>
+          Демо-данные
+        </h3>
+        <p style={{ fontSize: 13.5, color: C.sub, marginBottom: 12 }}>
+          Сбросить все задачи, журнал и смены к исходному демонстрационному
+          состоянию.
+        </p>
+        <button
+          onClick={() => {
+            dispatch({ type: "RESET" });
+            notify("Демо-данные сброшены");
+          }}
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+          style={{ background: C.bad, fontSize: 14 }}
+        >
           <RotateCcw size={16} /> Сбросить демо-данные
         </button>
       </div>
@@ -3060,52 +7940,141 @@ const NAV = [
   { key: "create", label: "Создать заявку", icon: PlusCircle, roles: "all" },
   { key: "me", label: "Мои достижения", icon: Award, roles: "all" },
   { key: "archive", label: "Архив задач", icon: Archive, roles: "all" },
-  { key: "analytics", label: "Аналитика", icon: BarChart3, roles: ["director", "finance", "manager", "accountant", "sysadmin"] },
-  { key: "time", label: "Учёт времени", icon: Clock, roles: ["director", "finance", "manager", "accountant", "sysadmin"] },
-  { key: "cash", label: "Кассы", icon: Wallet, roles: ["director", "finance", "manager", "accountant", "sysadmin"] },
-  { key: "sales", label: "Аналитика продаж", icon: TrendingUp, roles: ["director", "finance", "manager", "accountant", "sysadmin"] },
+  {
+    key: "analytics",
+    label: "Аналитика",
+    icon: BarChart3,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
+    key: "time",
+    label: "Учёт времени",
+    icon: Clock,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
+    key: "cash",
+    label: "Кассы",
+    icon: Wallet,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
+    key: "sales",
+    label: "Аналитика продаж",
+    icon: TrendingUp,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
   { key: "org", label: "Оргструктура", icon: Building2, roles: "all" },
   { key: "about", label: "О системе", icon: Info, roles: "all" },
   { key: "admin", label: "Админ-панель", icon: Settings, roles: ["sysadmin"] },
 ];
-const navAllowed = (item, role) => item.roles === "all" || item.roles.includes(role);
+const navAllowed = (item, role) =>
+  item.roles === "all" || item.roles.includes(role);
 const VIEW_TITLE = {
-  inbox: "Входящие задачи", create: "Создать заявку", me: "Мои достижения",
-  archive: "Архив задач", analytics: "Аналитика — кабина директора", time: "Учёт рабочего времени", cash: "Кассы филиалов", sales: "Аналитика продаж",
-  org: "Оргструктура и филиалы", about: "О системе", admin: "Админ-панель",
+  inbox: "Входящие задачи",
+  create: "Создать заявку",
+  me: "Мои достижения",
+  archive: "Архив задач",
+  analytics: "Аналитика — кабина директора",
+  time: "Учёт рабочего времени",
+  cash: "Кассы филиалов",
+  sales: "Аналитика продаж",
+  org: "Оргструктура и филиалы",
+  about: "О системе",
+  admin: "Админ-панель",
 };
 
 function Sidebar({ view, setView, role }) {
   const items = NAV.filter((n) => navAllowed(n, role));
   return (
-    <aside className="hidden md:flex flex-col" style={{ position: "fixed", left: 0, top: 0, width: 250, height: "100vh", overflowY: "auto", borderRight: `1px solid ${C.border}`, background: "#fff", zIndex: 40 }}>
-      <div className="shrink-0 flex items-center gap-3" style={{ height: 65, paddingLeft: 16, paddingRight: 16, borderBottom: `1px solid ${C.border}` }}>
+    <aside
+      className="hidden md:flex flex-col"
+      style={{
+        position: "fixed",
+        left: 0,
+        top: 0,
+        width: 250,
+        height: "100vh",
+        overflowY: "auto",
+        borderRight: `1px solid ${C.border}`,
+        background: "#fff",
+        zIndex: 40,
+      }}
+    >
+      <div
+        className="shrink-0 flex items-center gap-3"
+        style={{
+          height: 65,
+          paddingLeft: 16,
+          paddingRight: 16,
+          borderBottom: `1px solid ${C.border}`,
+        }}
+      >
         <Logo size={36} radius={10} />
         <div className="min-w-0 flex flex-col justify-center">
-          <div className="font-extrabold truncate" style={{ color: C.ink, fontSize: 15.5, lineHeight: 1.25 }}>Avesto Group</div>
-          <div className="truncate" style={{ fontSize: 11, color: C.faint, lineHeight: 1.25 }}>CRM System</div>
+          <div
+            className="font-extrabold truncate"
+            style={{ color: C.ink, fontSize: 15.5, lineHeight: 1.25 }}
+          >
+            Avesto Group
+          </div>
+          <div
+            className="truncate"
+            style={{ fontSize: 11, color: C.faint, lineHeight: 1.25 }}
+          >
+            CRM System
+          </div>
         </div>
       </div>
       <nav className="flex flex-col gap-1" style={{ padding: 12 }}>
         {items.map((n) => {
           const active = view === n.key;
           return (
-            <button key={n.key} onClick={() => setView(n.key)}
+            <button
+              key={n.key}
+              onClick={() => setView(n.key)}
               className="flex items-center gap-3 rounded-xl px-3 py-3 text-left transition"
-              style={{ background: active ? C.brandA : "transparent", color: active ? "#fff" : C.ink, fontWeight: active ? 700 : 600, fontSize: 14.5 }}>
+              style={{
+                background: active ? C.brandA : "transparent",
+                color: active ? "#fff" : C.ink,
+                fontWeight: active ? 700 : 600,
+                fontSize: 14.5,
+              }}
+            >
               <n.icon size={20} color={active ? "#fff" : C.sub} /> {tr(n.label)}
             </button>
           );
         })}
       </nav>
-      <div className="mt-auto" style={{ padding: "16px 16px 16px 24px", fontSize: 11.5, color: C.faint, lineHeight: 1.5 }}>
-        Стандарт доступности: крупный шрифт, текстовые подписи, цветовое кодирование фаз.
+      <div
+        className="mt-auto"
+        style={{
+          padding: "16px 16px 16px 24px",
+          fontSize: 11.5,
+          color: C.faint,
+          lineHeight: 1.5,
+        }}
+      >
+        Стандарт доступности: крупный шрифт, текстовые подписи, цветовое
+        кодирование фаз.
       </div>
     </aside>
   );
 }
 // Короткие подписи для нижней панели (узкие экраны)
-const NAV_SHORT = { inbox: "Входящие", create: "Создать", me: "Кабинет", archive: "Архив", analytics: "Аналитика", time: "Время", cash: "Кассы", sales: "Продажи", org: "Структура", about: "О системе", admin: "Админка" };
+const NAV_SHORT = {
+  inbox: "Входящие",
+  create: "Создать",
+  me: "Кабинет",
+  archive: "Архив",
+  analytics: "Аналитика",
+  time: "Время",
+  cash: "Кассы",
+  sales: "Продажи",
+  org: "Структура",
+  about: "О системе",
+  admin: "Админка",
+};
 
 function BottomNav({ view, setView, role, onMore }) {
   const items = NAV.filter((n) => navAllowed(n, role));
@@ -3113,16 +8082,55 @@ function BottomNav({ view, setView, role, onMore }) {
   const overflow = items.slice(4);
   const overflowActive = overflow.some((n) => n.key === view);
   const Cell = ({ active, onClick, Icon, label }) => (
-    <button onClick={onClick} className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-0.5" style={{ minWidth: 0, color: active ? C.brandA : C.sub }}>
+    <button
+      onClick={onClick}
+      className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-0.5"
+      style={{ minWidth: 0, color: active ? C.brandA : C.sub }}
+    >
       <Icon size={20} color={active ? C.brandA : C.sub} />
-      <span style={{ fontSize: 9.5, letterSpacing: "-.01em", fontWeight: active ? 800 : 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <span
+        style={{
+          fontSize: 9.5,
+          letterSpacing: "-.01em",
+          fontWeight: active ? 800 : 600,
+          maxWidth: "100%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
     </button>
   );
   return (
-    <nav className="md:hidden fixed left-0 right-0 bottom-0 flex items-stretch"
-      style={{ background: "#fff", borderTop: `1px solid ${C.border}`, boxShadow: "0 -4px 16px rgba(15,23,42,.07)", paddingBottom: "max(6px, env(safe-area-inset-bottom))", zIndex: 30 }}>
-      {primary.map((n) => <Cell key={n.key} active={view === n.key} onClick={() => setView(n.key)} Icon={n.icon} label={tr(NAV_SHORT[n.key] || n.label)} />)}
-      {overflow.length > 0 && <Cell active={overflowActive} onClick={onMore} Icon={Menu} label={tr("Ещё")} />}
+    <nav
+      className="md:hidden fixed left-0 right-0 bottom-0 flex items-stretch"
+      style={{
+        background: "#fff",
+        borderTop: `1px solid ${C.border}`,
+        boxShadow: "0 -4px 16px rgba(15,23,42,.07)",
+        paddingBottom: "max(6px, env(safe-area-inset-bottom))",
+        zIndex: 30,
+      }}
+    >
+      {primary.map((n) => (
+        <Cell
+          key={n.key}
+          active={view === n.key}
+          onClick={() => setView(n.key)}
+          Icon={n.icon}
+          label={tr(NAV_SHORT[n.key] || n.label)}
+        />
+      ))}
+      {overflow.length > 0 && (
+        <Cell
+          active={overflowActive}
+          onClick={onMore}
+          Icon={Menu}
+          label={tr("Ещё")}
+        />
+      )}
     </nav>
   );
 }
@@ -3131,22 +8139,71 @@ function MoreSheet({ open, onClose, items, view, setView }) {
   if (!open) return null;
   return (
     <div className="md:hidden fixed inset-0" style={{ zIndex: 60 }}>
-      <div className="absolute inset-0" style={{ background: "rgba(15,23,42,.45)" }} onClick={onClose} />
-      <div className="absolute left-0 right-0 bottom-0 bg-white p-4" style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: "max(16px, env(safe-area-inset-bottom))", boxShadow: "0 -8px 30px rgba(0,0,0,.18)" }}>
-        <div className="mx-auto mb-3" style={{ width: 40, height: 4, borderRadius: 99, background: "#E2E8F0" }} />
+      <div
+        className="absolute inset-0"
+        style={{ background: "rgba(15,23,42,.45)" }}
+        onClick={onClose}
+      />
+      <div
+        className="absolute left-0 right-0 bottom-0 bg-white p-4"
+        style={{
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+          boxShadow: "0 -8px 30px rgba(0,0,0,.18)",
+        }}
+      >
+        <div
+          className="mx-auto mb-3"
+          style={{
+            width: 40,
+            height: 4,
+            borderRadius: 99,
+            background: "#E2E8F0",
+          }}
+        />
         <div className="flex items-center justify-between mb-3">
-          <div className="font-extrabold" style={{ color: C.ink, fontSize: 16 }}>{tr("Все разделы")}</div>
-          <button onClick={onClose} className="p-2 rounded-xl" style={{ background: C.line }}><X size={18} color={C.sub} /></button>
+          <div
+            className="font-extrabold"
+            style={{ color: C.ink, fontSize: 16 }}
+          >
+            {tr("Все разделы")}
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl"
+            style={{ background: C.line }}
+          >
+            <X size={18} color={C.sub} />
+          </button>
         </div>
         <div className="grid grid-cols-1 gap-2">
           {items.map((n) => {
             const active = view === n.key;
             return (
-              <button key={n.key} onClick={() => { setView(n.key); onClose(); }}
+              <button
+                key={n.key}
+                onClick={() => {
+                  setView(n.key);
+                  onClose();
+                }}
                 className="flex items-center gap-2.5 rounded-xl px-3 py-3 text-left min-w-0"
-                style={{ background: active ? C.brandA : "#F8FAFC", color: active ? "#fff" : C.ink, fontWeight: 600, fontSize: 13.5, border: `1px solid ${active ? C.brandA : C.border}` }}>
-                <n.icon size={19} color={active ? "#fff" : C.sub} className="shrink-0" />
-                <span className="min-w-0" style={{ lineHeight: 1.15 }}>{tr(n.label)}</span>
+                style={{
+                  background: active ? C.brandA : "#F8FAFC",
+                  color: active ? "#fff" : C.ink,
+                  fontWeight: 600,
+                  fontSize: 13.5,
+                  border: `1px solid ${active ? C.brandA : C.border}`,
+                }}
+              >
+                <n.icon
+                  size={19}
+                  color={active ? "#fff" : C.sub}
+                  className="shrink-0"
+                />
+                <span className="min-w-0" style={{ lineHeight: 1.15 }}>
+                  {tr(n.label)}
+                </span>
               </button>
             );
           })}
@@ -3158,62 +8215,177 @@ function MoreSheet({ open, onClose, items, view, setView }) {
 function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="topbar-h bg-white px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0" style={{ minHeight: 65, borderBottom: `1px solid ${C.border}`, zIndex: 20 }}>
-      <button onClick={onToggleShift}
+    <header
+      className="topbar-h bg-white px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0"
+      style={{
+        minHeight: 65,
+        borderBottom: `1px solid ${C.border}`,
+        zIndex: 20,
+      }}
+    >
+      <button
+        onClick={onToggleShift}
         className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 font-bold transition"
-        style={{ ...(shift.open
-          ? { background: "#E9F9EF", color: C.ok, border: `1.5px solid ${C.ok}` }
-          : { background: "#FEECEC", color: C.bad, border: `1.5px solid ${C.bad}` }) }}>
+        style={{
+          ...(shift.open
+            ? {
+                background: "#E9F9EF",
+                color: C.ok,
+                border: `1.5px solid ${C.ok}`,
+              }
+            : {
+                background: "#FEECEC",
+                color: C.bad,
+                border: `1.5px solid ${C.bad}`,
+              }),
+        }}
+      >
         <Power size={17} className="shrink-0" />
-        <span>{shift.open ? tr("Смена открыта") : tr("Открыть смену")}{shift.open && shift.openedAt ? ` · ${fmtDur(Date.now() - shift.openedAt)}` : ""}</span>
+        <span>
+          {shift.open ? tr("Смена открыта") : tr("Открыть смену")}
+          {shift.open && shift.openedAt
+            ? ` · ${fmtDur(Date.now() - shift.openedAt)}`
+            : ""}
+        </span>
       </button>
       {shift.open && (
-        <button onClick={onToggleShift} className="hidden sm:inline-flex rounded-xl px-3 py-2 font-semibold" style={{ background: C.line, color: C.sub, fontSize: 13 }}>{tr("Закрыть смену")}</button>
+        <button
+          onClick={onToggleShift}
+          className="hidden sm:inline-flex rounded-xl px-3 py-2 font-semibold"
+          style={{ background: C.line, color: C.sub, fontSize: 13 }}
+        >
+          {tr("Закрыть смену")}
+        </button>
       )}
       <div className="ml-auto flex items-center gap-2 sm:gap-3 relative">
-        <div className="flex rounded-xl overflow-hidden shrink-0" style={{ border: `1px solid ${C.border}` }}>
+        <div
+          className="flex rounded-xl overflow-hidden shrink-0"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           {["ru", "uz"].map((lg) => (
-            <button key={lg} onClick={() => dispatch({ type: "SET_SETTING", key: "lang", value: lg })}
-              className="px-2.5 py-1.5 font-bold" style={{ background: LANG === lg ? C.brandA : "#fff", color: LANG === lg ? "#fff" : C.sub, fontSize: 12.5 }}>
+            <button
+              key={lg}
+              onClick={() =>
+                dispatch({ type: "SET_SETTING", key: "lang", value: lg })
+              }
+              className="px-2.5 py-1.5 font-bold"
+              style={{
+                background: LANG === lg ? C.brandA : "#fff",
+                color: LANG === lg ? "#fff" : C.sub,
+                fontSize: 12.5,
+              }}
+            >
               {lg === "ru" ? "RU" : "UZ"}
             </button>
           ))}
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5" style={{ border: `1px solid ${C.border}` }}>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-2.5 rounded-xl px-2 py-1.5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
           <Avatar id={me.id} size={34} />
           <div className="text-left hidden sm:block">
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, lineHeight: 1.1 }}>{me.name}</div>
+            <div
+              style={{
+                fontSize: 13.5,
+                fontWeight: 700,
+                color: C.ink,
+                lineHeight: 1.1,
+              }}
+            >
+              {me.name}
+            </div>
             <div style={{ fontSize: 12, color: C.sub }}>{me.pos}</div>
           </div>
           <Users size={16} color={C.faint} />
         </button>
         {open && (
-          <div className="absolute right-0 top-12 z-30 rounded-2xl bg-white p-2 shadow-xl" style={{ border: `1px solid ${C.border}`, width: "min(280px, calc(100vw - 24px))" }}>
+          <div
+            className="absolute right-0 top-12 z-30 rounded-2xl bg-white p-2 shadow-xl"
+            style={{
+              border: `1px solid ${C.border}`,
+              width: "min(280px, calc(100vw - 24px))",
+            }}
+          >
             {authUser && (
-              <div className="px-2.5 py-2 mb-1 rounded-xl" style={{ background: "#F1F5FD" }}>
-                <div style={{ fontSize: 11.5, color: C.faint, fontWeight: 700 }}>{tr("Вход выполнен")}</div>
-                <div className="truncate" style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}>{authUser.name} · {authUser.role}</div>
+              <div
+                className="px-2.5 py-2 mb-1 rounded-xl"
+                style={{ background: "#F1F5FD" }}
+              >
+                <div
+                  style={{ fontSize: 11.5, color: C.faint, fontWeight: 700 }}
+                >
+                  {tr("Вход выполнен")}
+                </div>
+                <div
+                  className="truncate"
+                  style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}
+                >
+                  {authUser.name} · {authUser.role}
+                </div>
               </div>
             )}
-            <div className="px-2 py-1.5" style={{ fontSize: 12, color: C.faint, fontWeight: 700 }}>{tr("Войти как (демо ролей):")}</div>
+            <div
+              className="px-2 py-1.5"
+              style={{ fontSize: 12, color: C.faint, fontWeight: 700 }}
+            >
+              {tr("Войти как (демо ролей):")}
+            </div>
             <div className="max-h-80 overflow-y-auto">
-              {ORG.users.filter((u) => u.active !== false).map((u) => (
-                <button key={u.id} onClick={() => { dispatch({ type: "SET_USER", id: u.id }); setOpen(false); }}
-                  className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
-                  style={{ background: u.id === me.id ? C.line : "transparent" }}>
-                  <Avatar id={u.id} size={30} />
-                  <div className="flex-1 min-w-0">
-                    <div className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{u.name}</div>
-                    <div className="truncate" style={{ fontSize: 12, color: C.sub }}>{u.pos}{u.branchId ? ` · ${branchById(u.branchId)?.name}` : ""}</div>
-                  </div>
-                  {u.id === me.id && <CheckCircle2 size={16} color={C.brandA} className="shrink-0" />}
-                </button>
-              ))}
+              {ORG.users
+                .filter((u) => u.active !== false)
+                .map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      dispatch({ type: "SET_USER", id: u.id });
+                      setOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
+                    style={{
+                      background: u.id === me.id ? C.line : "transparent",
+                    }}
+                  >
+                    <Avatar id={u.id} size={30} />
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className="truncate"
+                        style={{
+                          fontSize: 13.5,
+                          fontWeight: 600,
+                          color: C.ink,
+                        }}
+                      >
+                        {u.name}
+                      </div>
+                      <div
+                        className="truncate"
+                        style={{ fontSize: 12, color: C.sub }}
+                      >
+                        {u.pos}
+                        {u.branchId ? ` · ${branchById(u.branchId)?.name}` : ""}
+                      </div>
+                    </div>
+                    {u.id === me.id && (
+                      <CheckCircle2
+                        size={16}
+                        color={C.brandA}
+                        className="shrink-0"
+                      />
+                    )}
+                  </button>
+                ))}
             </div>
             {onLogout && (
-              <button onClick={() => { setOpen(false); onLogout(); }}
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onLogout();
+                }}
                 className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2.5 mt-1 font-bold"
-                style={{ color: C.bad, borderTop: `1px solid ${C.line}` }}>
+                style={{ color: C.bad, borderTop: `1px solid ${C.line}` }}
+              >
                 <Power size={16} /> {tr("Выйти")}
               </button>
             )}
@@ -3240,29 +8412,79 @@ export default function App({ authUser, onLogout }) {
       if (data && data.tasks) dispatch({ type: "HYDRATE", data });
       else dispatch({ type: "MARK_HYDRATED" });
     });
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!s.hydrated) return;
     store.save({
-      tasks: s.tasks, history: s.history, shifts: s.shifts, timesheet: s.timesheet, cashReports: s.cashReports, cashHandovers: s.cashHandovers, currentUserId: s.currentUserId,
-      companies: s.companies, branches: s.branches, positions: s.positions, users: s.users,
-      budgets: s.budgets, sla: s.sla, sops: s.sops, settings: s.settings,
-      departments: s.departments, catDept: s.catDept, routes: s.routes,
+      tasks: s.tasks,
+      history: s.history,
+      shifts: s.shifts,
+      timesheet: s.timesheet,
+      cashReports: s.cashReports,
+      cashHandovers: s.cashHandovers,
+      currentUserId: s.currentUserId,
+      companies: s.companies,
+      branches: s.branches,
+      positions: s.positions,
+      users: s.users,
+      budgets: s.budgets,
+      sla: s.sla,
+      sops: s.sops,
+      settings: s.settings,
+      departments: s.departments,
+      catDept: s.catDept,
+      routes: s.routes,
+      // Запоминаем и выбор пользователя: текущую страницу и фильтры,
+      // чтобы после обновления ничего не сбрасывалось.
+      view: s.view,
+      filters: s.filters,
     });
-  }, [s.hydrated, s.tasks, s.history, s.shifts, s.timesheet, s.cashReports, s.cashHandovers, s.currentUserId, s.companies, s.branches, s.positions, s.users, s.budgets, s.sla, s.sops, s.settings, s.departments, s.catDept, s.routes]);
+  }, [
+    s.hydrated,
+    s.tasks,
+    s.history,
+    s.shifts,
+    s.timesheet,
+    s.cashReports,
+    s.cashHandovers,
+    s.currentUserId,
+    s.companies,
+    s.branches,
+    s.positions,
+    s.users,
+    s.budgets,
+    s.sla,
+    s.sops,
+    s.settings,
+    s.departments,
+    s.catDept,
+    s.routes,
+    s.view,
+    s.filters,
+  ]);
 
   // Реальный вход: роль приходит с сервера — открываем приложение под ролью
   // (демо-пользователь той же роли ведёт демо-данные до переноса данных на сервер).
   useEffect(() => {
     if (!authUser || !s.hydrated) return;
     const demo = USERS.find((u) => u.role === authUser.role) || USERS[0];
-    if (s.currentUserId !== demo.id) dispatch({ type: "SET_USER", id: demo.id });
+    if (s.currentUserId !== demo.id)
+      dispatch({ type: "SET_USER", id: demo.id });
   }, [authUser, s.hydrated]); // eslint-disable-line
 
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 20000); return () => clearInterval(id); }, []);
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2600); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 20000);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   syncOrg(s);
   syncLang(s);
@@ -3271,23 +8493,48 @@ export default function App({ authUser, onLogout }) {
   // Единый охват по филиалу: старший (руководство/финансы/сисадмин) выбирает любой;
   // сотрудник филиала «привязан» к своему и видит только его данные.
   const canPickBranch = ["director", "finance", "sysadmin"].includes(me.role);
-  const branchScope = canPickBranch ? (s.settings?.branchScope || 0) : (me.branchId || 0);
-  const scoped = useMemo(() => visibleTasks(s.tasks, me), [s.tasks, me, s.departments, s.routes]);
-  const branchScoped = useMemo(() => (branchScope ? scoped.filter((t) => t.branchId === branchScope) : scoped), [scoped, branchScope]);
-  const filtered = useMemo(() => applyFilters(branchScoped, s.filters, now), [branchScoped, s.filters, now]);
-  const { flags } = useMemo(() => detectAnomalies(s.tasks, s.history, now), [s.tasks, s.history, now]);
-  const selected = s.selectedId ? s.tasks.find((t) => t.id === s.selectedId) : null;
+  const branchScope = canPickBranch
+    ? s.settings?.branchScope || 0
+    : me.branchId || 0;
+  const scoped = useMemo(
+    () => visibleTasks(s.tasks, me),
+    [s.tasks, me, s.departments, s.routes],
+  );
+  const branchScoped = useMemo(
+    () =>
+      branchScope ? scoped.filter((t) => t.branchId === branchScope) : scoped,
+    [scoped, branchScope],
+  );
+  const filtered = useMemo(
+    () => applyFilters(branchScoped, s.filters, now),
+    [branchScoped, s.filters, now],
+  );
+  const { flags } = useMemo(
+    () => detectAnomalies(s.tasks, s.history, now),
+    [s.tasks, s.history, now],
+  );
+  const selected = s.selectedId
+    ? s.tasks.find((t) => t.id === s.selectedId)
+    : null;
 
   useEffect(() => {
     const item = NAV.find((n) => n.key === s.view);
-    if (item && !navAllowed(item, me.role)) dispatch({ type: "SET_VIEW", view: "inbox" });
+    if (item && !navAllowed(item, me.role))
+      dispatch({ type: "SET_VIEW", view: "inbox" });
   }, [me.role]); // eslint-disable-line
 
   const onOpen = (id) => dispatch({ type: "SELECT", id });
   const setView = (v) => dispatch({ type: "SET_VIEW", view: v });
 
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: FONT, color: C.ink }}>
+    <div
+      style={{
+        background: C.bg,
+        minHeight: "100vh",
+        fontFamily: FONT,
+        color: C.ink,
+      }}
+    >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
         *{box-sizing:border-box} button{font-family:inherit;cursor:pointer} select{font-family:inherit}
         ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:9px}
@@ -3304,21 +8551,86 @@ export default function App({ authUser, onLogout }) {
       <div className="flex" style={{ minHeight: "100vh" }}>
         <Sidebar view={s.view} setView={setView} role={me.role} />
         <div className="flex-1 min-w-0 flex flex-col desk-shift">
-          <TopBar me={me} shift={myShift} dispatch={dispatch} authUser={authUser} onLogout={onLogout} onToggleShift={() => { dispatch({ type: "TOGGLE_SHIFT", id: me.id }); notify(myShift.open ? "Смена закрыта" : "Смена открыта — задачи доступны"); }} />
+          <TopBar
+            me={me}
+            shift={myShift}
+            dispatch={dispatch}
+            authUser={authUser}
+            onLogout={onLogout}
+            onToggleShift={() => {
+              dispatch({ type: "TOGGLE_SHIFT", id: me.id });
+              notify(
+                myShift.open
+                  ? "Смена закрыта"
+                  : "Смена открыта — задачи доступны",
+              );
+            }}
+          />
 
           <main className="flex-1 p-4 md:p-6 pb-28 md:pb-6">
             <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-4">
-              <h1 className="font-extrabold" style={{ color: C.ink, fontSize: 24, overflowWrap: "break-word" }}>{tr(VIEW_TITLE[s.view] || "")}</h1>
-              {s.view === "inbox" && <span style={{ fontSize: 13.5, color: C.faint, whiteSpace: "nowrap" }}>{filtered.filter((t) => t.phase < 5).length} {tr("активных")}</span>}
-              {["inbox", "archive", "analytics", "time", "cash", "sales"].includes(s.view) && (
+              <h1
+                className="font-extrabold"
+                style={{
+                  color: C.ink,
+                  fontSize: 24,
+                  overflowWrap: "break-word",
+                }}
+              >
+                {tr(VIEW_TITLE[s.view] || "")}
+              </h1>
+              {s.view === "inbox" && (
+                <span
+                  style={{
+                    fontSize: 13.5,
+                    color: C.faint,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {filtered.filter((t) => t.phase < 5).length} {tr("активных")}
+                </span>
+              )}
+              {[
+                "inbox",
+                "archive",
+                "analytics",
+                "time",
+                "cash",
+                "sales",
+              ].includes(s.view) && (
                 <div className="ml-auto flex items-center gap-2">
                   {canPickBranch ? (
-                    <NiceSelect value={branchScope} width={186}
-                      onChange={(v) => dispatch({ type: "SET_SETTING", key: "branchScope", value: +v })}
-                      options={[{ value: 0, label: tr("Все филиалы") }, ...(s.branches || []).map((b) => ({ value: b.id, label: b.name }))]} />
+                    <NiceSelect
+                      value={branchScope}
+                      width={186}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "SET_SETTING",
+                          key: "branchScope",
+                          value: +v,
+                        })
+                      }
+                      options={[
+                        { value: 0, label: tr("Все филиалы") },
+                        ...(s.branches || []).map((b) => ({
+                          value: b.id,
+                          label: b.name,
+                        })),
+                      ]}
+                    />
                   ) : me.branchId ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2" style={{ border: `1px solid ${C.border}`, background: "#fff", fontSize: 13, fontWeight: 700, color: C.ink }}>
-                      <Building2 size={14} color={C.faint} /> {branchById(me.branchId)?.name}
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2"
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        background: "#fff",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: C.ink,
+                      }}
+                    >
+                      <Building2 size={14} color={C.faint} />{" "}
+                      {branchById(me.branchId)?.name}
                     </span>
                   ) : null}
                 </div>
@@ -3326,49 +8638,144 @@ export default function App({ authUser, onLogout }) {
             </div>
 
             {s.view === "inbox" && hint && (
-              <div className="mb-4 rounded-xl px-4 py-3 flex items-start gap-2.5" style={{ background: "#EFF4FF", border: `1px solid #BFDBFE` }}>
+              <div
+                className="mb-4 rounded-xl px-4 py-3 flex items-start gap-2.5"
+                style={{ background: "#EFF4FF", border: `1px solid #BFDBFE` }}
+              >
                 <Info size={17} color={C.brandA} style={{ marginTop: 1 }} />
                 <div style={{ fontSize: 13.5, color: "#1E3A8A", flex: 1 }}>
-                  {tr("Рабочий прототип. Откройте задачу, где вы исполнитель или контролёр — фаза «Отправлено» сама станет «Просмотрено» (защита «я не видел»). Кнопки действий зависят от роли и открытой смены — переключайте роль через профиль справа вверху.")}
+                  {tr(
+                    "Рабочий прототип. Откройте задачу, где вы исполнитель или контролёр — фаза «Отправлено» сама станет «Просмотрено» (защита «я не видел»). Кнопки действий зависят от роли и открытой смены — переключайте роль через профиль справа вверху.",
+                  )}
                 </div>
-                <button onClick={() => setHint(false)} className="p-1 rounded-lg" style={{ color: C.brandA }}><X size={16} /></button>
+                <button
+                  onClick={() => setHint(false)}
+                  className="p-1 rounded-lg"
+                  style={{ color: C.brandA }}
+                >
+                  <X size={16} />
+                </button>
               </div>
             )}
 
-            {s.view === "inbox" && <Board tasks={filtered} now={now} onOpen={onOpen} onFav={(id) => dispatch({ type: "TOGGLE_FAV", id })} flags={flags} />}
-            {s.view === "create" && <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />}
-            {s.view === "me" && <PersonalAchievements me={me} tasks={s.tasks} history={s.history} shift={myShift} now={now} />}
-            {s.view === "archive" && <ArchiveView tasks={scoped} onOpen={onOpen} />}
-            {s.view === "analytics" && navAllowed({ roles: NAV.find((n) => n.key === "analytics").roles }, me.role) && (
-              <Analytics tasks={filtered} history={s.history} now={now} filters={s.filters} dispatch={dispatch} role={me.role} notify={notify} />
+            {s.view === "inbox" && (
+              <Board
+                tasks={filtered}
+                now={now}
+                onOpen={onOpen}
+                onFav={(id) => dispatch({ type: "TOGGLE_FAV", id })}
+                flags={flags}
+              />
             )}
-            {s.view === "time" && navAllowed({ roles: NAV.find((n) => n.key === "time").roles }, me.role) && (
-              <TimesheetView s={s} me={me} now={now} branchScope={branchScope} />
+            {s.view === "create" && (
+              <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />
             )}
-            {s.view === "cash" && navAllowed({ roles: NAV.find((n) => n.key === "cash").roles }, me.role) && (
-              <CashRegisterView s={s} me={me} dispatch={dispatch} notify={notify} branchScope={branchScope} />
+            {s.view === "me" && (
+              <PersonalAchievements
+                me={me}
+                tasks={s.tasks}
+                history={s.history}
+                shift={myShift}
+                now={now}
+              />
             )}
-            {s.view === "sales" && navAllowed({ roles: NAV.find((n) => n.key === "sales").roles }, me.role) && (
-              <SalesAnalytics s={s} me={me} branchScope={branchScope} />
+            {s.view === "archive" && (
+              <ArchiveView tasks={scoped} onOpen={onOpen} />
             )}
+            {s.view === "analytics" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "analytics").roles },
+                me.role,
+              ) && (
+                <Analytics
+                  tasks={filtered}
+                  history={s.history}
+                  now={now}
+                  filters={s.filters}
+                  dispatch={dispatch}
+                  role={me.role}
+                  notify={notify}
+                />
+              )}
+            {s.view === "time" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "time").roles },
+                me.role,
+              ) && (
+                <TimesheetView
+                  s={s}
+                  me={me}
+                  now={now}
+                  branchScope={branchScope}
+                />
+              )}
+            {s.view === "cash" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "cash").roles },
+                me.role,
+              ) && (
+                <CashRegisterView
+                  s={s}
+                  me={me}
+                  dispatch={dispatch}
+                  notify={notify}
+                  branchScope={branchScope}
+                />
+              )}
+            {s.view === "sales" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "sales").roles },
+                me.role,
+              ) && <SalesAnalytics s={s} me={me} branchScope={branchScope} />}
             {s.view === "org" && <OrgStructure />}
             {s.view === "about" && <AboutView />}
-            {s.view === "admin" && me.role === "sysadmin" && <AdminPanel s={s} dispatch={dispatch} notify={notify} />}
+            {s.view === "admin" && me.role === "sysadmin" && (
+              <AdminPanel s={s} dispatch={dispatch} notify={notify} />
+            )}
           </main>
         </div>
       </div>
 
-      <BottomNav view={s.view} setView={setView} role={me.role} onMore={() => setMoreOpen(true)} />
-      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} items={NAV.filter((n) => navAllowed(n, me.role))} view={s.view} setView={setView} />
+      <BottomNav
+        view={s.view}
+        setView={setView}
+        role={me.role}
+        onMore={() => setMoreOpen(true)}
+      />
+      <MoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        items={NAV.filter((n) => navAllowed(n, me.role))}
+        view={s.view}
+        setView={setView}
+      />
 
       {selected && (
-        <TaskDetail t={selected} now={now} me={me} history={s.history} dispatch={dispatch} notify={notify}
-          anomalyFlags={flags[selected.id]} shiftOpen={myShift.open} onClose={() => dispatch({ type: "CLOSE_TASK" })} key={selected.id} />
+        <TaskDetail
+          t={selected}
+          now={now}
+          me={me}
+          history={s.history}
+          dispatch={dispatch}
+          notify={notify}
+          anomalyFlags={flags[selected.id]}
+          shiftOpen={myShift.open}
+          onClose={() => dispatch({ type: "CLOSE_TASK" })}
+          key={selected.id}
+        />
       )}
 
       {toast && (
-        <div className="fixed left-1/2 bottom-24 md:bottom-6 z-50" style={{ transform: "translateX(-50%)" }}>
-          <div className="rounded-xl px-4 py-3 text-white font-semibold shadow-xl" style={{ background: C.ink, fontSize: 14 }}>{toast}</div>
+        <div
+          className="fixed left-1/2 bottom-24 md:bottom-6 z-50"
+          style={{ transform: "translateX(-50%)" }}
+        >
+          <div
+            className="rounded-xl px-4 py-3 text-white font-semibold shadow-xl"
+            style={{ background: C.ink, fontSize: 14 }}
+          >
+            {toast}
+          </div>
         </div>
       )}
     </div>
@@ -3378,106 +8785,318 @@ export default function App({ authUser, onLogout }) {
 /* ============================================================================
    АДМИН-ПАНЕЛЬ  (настройка системы, управление персоналом и бизнесом)
    ============================================================================ */
-const ROLE_OPTS = [["director", "Руководство"], ["finance", "Финансист"], ["manager", "Управляющий"], ["accountant", "Бухгалтер"], ["sysadmin", "Сист. администратор"], ["staff", "Сотрудник"]];
+const ROLE_OPTS = [
+  ["director", "Руководство"],
+  ["finance", "Финансист"],
+  ["manager", "Управляющий"],
+  ["accountant", "Бухгалтер"],
+  ["sysadmin", "Сист. администратор"],
+  ["staff", "Сотрудник"],
+];
 
 function AdInput({ label, value, onChange, placeholder, type = "text" }) {
   return (
     <label className="block">
-      {label && <div style={{ fontSize: 12, color: C.faint, fontWeight: 600, marginBottom: 4 }}>{label}</div>}
-      <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl px-3 py-2 focus:outline-none" style={{ border: `1px solid ${C.border}`, fontSize: 14, color: C.ink, background: "#fff" }} />
+      {label && (
+        <div
+          style={{
+            fontSize: 12,
+            color: C.faint,
+            fontWeight: 600,
+            marginBottom: 4,
+          }}
+        >
+          {label}
+        </div>
+      )}
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl px-3 py-2 focus:outline-none"
+        style={{
+          border: `1px solid ${C.border}`,
+          fontSize: 14,
+          color: C.ink,
+          background: "#fff",
+        }}
+      />
     </label>
   );
 }
 function AdToggle({ label, hint, checked, onChange }) {
   return (
-    <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-      <div><div style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>{label}</div>{hint && <div style={{ fontSize: 12.5, color: C.sub }}>{hint}</div>}</div>
-      <button onClick={() => onChange(!checked)} className="rounded-full" style={{ width: 46, height: 26, background: checked ? C.ok : "#CBD5E1", position: "relative", transition: "background .2s" }}>
-        <span style={{ position: "absolute", top: 3, left: checked ? 23 : 3, width: 20, height: 20, borderRadius: 99, background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.2)" }} />
+    <div
+      className="flex items-center justify-between rounded-xl px-4 py-3"
+      style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+    >
+      <div>
+        <div style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>
+          {label}
+        </div>
+        {hint && <div style={{ fontSize: 12.5, color: C.sub }}>{hint}</div>}
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        className="rounded-full"
+        style={{
+          width: 46,
+          height: 26,
+          background: checked ? C.ok : "#CBD5E1",
+          position: "relative",
+          transition: "background .2s",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 3,
+            left: checked ? 23 : 3,
+            width: 20,
+            height: 20,
+            borderRadius: 99,
+            background: "#fff",
+            transition: "left .2s",
+            boxShadow: "0 1px 3px rgba(0,0,0,.2)",
+          }}
+        />
       </button>
     </div>
   );
 }
 function AdCard({ title, children, desc }) {
   return (
-    <div className="rounded-2xl bg-white p-5" style={{ border: `1px solid ${C.border}` }}>
-      {title && <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 16 }}>{title}</h3>}
-      {desc && <p style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>{desc}</p>}
+    <div
+      className="rounded-2xl bg-white p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      {title && (
+        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 16 }}>
+          {title}
+        </h3>
+      )}
+      {desc && (
+        <p style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>{desc}</p>
+      )}
       {children}
     </div>
   );
 }
 
 function AdminStaff({ s, dispatch, notify }) {
-  const blank = { name: "", role: "staff", positionId: s.positions[0]?.id || "", departmentId: s.departments[0]?.id || "", branchId: "", parentId: "", phone: "", tg: "" };
+  const blank = {
+    name: "",
+    role: "staff",
+    positionId: s.positions[0]?.id || "",
+    departmentId: s.departments[0]?.id || "",
+    branchId: "",
+    parentId: "",
+    phone: "",
+    tg: "",
+  };
   const [f, setF] = useState(blank);
-  const branchOpts = [{ value: "", label: "— без филиала —" }, ...s.branches.map((b) => ({ value: b.id, label: b.name }))];
+  const branchOpts = [
+    { value: "", label: "— без филиала —" },
+    ...s.branches.map((b) => ({ value: b.id, label: b.name })),
+  ];
   const deptOpts = s.departments.map((d) => ({ value: d.id, label: d.name }));
-  const posOpts = s.positions.map((p) => ({ value: p.id, label: `${p.title} · ур.${p.level}` }));
-  const mgrOpts = [{ value: "", label: "— без руководителя —" }, ...s.users.filter((u) => u.active !== false).map((u) => ({ value: u.id, label: `${u.name}` }))];
+  const posOpts = s.positions.map((p) => ({
+    value: p.id,
+    label: `${p.title} · ур.${p.level}`,
+  }));
+  const mgrOpts = [
+    { value: "", label: "— без руководителя —" },
+    ...s.users
+      .filter((u) => u.active !== false)
+      .map((u) => ({ value: u.id, label: `${u.name}` })),
+  ];
 
   const add = () => {
-    if (!f.name.trim()) { notify("Укажите ФИО сотрудника"); return; }
+    if (!f.name.trim()) {
+      notify("Укажите ФИО сотрудника");
+      return;
+    }
     const pos = s.positions.find((p) => p.id === f.positionId);
     const user = {
-      id: "u" + uid().slice(0, 5), name: f.name.trim(), role: f.role,
-      pos: pos ? pos.title : "Сотрудник", level: pos ? pos.level : 4,
-      branchId: f.branchId === "" ? null : +f.branchId, parentId: f.parentId === "" ? null : f.parentId,
+      id: "u" + uid().slice(0, 5),
+      name: f.name.trim(),
+      role: f.role,
+      pos: pos ? pos.title : "Сотрудник",
+      level: pos ? pos.level : 4,
+      branchId: f.branchId === "" ? null : +f.branchId,
+      parentId: f.parentId === "" ? null : f.parentId,
       departmentId: f.departmentId || null,
-      tg_chat_id: f.tg || null, active: true,
+      tg_chat_id: f.tg || null,
+      active: true,
     };
     dispatch({ type: "ADD_USER", user });
-    notify("Сотрудник добавлен"); setF(blank);
+    notify("Сотрудник добавлен");
+    setF(blank);
   };
 
   return (
     <div className="space-y-5">
-      <AdCard title="Добавить сотрудника" desc="Новый сотрудник появится в оргструктуре, в назначении задач и переключателе ролей.">
+      <AdCard
+        title="Добавить сотрудника"
+        desc="Новый сотрудник появится в оргструктуре, в назначении задач и переключателе ролей."
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <AdInput label="ФИО" value={f.name} onChange={(v) => setF({ ...f, name: v })} placeholder="Иванов И. И." />
-          <Field label="Роль"><Select value={f.role} onChange={(v) => setF({ ...f, role: v })} options={ROLE_OPTS.map(([value, label]) => ({ value, label: tr(label) }))} /></Field>
-          <Field label="Должность"><Select value={f.positionId} onChange={(v) => setF({ ...f, positionId: v })} options={posOpts} /></Field>
-          <Field label="Филиал"><Select value={f.branchId} onChange={(v) => setF({ ...f, branchId: v })} options={branchOpts} /></Field>
-          <Field label="Руководитель (эскалация)"><Select value={f.parentId} onChange={(v) => setF({ ...f, parentId: v })} options={mgrOpts} /></Field>
-          <Field label="Отдел (граница доступа)"><Select value={f.departmentId} onChange={(v) => setF({ ...f, departmentId: v })} options={deptOpts} /></Field>
-          <AdInput label="Telegram ID (для бота)" value={f.tg} onChange={(v) => setF({ ...f, tg: v })} placeholder="123456789" />
+          <AdInput
+            label="ФИО"
+            value={f.name}
+            onChange={(v) => setF({ ...f, name: v })}
+            placeholder="Иванов И. И."
+          />
+          <Field label="Роль">
+            <Select
+              value={f.role}
+              onChange={(v) => setF({ ...f, role: v })}
+              options={ROLE_OPTS.map(([value, label]) => ({
+                value,
+                label: tr(label),
+              }))}
+            />
+          </Field>
+          <Field label="Должность">
+            <Select
+              value={f.positionId}
+              onChange={(v) => setF({ ...f, positionId: v })}
+              options={posOpts}
+            />
+          </Field>
+          <Field label="Филиал">
+            <Select
+              value={f.branchId}
+              onChange={(v) => setF({ ...f, branchId: v })}
+              options={branchOpts}
+            />
+          </Field>
+          <Field label="Руководитель (эскалация)">
+            <Select
+              value={f.parentId}
+              onChange={(v) => setF({ ...f, parentId: v })}
+              options={mgrOpts}
+            />
+          </Field>
+          <Field label="Отдел (граница доступа)">
+            <Select
+              value={f.departmentId}
+              onChange={(v) => setF({ ...f, departmentId: v })}
+              options={deptOpts}
+            />
+          </Field>
+          <AdInput
+            label="Telegram ID (для бота)"
+            value={f.tg}
+            onChange={(v) => setF({ ...f, tg: v })}
+            placeholder="123456789"
+          />
         </div>
-        <button onClick={add} className="mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>
+        <button
+          onClick={add}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+          style={{ background: C.brandA, fontSize: 14.5 }}
+        >
           <PlusCircle size={17} /> {tr("Добавить сотрудника")}
         </button>
       </AdCard>
 
-      <AdCard title={`Сотрудники (${s.users.length})`} desc="Меняйте роль и филиал прямо в таблице. Уволенных — деактивируйте: история их задач сохраняется.">
+      <AdCard
+        title={`Сотрудники (${s.users.length})`}
+        desc="Меняйте роль и филиал прямо в таблице. Уволенных — деактивируйте: история их задач сохраняется."
+      >
         <div className="hidden lg:block">
           <table className="w-full" style={{ fontSize: 13 }}>
-            <thead><tr style={{ color: C.faint, textAlign: "left" }}>
-              <th className="pb-2 font-semibold">Сотрудник</th><th className="pb-2 font-semibold">Роль</th>
-              <th className="pb-2 font-semibold">Филиал</th><th className="pb-2 font-semibold">Отдел</th><th className="pb-2 font-semibold text-center">Статус</th>
-            </tr></thead>
+            <thead>
+              <tr style={{ color: C.faint, textAlign: "left" }}>
+                <th className="pb-2 font-semibold">Сотрудник</th>
+                <th className="pb-2 font-semibold">Роль</th>
+                <th className="pb-2 font-semibold">Филиал</th>
+                <th className="pb-2 font-semibold">Отдел</th>
+                <th className="pb-2 font-semibold text-center">Статус</th>
+              </tr>
+            </thead>
             <tbody>
               {s.users.map((u) => (
-                <tr key={u.id} style={{ borderTop: `1px solid ${C.line}`, opacity: u.active === false ? 0.5 : 1 }}>
+                <tr
+                  key={u.id}
+                  style={{
+                    borderTop: `1px solid ${C.line}`,
+                    opacity: u.active === false ? 0.5 : 1,
+                  }}
+                >
                   <td className="py-2.5 pr-2">
-                    <div className="flex items-center gap-2"><Avatar id={u.id} size={28} />
-                      <div><div style={{ color: C.ink, fontWeight: 600 }}>{u.name}</div><div style={{ color: C.faint, fontSize: 11.5 }}>{u.pos}</div></div></div>
+                    <div className="flex items-center gap-2">
+                      <Avatar id={u.id} size={28} />
+                      <div>
+                        <div style={{ color: C.ink, fontWeight: 600 }}>
+                          {u.name}
+                        </div>
+                        <div style={{ color: C.faint, fontSize: 11.5 }}>
+                          {u.pos}
+                        </div>
+                      </div>
+                    </div>
                   </td>
                   <td className="py-2.5 pr-2" style={{ minWidth: 150 }}>
-                    <Select value={u.role} onChange={(v) => dispatch({ type: "UPDATE_USER", id: u.id, patch: { role: v } })} options={ROLE_OPTS.map(([value, label]) => ({ value, label: tr(label) }))} />
+                    <Select
+                      value={u.role}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "UPDATE_USER",
+                          id: u.id,
+                          patch: { role: v },
+                        })
+                      }
+                      options={ROLE_OPTS.map(([value, label]) => ({
+                        value,
+                        label: tr(label),
+                      }))}
+                    />
                   </td>
                   <td className="py-2.5 pr-2" style={{ minWidth: 130 }}>
-                    <Select value={u.branchId == null ? "" : u.branchId}
-                      onChange={(v) => dispatch({ type: "UPDATE_USER", id: u.id, patch: { branchId: v === "" ? null : +v } })}
-                      options={branchOpts} />
+                    <Select
+                      value={u.branchId == null ? "" : u.branchId}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "UPDATE_USER",
+                          id: u.id,
+                          patch: { branchId: v === "" ? null : +v },
+                        })
+                      }
+                      options={branchOpts}
+                    />
                   </td>
                   <td className="py-2.5 pr-2" style={{ minWidth: 150 }}>
-                    <Select value={u.departmentId || ""}
-                      onChange={(v) => dispatch({ type: "UPDATE_USER", id: u.id, patch: { departmentId: v || null } })}
-                      options={deptOpts} />
+                    <Select
+                      value={u.departmentId || ""}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "UPDATE_USER",
+                          id: u.id,
+                          patch: { departmentId: v || null },
+                        })
+                      }
+                      options={deptOpts}
+                    />
                   </td>
                   <td className="py-2.5 text-center">
-                    <button onClick={() => dispatch({ type: "UPDATE_USER", id: u.id, patch: { active: u.active === false } })}
-                      className="rounded-lg px-2.5 py-1.5 font-semibold" style={u.active === false ? { background: "#FEECEC", color: C.bad } : { background: "#E9F9EF", color: C.ok }}>
+                    <button
+                      onClick={() =>
+                        dispatch({
+                          type: "UPDATE_USER",
+                          id: u.id,
+                          patch: { active: u.active === false },
+                        })
+                      }
+                      className="rounded-lg px-2.5 py-1.5 font-semibold"
+                      style={
+                        u.active === false
+                          ? { background: "#FEECEC", color: C.bad }
+                          : { background: "#E9F9EF", color: C.ok }
+                      }
+                    >
                       {u.active === false ? "Неактивен" : "Активен"}
                     </button>
                   </td>
@@ -3489,23 +9108,93 @@ function AdminStaff({ s, dispatch, notify }) {
 
         <div className="lg:hidden space-y-2.5">
           {s.users.map((u) => (
-            <div key={u.id} className="rounded-xl p-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}`, opacity: u.active === false ? 0.55 : 1 }}>
+            <div
+              key={u.id}
+              className="rounded-xl p-3"
+              style={{
+                background: "#FBFCFE",
+                border: `1px solid ${C.border}`,
+                opacity: u.active === false ? 0.55 : 1,
+              }}
+            >
               <div className="flex items-center gap-2.5">
                 <Avatar id={u.id} size={32} />
                 <div className="flex-1 min-w-0">
-                  <div className="truncate" style={{ color: C.ink, fontWeight: 700, fontSize: 14 }}>{u.name}</div>
-                  <div className="truncate" style={{ color: C.faint, fontSize: 12 }}>{u.pos}</div>
+                  <div
+                    className="truncate"
+                    style={{ color: C.ink, fontWeight: 700, fontSize: 14 }}
+                  >
+                    {u.name}
+                  </div>
+                  <div
+                    className="truncate"
+                    style={{ color: C.faint, fontSize: 12 }}
+                  >
+                    {u.pos}
+                  </div>
                 </div>
-                <button onClick={() => dispatch({ type: "UPDATE_USER", id: u.id, patch: { active: u.active === false } })}
-                  className="shrink-0 rounded-lg px-2.5 py-1.5 font-semibold" style={u.active === false ? { background: "#FEECEC", color: C.bad, fontSize: 12.5 } : { background: "#E9F9EF", color: C.ok, fontSize: 12.5 }}>
+                <button
+                  onClick={() =>
+                    dispatch({
+                      type: "UPDATE_USER",
+                      id: u.id,
+                      patch: { active: u.active === false },
+                    })
+                  }
+                  className="shrink-0 rounded-lg px-2.5 py-1.5 font-semibold"
+                  style={
+                    u.active === false
+                      ? { background: "#FEECEC", color: C.bad, fontSize: 12.5 }
+                      : { background: "#E9F9EF", color: C.ok, fontSize: 12.5 }
+                  }
+                >
                   {u.active === false ? "Неактивен" : "Активен"}
                 </button>
               </div>
               <div className="mt-2.5 space-y-2">
-                <Field label="Роль"><Select value={u.role} onChange={(v) => dispatch({ type: "UPDATE_USER", id: u.id, patch: { role: v } })} options={ROLE_OPTS.map(([value, label]) => ({ value, label: tr(label) }))} /></Field>
+                <Field label="Роль">
+                  <Select
+                    value={u.role}
+                    onChange={(v) =>
+                      dispatch({
+                        type: "UPDATE_USER",
+                        id: u.id,
+                        patch: { role: v },
+                      })
+                    }
+                    options={ROLE_OPTS.map(([value, label]) => ({
+                      value,
+                      label: tr(label),
+                    }))}
+                  />
+                </Field>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Филиал"><Select value={u.branchId == null ? "" : u.branchId} onChange={(v) => dispatch({ type: "UPDATE_USER", id: u.id, patch: { branchId: v === "" ? null : +v } })} options={branchOpts} /></Field>
-                  <Field label="Отдел"><Select value={u.departmentId || ""} onChange={(v) => dispatch({ type: "UPDATE_USER", id: u.id, patch: { departmentId: v || null } })} options={deptOpts} /></Field>
+                  <Field label="Филиал">
+                    <Select
+                      value={u.branchId == null ? "" : u.branchId}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "UPDATE_USER",
+                          id: u.id,
+                          patch: { branchId: v === "" ? null : +v },
+                        })
+                      }
+                      options={branchOpts}
+                    />
+                  </Field>
+                  <Field label="Отдел">
+                    <Select
+                      value={u.departmentId || ""}
+                      onChange={(v) =>
+                        dispatch({
+                          type: "UPDATE_USER",
+                          id: u.id,
+                          patch: { departmentId: v || null },
+                        })
+                      }
+                      options={deptOpts}
+                    />
+                  </Field>
                 </div>
               </div>
             </div>
@@ -3517,27 +9206,77 @@ function AdminStaff({ s, dispatch, notify }) {
 }
 
 function AdminPositions({ s, dispatch, notify }) {
-  const [title, setTitle] = useState(""); const [level, setLevel] = useState("3");
-  const add = () => { if (!title.trim()) { notify("Укажите название должности"); return; }
-    dispatch({ type: "ADD_POSITION", position: { id: "p" + uid().slice(0, 4), title: title.trim(), level: +level } });
-    notify("Должность добавлена"); setTitle(""); };
+  const [title, setTitle] = useState("");
+  const [level, setLevel] = useState("3");
+  const add = () => {
+    if (!title.trim()) {
+      notify("Укажите название должности");
+      return;
+    }
+    dispatch({
+      type: "ADD_POSITION",
+      position: {
+        id: "p" + uid().slice(0, 4),
+        title: title.trim(),
+        level: +level,
+      },
+    });
+    notify("Должность добавлена");
+    setTitle("");
+  };
   return (
     <div className="space-y-5">
-      <AdCard title="Добавить должность" desc="Уровень задаёт иерархию для эскалации: 1 — высшая, 4 — линейный персонал.">
+      <AdCard
+        title="Добавить должность"
+        desc="Уровень задаёт иерархию для эскалации: 1 — высшая, 4 — линейный персонал."
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-          <AdInput label="Название" value={title} onChange={setTitle} placeholder="Старший техник" />
-          <Field label="Уровень иерархии"><Select value={level} onChange={setLevel} options={[1, 2, 3, 4].map((n) => ({ value: n, label: `Уровень ${n}` }))} /></Field>
-          <button onClick={add} className="rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>Добавить</button>
+          <AdInput
+            label="Название"
+            value={title}
+            onChange={setTitle}
+            placeholder="Старший техник"
+          />
+          <Field label="Уровень иерархии">
+            <Select
+              value={level}
+              onChange={setLevel}
+              options={[1, 2, 3, 4].map((n) => ({
+                value: n,
+                label: `Уровень ${n}`,
+              }))}
+            />
+          </Field>
+          <button
+            onClick={add}
+            className="rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{ background: C.brandA, fontSize: 14.5 }}
+          >
+            Добавить
+          </button>
         </div>
       </AdCard>
       <AdCard title={`Должности (${s.positions.length})`}>
         <div className="space-y-2">
-          {s.positions.sort((a, z) => a.level - z.level).map((p) => (
-            <div key={p.id} className="flex items-center justify-between rounded-xl px-4 py-2.5" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-              <span style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>{p.title}</span>
-              <Badge color={C.violet} bg="#F5F0FE">Уровень {p.level}</Badge>
-            </div>
-          ))}
+          {s.positions
+            .sort((a, z) => a.level - z.level)
+            .map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between rounded-xl px-4 py-2.5"
+                style={{
+                  background: "#FBFCFE",
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <span style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>
+                  {p.title}
+                </span>
+                <Badge color={C.violet} bg="#F5F0FE">
+                  Уровень {p.level}
+                </Badge>
+              </div>
+            ))}
         </div>
       </AdCard>
     </div>
@@ -3545,32 +9284,90 @@ function AdminPositions({ s, dispatch, notify }) {
 }
 
 function AdminBranches({ s, dispatch, notify }) {
-  const [bc, setBc] = useState(String(s.companies[0]?.id || "")); const [bn, setBn] = useState(""); const [bb, setBb] = useState("300000");
-  const [cn, setCn] = useState(""); const [ci, setCi] = useState("");
-  const addBranch = () => { if (!bn.trim()) { notify("Укажите название филиала"); return; }
+  const [bc, setBc] = useState(String(s.companies[0]?.id || ""));
+  const [bn, setBn] = useState("");
+  const [bb, setBb] = useState("300000");
+  const [cn, setCn] = useState("");
+  const [ci, setCi] = useState("");
+  const addBranch = () => {
+    if (!bn.trim()) {
+      notify("Укажите название филиала");
+      return;
+    }
     const id = Math.max(0, ...s.branches.map((b) => b.id)) + 1;
-    dispatch({ type: "ADD_BRANCH", branch: { id, companyId: +bc, name: bn.trim(), monthly: +bb || 0 } });
-    notify("Филиал добавлен"); setBn(""); };
-  const addCompany = () => { if (!cn.trim()) { notify("Укажите название юр. лица"); return; }
+    dispatch({
+      type: "ADD_BRANCH",
+      branch: { id, companyId: +bc, name: bn.trim(), monthly: +bb || 0 },
+    });
+    notify("Филиал добавлен");
+    setBn("");
+  };
+  const addCompany = () => {
+    if (!cn.trim()) {
+      notify("Укажите название юр. лица");
+      return;
+    }
     const id = Math.max(0, ...s.companies.map((c) => c.id)) + 1;
-    dispatch({ type: "ADD_COMPANY", company: { id, name: cn.trim(), inn: ci.trim() } });
-    notify("Юр. лицо добавлено"); setCn(""); setCi(""); };
+    dispatch({
+      type: "ADD_COMPANY",
+      company: { id, name: cn.trim(), inn: ci.trim() },
+    });
+    notify("Юр. лицо добавлено");
+    setCn("");
+    setCi("");
+  };
   return (
     <div className="space-y-5">
       <AdCard title="Юр. лица и филиалы">
         {s.companies.map((co) => (
           <div key={co.id} className="mb-4">
-            <div className="flex items-center gap-2 mb-2"><Building2 size={16} color={C.brandA} /><span style={{ fontWeight: 700, color: C.ink }}>{co.name}</span><Badge>ИНН {co.inn || "—"}</Badge></div>
+            <div className="flex items-center gap-2 mb-2">
+              <Building2 size={16} color={C.brandA} />
+              <span style={{ fontWeight: 700, color: C.ink }}>{co.name}</span>
+              <Badge>ИНН {co.inn || "—"}</Badge>
+            </div>
             <div className="space-y-2">
-              {s.branches.filter((b) => b.companyId === co.id).map((b) => (
-                <div key={b.id} className="flex items-center gap-3 rounded-xl px-4 py-2.5" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-                  <span className="flex-1" style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>Филиал «{b.name}»</span>
-                  <span style={{ fontSize: 12.5, color: C.faint }}>Бюджет/мес:</span>
-                  <input type="number" value={s.budgets[b.id] || 0} onChange={(e) => dispatch({ type: "SET_BUDGET", branchId: b.id, value: +e.target.value || 0 })}
-                    className="rounded-lg px-2 py-1.5 focus:outline-none" style={{ border: `1px solid ${C.border}`, fontSize: 13.5, color: C.ink, width: 130 }} />
-                  <span style={{ fontSize: 13, color: C.sub }}>сум</span>
-                </div>
-              ))}
+              {s.branches
+                .filter((b) => b.companyId === co.id)
+                .map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center gap-3 rounded-xl px-4 py-2.5"
+                    style={{
+                      background: "#FBFCFE",
+                      border: `1px solid ${C.border}`,
+                    }}
+                  >
+                    <span
+                      className="flex-1"
+                      style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}
+                    >
+                      Филиал «{b.name}»
+                    </span>
+                    <span style={{ fontSize: 12.5, color: C.faint }}>
+                      Бюджет/мес:
+                    </span>
+                    <input
+                      type="number"
+                      value={s.budgets[b.id] || 0}
+                      onChange={(e) =>
+                        dispatch({
+                          type: "SET_BUDGET",
+                          branchId: b.id,
+                          value: +e.target.value || 0,
+                        })
+                      }
+                      className="rounded-lg px-2 py-1.5 focus:outline-none"
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        fontSize: 13.5,
+                        color: C.ink,
+                        width: 130,
+                      }}
+                    />
+                    <span style={{ fontSize: 13, color: C.sub }}>сум</span>
+                  </div>
+                ))}
             </div>
           </div>
         ))}
@@ -3578,17 +9375,58 @@ function AdminBranches({ s, dispatch, notify }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <AdCard title="Добавить филиал">
           <div className="space-y-3">
-            <Field label="Юр. лицо"><Select value={bc} onChange={setBc} options={s.companies.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-            <AdInput label="Название филиала" value={bn} onChange={setBn} placeholder="Запад" />
-            <AdInput label="Месячный бюджет, сум" type="number" value={bb} onChange={setBb} />
-            <button onClick={addBranch} className="rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>Добавить филиал</button>
+            <Field label="Юр. лицо">
+              <Select
+                value={bc}
+                onChange={setBc}
+                options={s.companies.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                }))}
+              />
+            </Field>
+            <AdInput
+              label="Название филиала"
+              value={bn}
+              onChange={setBn}
+              placeholder="Запад"
+            />
+            <AdInput
+              label="Месячный бюджет, сум"
+              type="number"
+              value={bb}
+              onChange={setBb}
+            />
+            <button
+              onClick={addBranch}
+              className="rounded-xl px-4 py-2.5 font-bold text-white"
+              style={{ background: C.brandA, fontSize: 14.5 }}
+            >
+              Добавить филиал
+            </button>
           </div>
         </AdCard>
         <AdCard title="Добавить юр. лицо">
           <div className="space-y-3">
-            <AdInput label="Название" value={cn} onChange={setCn} placeholder="ООО «Новая сеть»" />
-            <AdInput label="ИНН" value={ci} onChange={setCi} placeholder="7700000000" />
-            <button onClick={addCompany} className="rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>Добавить юр. лицо</button>
+            <AdInput
+              label="Название"
+              value={cn}
+              onChange={setCn}
+              placeholder="ООО «Новая сеть»"
+            />
+            <AdInput
+              label="ИНН"
+              value={ci}
+              onChange={setCi}
+              placeholder="7700000000"
+            />
+            <button
+              onClick={addCompany}
+              className="rounded-xl px-4 py-2.5 font-bold text-white"
+              style={{ background: C.brandA, fontSize: 14.5 }}
+            >
+              Добавить юр. лицо
+            </button>
           </div>
         </AdCard>
       </div>
@@ -3598,12 +9436,32 @@ function AdminBranches({ s, dispatch, notify }) {
 
 function AdminSla({ s, dispatch }) {
   return (
-    <AdCard title="SLA-нормативы (часы на решение)" desc="Сколько времени даётся на задачу по приоритету. ИИ применяет это при создании заявок.">
+    <AdCard
+      title="SLA-нормативы (часы на решение)"
+      desc="Сколько времени даётся на задачу по приоритету. ИИ применяет это при создании заявок."
+    >
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {["Критический", "Высокий", "Обычный"].map((p) => (
           <Field key={p} label={p}>
-            <input type="number" min="1" value={s.sla[p] ?? 24} onChange={(e) => dispatch({ type: "SET_SLA", priority: p, hours: +e.target.value || 1 })}
-              className="w-full rounded-xl px-3 py-2 focus:outline-none" style={{ border: `1px solid ${C.border}`, fontSize: 15, color: C.ink, fontWeight: 700 }} />
+            <input
+              type="number"
+              min="1"
+              value={s.sla[p] ?? 24}
+              onChange={(e) =>
+                dispatch({
+                  type: "SET_SLA",
+                  priority: p,
+                  hours: +e.target.value || 1,
+                })
+              }
+              className="w-full rounded-xl px-3 py-2 focus:outline-none"
+              style={{
+                border: `1px solid ${C.border}`,
+                fontSize: 15,
+                color: C.ink,
+                fontWeight: 700,
+              }}
+            />
           </Field>
         ))}
       </div>
@@ -3615,20 +9473,50 @@ function AdSop({ cat, sop, dispatch, notify }) {
   const [text, setText] = useState(sop.steps.join("\n"));
   const [photo, setPhoto] = useState(sop.requirePhoto);
   const save = () => {
-    const steps = text.split("\n").map((x) => x.trim()).filter(Boolean);
+    const steps = text
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
     dispatch({ type: "SET_SOP", category: cat, steps, requirePhoto: photo });
     notify(`Регламент «${cat}» сохранён`);
   };
   return (
     <AdCard title={cat}>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={Math.max(3, text.split("\n").length)}
-        className="w-full rounded-xl px-3 py-2 focus:outline-none resize-y" style={{ border: `1px solid ${C.border}`, fontSize: 13.5, color: C.ink, lineHeight: 1.5 }} />
-      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 4 }}>Каждый шаг — с новой строки.</div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={Math.max(3, text.split("\n").length)}
+        className="w-full rounded-xl px-3 py-2 focus:outline-none resize-y"
+        style={{
+          border: `1px solid ${C.border}`,
+          fontSize: 13.5,
+          color: C.ink,
+          lineHeight: 1.5,
+        }}
+      />
+      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 4 }}>
+        Каждый шаг — с новой строки.
+      </div>
       <div className="flex items-center justify-between mt-3">
-        <label className="flex items-center gap-2 cursor-pointer" style={{ fontSize: 13.5, color: C.ink }}>
-          <input type="checkbox" checked={photo} onChange={() => setPhoto((p) => !p)} style={{ width: 18, height: 18, accentColor: C.brandA }} /> Требовать фотоотчёт
+        <label
+          className="flex items-center gap-2 cursor-pointer"
+          style={{ fontSize: 13.5, color: C.ink }}
+        >
+          <input
+            type="checkbox"
+            checked={photo}
+            onChange={() => setPhoto((p) => !p)}
+            style={{ width: 18, height: 18, accentColor: C.brandA }}
+          />{" "}
+          Требовать фотоотчёт
         </label>
-        <button onClick={save} className="rounded-xl px-4 py-2 font-bold text-white" style={{ background: C.brandA, fontSize: 13.5 }}>Сохранить</button>
+        <button
+          onClick={save}
+          className="rounded-xl px-4 py-2 font-bold text-white"
+          style={{ background: C.brandA, fontSize: 13.5 }}
+        >
+          Сохранить
+        </button>
       </div>
     </AdCard>
   );
@@ -3636,8 +9524,19 @@ function AdSop({ cat, sop, dispatch, notify }) {
 function AdminSops({ s, dispatch, notify }) {
   return (
     <div className="space-y-4">
-      <div style={{ fontSize: 13.5, color: C.sub }}>Регламенты (SOP) — это чек-листы, которые исполнитель обязан выполнить в фазе «В работе» перед сдачей задачи.</div>
-      {Object.keys(s.sops).map((cat) => <AdSop key={cat} cat={cat} sop={s.sops[cat]} dispatch={dispatch} notify={notify} />)}
+      <div style={{ fontSize: 13.5, color: C.sub }}>
+        Регламенты (SOP) — это чек-листы, которые исполнитель обязан выполнить в
+        фазе «В работе» перед сдачей задачи.
+      </div>
+      {Object.keys(s.sops).map((cat) => (
+        <AdSop
+          key={cat}
+          cat={cat}
+          sop={s.sops[cat]}
+          dispatch={dispatch}
+          notify={notify}
+        />
+      ))}
     </div>
   );
 }
@@ -3649,14 +9548,38 @@ function AdminSystem({ s, dispatch, notify }) {
     <div className="space-y-4">
       <AdCard title="Настройки системы">
         <div className="space-y-3">
-          <AdToggle label="Голосовой ввод задач" hint="Кнопка «Сказать задачу» в форме создания" checked={cfg.voiceInput !== false} onChange={(v) => set("voiceInput", v)} />
-          <AdToggle label="Водяные знаки на экспорте" hint="ФИО и ID сотрудника на выгрузках (защита от утечек)" checked={!!cfg.watermark} onChange={(v) => set("watermark", v)} />
-          <AdToggle label="Ограничение по IP / VPN" hint="Доступ к финансам и админке только из офиса" checked={!!cfg.ipRestrict} onChange={(v) => set("ipRestrict", v)} />
+          <AdToggle
+            label="Голосовой ввод задач"
+            hint="Кнопка «Сказать задачу» в форме создания"
+            checked={cfg.voiceInput !== false}
+            onChange={(v) => set("voiceInput", v)}
+          />
+          <AdToggle
+            label="Водяные знаки на экспорте"
+            hint="ФИО и ID сотрудника на выгрузках (защита от утечек)"
+            checked={!!cfg.watermark}
+            onChange={(v) => set("watermark", v)}
+          />
+          <AdToggle
+            label="Ограничение по IP / VPN"
+            hint="Доступ к финансам и админке только из офиса"
+            checked={!!cfg.ipRestrict}
+            onChange={(v) => set("ipRestrict", v)}
+          />
         </div>
       </AdCard>
-      <AdCard title="Демо-данные" desc="Сбросить задачи, журнал, смены и оргструктуру к исходному состоянию.">
-        <button onClick={() => { dispatch({ type: "RESET" }); notify("Демо-данные сброшены"); }}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.bad, fontSize: 14 }}>
+      <AdCard
+        title="Демо-данные"
+        desc="Сбросить задачи, журнал, смены и оргструктуру к исходному состоянию."
+      >
+        <button
+          onClick={() => {
+            dispatch({ type: "RESET" });
+            notify("Демо-данные сброшены");
+          }}
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+          style={{ background: C.bad, fontSize: 14 }}
+        >
           <RotateCcw size={16} /> Сбросить демо-данные
         </button>
       </AdCard>
@@ -3666,76 +9589,200 @@ function AdminSystem({ s, dispatch, notify }) {
 
 function AdminPanel({ s, dispatch, notify }) {
   const [tab, setTab] = useState("staff");
-  const tabs = [["staff", "Сотрудники", Users], ["positions", "Должности", Award], ["branches", "Филиалы и бюджеты", Building2], ["departments", "Отделы и доступ", Lock], ["routes", "Маршруты", Send], ["sla", "SLA-нормативы", Clock], ["sops", "Регламенты", ListChecks], ["system", "Система", Settings]];
+  const tabs = [
+    ["staff", "Сотрудники", Users],
+    ["positions", "Должности", Award],
+    ["branches", "Филиалы и бюджеты", Building2],
+    ["departments", "Отделы и доступ", Lock],
+    ["routes", "Маршруты", Send],
+    ["sla", "SLA-нормативы", Clock],
+    ["sops", "Регламенты", ListChecks],
+    ["system", "Система", Settings],
+  ];
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl bg-white p-2 flex flex-wrap gap-1.5" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-2 flex flex-wrap gap-1.5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         {tabs.map(([k, label, Icon]) => {
           const active = tab === k;
           return (
-            <button key={k} onClick={() => setTab(k)} className="shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 font-semibold"
-              style={{ background: active ? C.brandA : "transparent", color: active ? "#fff" : C.ink, fontSize: 13.5, whiteSpace: "nowrap" }}>
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 font-semibold"
+              style={{
+                background: active ? C.brandA : "transparent",
+                color: active ? "#fff" : C.ink,
+                fontSize: 13.5,
+                whiteSpace: "nowrap",
+              }}
+            >
               <Icon size={16} color={active ? "#fff" : C.sub} /> {tr(label)}
             </button>
           );
         })}
       </div>
-      {tab === "staff" && <AdminStaff s={s} dispatch={dispatch} notify={notify} />}
-      {tab === "positions" && <AdminPositions s={s} dispatch={dispatch} notify={notify} />}
-      {tab === "branches" && <AdminBranches s={s} dispatch={dispatch} notify={notify} />}
-      {tab === "departments" && <AdminDepartments s={s} dispatch={dispatch} notify={notify} />}
-      {tab === "routes" && <AdminRoutes s={s} dispatch={dispatch} notify={notify} />}
+      {tab === "staff" && (
+        <AdminStaff s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "positions" && (
+        <AdminPositions s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "branches" && (
+        <AdminBranches s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "departments" && (
+        <AdminDepartments s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "routes" && (
+        <AdminRoutes s={s} dispatch={dispatch} notify={notify} />
+      )}
       {tab === "sla" && <AdminSla s={s} dispatch={dispatch} />}
-      {tab === "sops" && <AdminSops s={s} dispatch={dispatch} notify={notify} />}
-      {tab === "system" && <AdminSystem s={s} dispatch={dispatch} notify={notify} />}
+      {tab === "sops" && (
+        <AdminSops s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "system" && (
+        <AdminSystem s={s} dispatch={dispatch} notify={notify} />
+      )}
     </div>
   );
 }
 
 function AdminDepartments({ s, dispatch, notify }) {
-  const [name, setName] = useState(""); const [restricted, setRestricted] = useState(false);
+  const [name, setName] = useState("");
+  const [restricted, setRestricted] = useState(false);
   const add = () => {
-    if (!name.trim()) { notify("Укажите название отдела"); return; }
-    dispatch({ type: "ADD_DEPARTMENT", department: { id: "d" + uid().slice(0, 4), name: name.trim(), restricted } });
-    notify("Отдел добавлен"); setName(""); setRestricted(false);
+    if (!name.trim()) {
+      notify("Укажите название отдела");
+      return;
+    }
+    dispatch({
+      type: "ADD_DEPARTMENT",
+      department: {
+        id: "d" + uid().slice(0, 4),
+        name: name.trim(),
+        restricted,
+      },
+    });
+    notify("Отдел добавлен");
+    setName("");
+    setRestricted(false);
   };
   const cats = Object.keys(s.catDept);
   return (
     <div className="space-y-5">
-      <AdCard title="Отделы и доступ к данным"
-        desc="«Закрытый» отдел = его задачи видят только сотрудники этого отдела, финансы и высшее руководство. Например, задачи финансового отдела недоступны посторонним.">
+      <AdCard
+        title="Отделы и доступ к данным"
+        desc="«Закрытый» отдел = его задачи видят только сотрудники этого отдела, финансы и высшее руководство. Например, задачи финансового отдела недоступны посторонним."
+      >
         <div className="space-y-2">
           {s.departments.map((d) => (
-            <div key={d.id} className="flex items-center gap-3 rounded-xl px-4 py-2.5" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-              <input value={d.name} onChange={(e) => dispatch({ type: "UPDATE_DEPARTMENT", id: d.id, patch: { name: e.target.value } })}
-                className="flex-1 rounded-lg px-2 py-1.5 focus:outline-none" style={{ border: `1px solid ${C.border}`, fontSize: 14, color: C.ink, fontWeight: 600 }} />
-              <button onClick={() => dispatch({ type: "UPDATE_DEPARTMENT", id: d.id, patch: { restricted: !d.restricted } })}
+            <div
+              key={d.id}
+              className="flex items-center gap-3 rounded-xl px-4 py-2.5"
+              style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+            >
+              <input
+                value={d.name}
+                onChange={(e) =>
+                  dispatch({
+                    type: "UPDATE_DEPARTMENT",
+                    id: d.id,
+                    patch: { name: e.target.value },
+                  })
+                }
+                className="flex-1 rounded-lg px-2 py-1.5 focus:outline-none"
+                style={{
+                  border: `1px solid ${C.border}`,
+                  fontSize: 14,
+                  color: C.ink,
+                  fontWeight: 600,
+                }}
+              />
+              <button
+                onClick={() =>
+                  dispatch({
+                    type: "UPDATE_DEPARTMENT",
+                    id: d.id,
+                    patch: { restricted: !d.restricted },
+                  })
+                }
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold"
-                style={d.restricted ? { background: "#FEECEC", color: C.bad } : { background: C.line, color: C.sub }}>
+                style={
+                  d.restricted
+                    ? { background: "#FEECEC", color: C.bad }
+                    : { background: C.line, color: C.sub }
+                }
+              >
                 <Lock size={14} /> {d.restricted ? "Закрытый" : "Открытый"}
               </button>
             </div>
           ))}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end mt-4">
-          <AdInput label="Новый отдел" value={name} onChange={setName} placeholder="Отдел маркетинга" />
-          <label className="flex items-center gap-2 cursor-pointer" style={{ fontSize: 13.5, color: C.ink, paddingBottom: 8 }}>
-            <input type="checkbox" checked={restricted} onChange={() => setRestricted((r) => !r)} style={{ width: 18, height: 18, accentColor: C.bad }} /> Закрытый (приватный)
+          <AdInput
+            label="Новый отдел"
+            value={name}
+            onChange={setName}
+            placeholder="Отдел маркетинга"
+          />
+          <label
+            className="flex items-center gap-2 cursor-pointer"
+            style={{ fontSize: 13.5, color: C.ink, paddingBottom: 8 }}
+          >
+            <input
+              type="checkbox"
+              checked={restricted}
+              onChange={() => setRestricted((r) => !r)}
+              style={{ width: 18, height: 18, accentColor: C.bad }}
+            />{" "}
+            Закрытый (приватный)
           </label>
-          <button onClick={add} className="rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>Добавить отдел</button>
+          <button
+            onClick={add}
+            className="rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{ background: C.brandA, fontSize: 14.5 }}
+          >
+            Добавить отдел
+          </button>
         </div>
       </AdCard>
 
-      <AdCard title="Маршрутизация: категория → отдел"
-        desc="К какому отделу относится задача каждой категории. От этого зависит, кто её увидит.">
+      <AdCard
+        title="Маршрутизация: категория → отдел"
+        desc="К какому отделу относится задача каждой категории. От этого зависит, кто её увидит."
+      >
         <div className="space-y-2">
           {cats.map((cat) => (
-            <div key={cat} className="flex items-center gap-3 rounded-xl px-4 py-2.5" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-              <span className="flex-1" style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>{cat}</span>
+            <div
+              key={cat}
+              className="flex items-center gap-3 rounded-xl px-4 py-2.5"
+              style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+            >
+              <span
+                className="flex-1"
+                style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}
+              >
+                {cat}
+              </span>
               <ChevronRight size={16} color={C.faint} />
               <div style={{ minWidth: 200 }}>
-                <Select value={s.catDept[cat]} onChange={(v) => dispatch({ type: "SET_CATDEPT", category: cat, departmentId: v })}
-                  options={s.departments.map((d) => ({ value: d.id, label: d.name + (d.restricted ? " 🔒" : "") }))} />
+                <Select
+                  value={s.catDept[cat]}
+                  onChange={(v) =>
+                    dispatch({
+                      type: "SET_CATDEPT",
+                      category: cat,
+                      departmentId: v,
+                    })
+                  }
+                  options={s.departments.map((d) => ({
+                    value: d.id,
+                    label: d.name + (d.restricted ? " 🔒" : ""),
+                  }))}
+                />
               </div>
             </div>
           ))}
@@ -3752,17 +9799,61 @@ function StepRail({ steps, current }) {
   return (
     <div className="flex flex-wrap items-stretch gap-1.5">
       {steps.map((st, i) => {
-        const done = i < current, active = i === current;
+        const done = i < current,
+          active = i === current;
         const color = done ? C.ok : active ? C.brandA : "#94A3B8";
         const bg = done ? "#E9F9EF" : active ? "#EFF4FF" : "#F1F5F9";
         return (
-          <div key={i} className="rounded-xl px-2.5 py-2" style={{ background: bg, border: `1px solid ${active ? C.brandA : C.border}`, minWidth: 104, flex: "1 1 104px" }}>
-            <div className="flex items-center gap-1.5" style={{ fontSize: 10.5, color, fontWeight: 800 }}>
-              {done ? <CheckCircle2 size={13} /> : <span style={{ width: 15, height: 15, borderRadius: 99, background: color, color: "#fff", fontSize: 9.5, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>{i + 1}</span>}
+          <div
+            key={i}
+            className="rounded-xl px-2.5 py-2"
+            style={{
+              background: bg,
+              border: `1px solid ${active ? C.brandA : C.border}`,
+              minWidth: 104,
+              flex: "1 1 104px",
+            }}
+          >
+            <div
+              className="flex items-center gap-1.5"
+              style={{ fontSize: 10.5, color, fontWeight: 800 }}
+            >
+              {done ? (
+                <CheckCircle2 size={13} />
+              ) : (
+                <span
+                  style={{
+                    width: 15,
+                    height: 15,
+                    borderRadius: 99,
+                    background: color,
+                    color: "#fff",
+                    fontSize: 9.5,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 800,
+                  }}
+                >
+                  {i + 1}
+                </span>
+              )}
               ШАГ {i + 1}
             </div>
-            <div style={{ fontSize: 12, color: C.ink, fontWeight: 700, marginTop: 3, lineHeight: 1.2 }}>{st.title}</div>
-            <div style={{ fontSize: 10.5, color: C.faint, marginTop: 1 }}>{st.actor}</div>
+            <div
+              style={{
+                fontSize: 12,
+                color: C.ink,
+                fontWeight: 700,
+                marginTop: 3,
+                lineHeight: 1.2,
+              }}
+            >
+              {st.title}
+            </div>
+            <div style={{ fontSize: 10.5, color: C.faint, marginTop: 1 }}>
+              {st.actor}
+            </div>
           </div>
         );
       })}
@@ -3773,8 +9864,17 @@ function StepRail({ steps, current }) {
 function RouteResp({ t }) {
   if (t.currentStep >= t.steps.length) {
     return (
-      <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: "#E9F9EF", color: C.ok, fontSize: 14, fontWeight: 700 }}>
-        <CheckCircle2 size={18} /> Процесс завершён — проверки пройдены, оплата проведена
+      <div
+        className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+        style={{
+          background: "#E9F9EF",
+          color: C.ok,
+          fontSize: 14,
+          fontWeight: 700,
+        }}
+      >
+        <CheckCircle2 size={18} /> Процесс завершён — проверки пройдены, оплата
+        проведена
       </div>
     );
   }
@@ -3784,8 +9884,16 @@ function RouteResp({ t }) {
     <div className="flex items-center gap-3 min-w-0">
       <Avatar id={t.assignees[t.currentStep]} size={38} />
       <div className="flex-1 min-w-0">
-        <div style={{ fontSize: 11.5, color: C.faint, fontWeight: 600 }}>Шаг {t.currentStep + 1} из {t.steps.length} · {st.title}</div>
-        <div className="truncate" style={{ fontSize: 14.5, color: C.ink, fontWeight: 700 }}>{who?.name} <span style={{ color: C.sub, fontWeight: 500 }}>— {st.actor}</span></div>
+        <div style={{ fontSize: 11.5, color: C.faint, fontWeight: 600 }}>
+          Шаг {t.currentStep + 1} из {t.steps.length} · {st.title}
+        </div>
+        <div
+          className="truncate"
+          style={{ fontSize: 14.5, color: C.ink, fontWeight: 700 }}
+        >
+          {who?.name}{" "}
+          <span style={{ color: C.sub, fontWeight: 500 }}>— {st.actor}</span>
+        </div>
       </div>
     </div>
   );
@@ -3799,81 +9907,225 @@ function RouteFlow({ t, me, shiftOpen, dispatch, notify }) {
   const [photo, setPhoto] = useState(false);
   const [doc, setDoc] = useState(false);
   const [checked, setChecked] = useState(false);
-  useEffect(() => { setPhoto(false); setDoc(false); setChecked(false); }, [t.id, t.currentStep]);
+  useEffect(() => {
+    setPhoto(false);
+    setDoc(false);
+    setChecked(false);
+  }, [t.id, t.currentStep]);
 
   if (done) {
     return (
-      <div className="rounded-2xl p-5 text-center" style={{ background: "#E9F9EF", border: `1px solid ${C.ok}` }}>
+      <div
+        className="rounded-2xl p-5 text-center"
+        style={{ background: "#E9F9EF", border: `1px solid ${C.ok}` }}
+      >
         <CheckCircle2 size={30} color={C.ok} style={{ margin: "0 auto" }} />
-        <div className="font-bold mt-2" style={{ color: C.ok, fontSize: 16 }}>Процесс завершён</div>
-        <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>Товар принят, накладная оформлена и проверена, счёт-фактура сверена, оплата проведена.</div>
+        <div className="font-bold mt-2" style={{ color: C.ok, fontSize: 16 }}>
+          Процесс завершён
+        </div>
+        <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>
+          Товар принят, накладная оформлена и проверена, счёт-фактура сверена,
+          оплата проведена.
+        </div>
       </div>
     );
   }
 
   const who = userById(t.assignees[idx]);
   const isMine = t.assignees[idx] === me.id;
-  const gateOk = (!step.photo || photo) && (!step.doc || doc) && (!step.check || checked);
+  const gateOk =
+    (!step.photo || photo) && (!step.doc || doc) && (!step.check || checked);
 
   return (
-    <div className="rounded-2xl p-4" style={{ border: `2px solid ${C.brandA}`, background: "#FBFDFF" }}>
-      <div className="flex items-center gap-2 mb-1" style={{ fontSize: 12, color: C.brandA, fontWeight: 800 }}>
+    <div
+      className="rounded-2xl p-4"
+      style={{ border: `2px solid ${C.brandA}`, background: "#FBFDFF" }}
+    >
+      <div
+        className="flex items-center gap-2 mb-1"
+        style={{ fontSize: 12, color: C.brandA, fontWeight: 800 }}
+      >
         <Send size={14} /> ТЕКУЩИЙ ШАГ {idx + 1} / {len}
       </div>
-      <div className="font-bold" style={{ color: C.ink, fontSize: 16 }}>{step.title}</div>
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>Ответственный: <b>{who?.name}</b> · {step.actor}</div>
+      <div className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+        {step.title}
+      </div>
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 12 }}>
+        Ответственный: <b>{who?.name}</b> · {step.actor}
+      </div>
 
       {isMine ? (
         <div className="space-y-2.5">
           {step.photo && (
-            <button onClick={() => { setPhoto(true); notify("Фотоотчёт прикреплён (снимок с камеры)"); }} className="w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 font-semibold"
-              style={photo ? { background: "#E9F9EF", color: C.ok, border: `1px solid ${C.ok}` } : { background: C.line, color: C.ink }}>
-              <span className="inline-flex items-center gap-2"><Camera size={16} /> Фотоотчёт приёмки товара</span>
-              {photo ? <CheckCircle2 size={16} /> : <span style={{ fontSize: 12.5, color: C.faint }}>обязательно</span>}
+            <button
+              onClick={() => {
+                setPhoto(true);
+                notify("Фотоотчёт прикреплён (снимок с камеры)");
+              }}
+              className="w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 font-semibold"
+              style={
+                photo
+                  ? {
+                      background: "#E9F9EF",
+                      color: C.ok,
+                      border: `1px solid ${C.ok}`,
+                    }
+                  : { background: C.line, color: C.ink }
+              }
+            >
+              <span className="inline-flex items-center gap-2">
+                <Camera size={16} /> Фотоотчёт приёмки товара
+              </span>
+              {photo ? (
+                <CheckCircle2 size={16} />
+              ) : (
+                <span style={{ fontSize: 12.5, color: C.faint }}>
+                  обязательно
+                </span>
+              )}
             </button>
           )}
           {step.doc && (
-            <button onClick={() => { setDoc(true); notify(`Документ прикреплён: ${step.docLabel || "документ"}`); }} className="w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 font-semibold"
-              style={doc ? { background: "#E9F9EF", color: C.ok, border: `1px solid ${C.ok}` } : { background: C.line, color: C.ink }}>
-              <span className="inline-flex items-center gap-2"><Paperclip size={16} /> {step.docLabel || "Документ"}</span>
-              {doc ? <CheckCircle2 size={16} /> : <span style={{ fontSize: 12.5, color: C.faint }}>обязательно</span>}
+            <button
+              onClick={() => {
+                setDoc(true);
+                notify(`Документ прикреплён: ${step.docLabel || "документ"}`);
+              }}
+              className="w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 font-semibold"
+              style={
+                doc
+                  ? {
+                      background: "#E9F9EF",
+                      color: C.ok,
+                      border: `1px solid ${C.ok}`,
+                    }
+                  : { background: C.line, color: C.ink }
+              }
+            >
+              <span className="inline-flex items-center gap-2">
+                <Paperclip size={16} /> {step.docLabel || "Документ"}
+              </span>
+              {doc ? (
+                <CheckCircle2 size={16} />
+              ) : (
+                <span style={{ fontSize: 12.5, color: C.faint }}>
+                  обязательно
+                </span>
+              )}
             </button>
           )}
           {step.check && (
-            <label className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 cursor-pointer" style={{ background: C.line, color: C.ink, fontSize: 14 }}>
-              <input type="checkbox" checked={checked} onChange={() => setChecked((v) => !v)} style={{ width: 18, height: 18, accentColor: C.brandA }} />
-              {step.pay ? "Сверил фотоотчёт, накладную и счёт-фактуру — всё верно" : "Проверил — оформлено и оприходовано верно"}
+            <label
+              className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 cursor-pointer"
+              style={{ background: C.line, color: C.ink, fontSize: 14 }}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => setChecked((v) => !v)}
+                style={{ width: 18, height: 18, accentColor: C.brandA }}
+              />
+              {step.pay
+                ? "Сверил фотоотчёт, накладную и счёт-фактуру — всё верно"
+                : "Проверил — оформлено и оприходовано верно"}
             </label>
           )}
           {step.pay && t.amount != null && (
-            <div className="rounded-xl px-3.5 py-2.5" style={{ background: "#F5F0FE", border: "1px solid #E4D9FB", fontSize: 14, color: C.violet, fontWeight: 700 }}>
-              <Wallet size={15} style={{ display: "inline", marginRight: 6 }} /> К оплате: {fmtMoney(t.amount)}
+            <div
+              className="rounded-xl px-3.5 py-2.5"
+              style={{
+                background: "#F5F0FE",
+                border: "1px solid #E4D9FB",
+                fontSize: 14,
+                color: C.violet,
+                fontWeight: 700,
+              }}
+            >
+              <Wallet size={15} style={{ display: "inline", marginRight: 6 }} />{" "}
+              К оплате: {fmtMoney(t.amount)}
             </div>
           )}
 
           {!shiftOpen ? (
-            <div className="flex items-center gap-2 rounded-xl px-3.5 py-2.5" style={{ background: "#FFF7ED", color: C.warn, fontSize: 13.5, fontWeight: 600 }}>
+            <div
+              className="flex items-center gap-2 rounded-xl px-3.5 py-2.5"
+              style={{
+                background: "#FFF7ED",
+                color: C.warn,
+                fontSize: 13.5,
+                fontWeight: 600,
+              }}
+            >
               <Lock size={15} /> Откройте смену, чтобы выполнить шаг.
             </div>
           ) : (
             <div className="flex flex-wrap gap-2 pt-1">
-              <button disabled={!gateOk} onClick={() => dispatch({ type: "ROUTE_ADVANCE", id: t.id, userId: me.id, note: `${step.title}: ${step.action}`, addAtt: (step.photo ? 1 : 0) + (step.doc ? 1 : 0) })}
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: gateOk ? (step.pay ? C.violet : C.brandA) : "#C7CDD6", fontSize: 14.5 }}>
-                {step.pay ? <Wallet size={17} /> : <Send size={17} />} {step.action}
+              <button
+                disabled={!gateOk}
+                onClick={() =>
+                  dispatch({
+                    type: "ROUTE_ADVANCE",
+                    id: t.id,
+                    userId: me.id,
+                    note: `${step.title}: ${step.action}`,
+                    addAtt: (step.photo ? 1 : 0) + (step.doc ? 1 : 0),
+                  })
+                }
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+                style={{
+                  background: gateOk
+                    ? step.pay
+                      ? C.violet
+                      : C.brandA
+                    : "#C7CDD6",
+                  fontSize: 14.5,
+                }}
+              >
+                {step.pay ? <Wallet size={17} /> : <Send size={17} />}{" "}
+                {step.action}
               </button>
               {step.check && idx > 0 && (
-                <button onClick={() => dispatch({ type: "ROUTE_RETURN", id: t.id, userId: me.id, note: `Возврат с шага «${step.title}»` })}
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold" style={{ background: "#FEECEC", color: C.bad, fontSize: 14.5 }}>
+                <button
+                  onClick={() =>
+                    dispatch({
+                      type: "ROUTE_RETURN",
+                      id: t.id,
+                      userId: me.id,
+                      note: `Возврат с шага «${step.title}»`,
+                    })
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold"
+                  style={{
+                    background: "#FEECEC",
+                    color: C.bad,
+                    fontSize: 14.5,
+                  }}
+                >
                   <RotateCcw size={16} /> Вернуть на доработку
                 </button>
               )}
-              {!gateOk && <span style={{ fontSize: 12, color: C.faint, alignSelf: "center" }}>Прикрепите обязательные вложения, чтобы продолжить.</span>}
+              {!gateOk && (
+                <span
+                  style={{ fontSize: 12, color: C.faint, alignSelf: "center" }}
+                >
+                  Прикрепите обязательные вложения, чтобы продолжить.
+                </span>
+              )}
             </div>
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-xl px-3.5 py-2.5" style={{ background: "#EFF4FF", color: C.brandA, fontSize: 13.5, fontWeight: 600 }}>
-          <Clock size={15} /> Ожидается действие: {who?.name} ({step.actor}). Вы — участник процесса и видите его ход.
+        <div
+          className="flex items-center gap-2 rounded-xl px-3.5 py-2.5"
+          style={{
+            background: "#EFF4FF",
+            color: C.brandA,
+            fontSize: 13.5,
+            fontWeight: 600,
+          }}
+        >
+          <Clock size={15} /> Ожидается действие: {who?.name} ({step.actor}). Вы
+          — участник процесса и видите его ход.
         </div>
       )}
     </div>
@@ -3883,75 +10135,212 @@ function RouteFlow({ t, me, shiftOpen, dispatch, notify }) {
 function RouteCreate({ me, s, dispatch, notify }) {
   const [rid, setRid] = useState(s.routes[0]?.id || "");
   const route = s.routes.find((r) => r.id === rid) || s.routes[0];
-  const [branch, setBranch] = useState(String(me.branchId || s.branches[0]?.id || ""));
+  const [branch, setBranch] = useState(
+    String(me.branchId || s.branches[0]?.id || ""),
+  );
   const [supplier, setSupplier] = useState("");
   const [goods, setGoods] = useState("");
   const [amount, setAmount] = useState("");
   const [picks, setPicks] = useState({});
   useEffect(() => {
     const def = {};
-    (route?.steps || []).forEach((st, i) => { def[i] = assignByActor(st.actor, +branch); });
+    (route?.steps || []).forEach((st, i) => {
+      def[i] = assignByActor(st.actor, +branch);
+    });
     setPicks(def);
   }, [rid, branch]);
 
   const create = () => {
-    if (!route) { notify("Нет шаблонов маршрутов"); return; }
+    if (!route) {
+      notify("Нет шаблонов маршрутов");
+      return;
+    }
     const steps = route.steps.map((st) => ({ ...st }));
-    if (steps.length === 0) { notify("В маршруте нет шагов"); return; }
-    const assignees = steps.map((st, i) => picks[i] || assignByActor(st.actor, +branch));
+    if (steps.length === 0) {
+      notify("В маршруте нет шагов");
+      return;
+    }
+    const assignees = steps.map(
+      (st, i) => picks[i] || assignByActor(st.actor, +branch),
+    );
     const now = Date.now();
     const task = {
       id: "t" + uid().slice(0, 6),
       title: `Приёмка: ${goods.trim() || "товар"} от ${supplier.trim() || "поставщика"}`,
       description: `Поставщик: ${supplier.trim() || "—"}. Принятый товар: ${goods.trim() || "—"}.`,
-      branchId: +branch, departmentId: deptForCategory(route.category), cat: route.category, pr: "Обычный",
-      amount: amount ? +amount : null, overBudget: false,
-      createdBy: me.id, createdAt: now, slaDeadline: now + slaFor("Обычный") * H,
-      attachments: 0, favorite: false, comments: [],
-      routeId: route.id, routeName: route.name, steps, assignees, currentStep: 0, phase: 1,
-      executorId: assignees[0], controllerId: assignees[assignees.length - 1],
+      branchId: +branch,
+      departmentId: deptForCategory(route.category),
+      cat: route.category,
+      pr: "Обычный",
+      amount: amount ? +amount : null,
+      overBudget: false,
+      createdBy: me.id,
+      createdAt: now,
+      slaDeadline: now + slaFor("Обычный") * H,
+      attachments: 0,
+      favorite: false,
+      comments: [],
+      routeId: route.id,
+      routeName: route.name,
+      steps,
+      assignees,
+      currentStep: 0,
+      phase: 1,
+      executorId: assignees[0],
+      controllerId: assignees[assignees.length - 1],
     };
     dispatch({ type: "CREATE_TASK", task });
     notify("Процесс запущен — задача создана");
-    setSupplier(""); setGoods(""); setAmount("");
+    setSupplier("");
+    setGoods("");
+    setAmount("");
   };
 
-  const userOpts = s.users.filter((u) => u.active !== false).map((u) => ({ value: u.id, label: `${u.name} · ${u.pos}` }));
+  const userOpts = s.users
+    .filter((u) => u.active !== false)
+    .map((u) => ({ value: u.id, label: `${u.name} · ${u.pos}` }));
   const inp = { border: `1px solid ${C.border}`, fontSize: 14.5, color: C.ink };
 
   return (
-    <div className="rounded-2xl bg-white p-6" style={{ border: `1px solid ${C.border}` }}>
-      <h2 className="font-extrabold mb-1" style={{ color: C.ink, fontSize: 19 }}>{tr("Запустить процесс по шаблону")}</h2>
-      <p style={{ fontSize: 14, color: C.sub, marginBottom: 16 }}>Задача пройдёт по шагам маршрута: каждый участник выполняет свой шаг строго по очереди, с обязательными вложениями.</p>
+    <div
+      className="rounded-2xl bg-white p-6"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <h2
+        className="font-extrabold mb-1"
+        style={{ color: C.ink, fontSize: 19 }}
+      >
+        {tr("Запустить процесс по шаблону")}
+      </h2>
+      <p style={{ fontSize: 14, color: C.sub, marginBottom: 16 }}>
+        Задача пройдёт по шагам маршрута: каждый участник выполняет свой шаг
+        строго по очереди, с обязательными вложениями.
+      </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Field label="Шаблон процесса"><Select value={rid} onChange={setRid} options={s.routes.map((r) => ({ value: r.id, label: r.name }))} /></Field>
-        <Field label="Филиал"><Select value={branch} onChange={setBranch} options={s.branches.map((b) => ({ value: b.id, label: b.name }))} /></Field>
-        <Field label="Поставщик"><input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="ООО «Поставщик»" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
-        <Field label="Что приняли"><input value={goods} onChange={(e) => setGoods(e.target.value)} placeholder="Продукты, упаковка…" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
-        <Field label="Сумма к оплате, сум"><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="w-full rounded-xl px-3 py-2.5 focus:outline-none" style={inp} /></Field>
+        <Field label="Шаблон процесса">
+          <Select
+            value={rid}
+            onChange={setRid}
+            options={s.routes.map((r) => ({ value: r.id, label: r.name }))}
+          />
+        </Field>
+        <Field label="Филиал">
+          <Select
+            value={branch}
+            onChange={setBranch}
+            options={s.branches.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        </Field>
+        <Field label="Поставщик">
+          <input
+            value={supplier}
+            onChange={(e) => setSupplier(e.target.value)}
+            placeholder="ООО «Поставщик»"
+            className="w-full rounded-xl px-3 py-2.5 focus:outline-none"
+            style={inp}
+          />
+        </Field>
+        <Field label="Что приняли">
+          <input
+            value={goods}
+            onChange={(e) => setGoods(e.target.value)}
+            placeholder="Продукты, упаковка…"
+            className="w-full rounded-xl px-3 py-2.5 focus:outline-none"
+            style={inp}
+          />
+        </Field>
+        <Field label="Сумма к оплате, сум">
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            className="w-full rounded-xl px-3 py-2.5 focus:outline-none"
+            style={inp}
+          />
+        </Field>
       </div>
 
-      <div className="mt-4 rounded-xl p-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-        <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 700, marginBottom: 8 }}>УЧАСТНИКИ ШАГОВ (можно переназначить)</div>
+      <div
+        className="mt-4 rounded-xl p-3"
+        style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+      >
+        <div
+          style={{
+            fontSize: 12.5,
+            color: C.faint,
+            fontWeight: 700,
+            marginBottom: 8,
+          }}
+        >
+          УЧАСТНИКИ ШАГОВ (можно переназначить)
+        </div>
         <div className="space-y-2">
           {(route?.steps || []).map((st, i) => (
             <div key={i} className="flex items-center gap-2 flex-wrap">
-              <span style={{ width: 18, height: 18, borderRadius: 99, background: C.brandA, color: "#fff", fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>{i + 1}</span>
-              <span style={{ fontSize: 13, color: C.ink, fontWeight: 600, minWidth: 150 }}>{st.title}</span>
+              <span
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 99,
+                  background: C.brandA,
+                  color: "#fff",
+                  fontSize: 11,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 800,
+                }}
+              >
+                {i + 1}
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  color: C.ink,
+                  fontWeight: 600,
+                  minWidth: 150,
+                }}
+              >
+                {st.title}
+              </span>
               <span style={{ fontSize: 11.5, color: C.faint }}>{st.actor}</span>
-              {st.photo && <Badge color={C.ok} bg="#E9F9EF">📷 фото</Badge>}
-              {st.doc && <Badge color={C.violet} bg="#F5F0FE">📄 {st.docLabel || "документ"}</Badge>}
-              {st.pay && <Badge color={C.violet} bg="#F5F0FE">💳 оплата</Badge>}
+              {st.photo && (
+                <Badge color={C.ok} bg="#E9F9EF">
+                  📷 фото
+                </Badge>
+              )}
+              {st.doc && (
+                <Badge color={C.violet} bg="#F5F0FE">
+                  📄 {st.docLabel || "документ"}
+                </Badge>
+              )}
+              {st.pay && (
+                <Badge color={C.violet} bg="#F5F0FE">
+                  💳 оплата
+                </Badge>
+              )}
               <div style={{ minWidth: 220, flex: 1 }}>
-                <Select value={picks[i] || ""} onChange={(v) => setPicks({ ...picks, [i]: v })} options={userOpts} />
+                <Select
+                  value={picks[i] || ""}
+                  onChange={(v) => setPicks({ ...picks, [i]: v })}
+                  options={userOpts}
+                />
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <button onClick={create} className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-bold text-white" style={{ background: `linear-gradient(90deg, ${C.violet}, ${C.brandA})`, fontSize: 15 }}>
+      <button
+        onClick={create}
+        className="mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-3 font-bold text-white"
+        style={{
+          background: `linear-gradient(90deg, ${C.violet}, ${C.brandA})`,
+          fontSize: 15,
+        }}
+      >
         <Send size={18} /> {tr("Запустить процесс")}
       </button>
     </div>
@@ -3960,22 +10349,54 @@ function RouteCreate({ me, s, dispatch, notify }) {
 
 function CreatePage({ me, s, dispatch, notify }) {
   const [mode, setMode] = useState("simple");
-  const tabs = [["simple", "Простая заявка", Sparkles], ["process", "По шаблону", ListChecks]];
+  const tabs = [
+    ["simple", "Простая заявка", Sparkles],
+    ["process", "По шаблону", ListChecks],
+  ];
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <div className="rounded-2xl bg-white p-2 flex gap-2" style={{ border: `1px solid ${C.border}` }}>
+      <div
+        className="rounded-2xl bg-white p-2 flex gap-2"
+        style={{ border: `1px solid ${C.border}` }}
+      >
         {tabs.map(([k, label, Icon]) => {
           const active = mode === k;
           return (
-            <button key={k} onClick={() => setMode(k)} className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 font-bold"
-              style={{ background: active ? C.brandA : "transparent", color: active ? "#fff" : C.ink, fontSize: 13.5, lineHeight: 1.15, textAlign: "center" }}>
-              <Icon size={16} color={active ? "#fff" : C.sub} className="shrink-0" /> <span style={{ overflowWrap: "break-word" }}>{tr(label)}</span>
+            <button
+              key={k}
+              onClick={() => setMode(k)}
+              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 font-bold"
+              style={{
+                background: active ? C.brandA : "transparent",
+                color: active ? "#fff" : C.ink,
+                fontSize: 13.5,
+                lineHeight: 1.15,
+                textAlign: "center",
+              }}
+            >
+              <Icon
+                size={16}
+                color={active ? "#fff" : C.sub}
+                className="shrink-0"
+              />{" "}
+              <span style={{ overflowWrap: "break-word" }}>{tr(label)}</span>
             </button>
           );
         })}
       </div>
-      {mode === "simple" && <CreateTask me={me} tasks={s.tasks} now={Date.now()} dispatch={dispatch} notify={notify} voiceEnabled={s.settings?.voiceInput !== false} />}
-      {mode === "process" && <RouteCreate me={me} s={s} dispatch={dispatch} notify={notify} />}
+      {mode === "simple" && (
+        <CreateTask
+          me={me}
+          tasks={s.tasks}
+          now={Date.now()}
+          dispatch={dispatch}
+          notify={notify}
+          voiceEnabled={s.settings?.voiceInput !== false}
+        />
+      )}
+      {mode === "process" && (
+        <RouteCreate me={me} s={s} dispatch={dispatch} notify={notify} />
+      )}
     </div>
   );
 }
@@ -3987,38 +10408,161 @@ function AdRoute({ route, s, dispatch, notify }) {
   const [photo, setPhoto] = useState(false);
   const [doc, setDoc] = useState(false);
   const addStep = () => {
-    if (!title.trim()) { notify("Укажите название шага"); return; }
-    const steps = [...route.steps, { title: title.trim(), actor, action: action.trim() || "Выполнил шаг", photo, doc, check: !photo && !doc }];
+    if (!title.trim()) {
+      notify("Укажите название шага");
+      return;
+    }
+    const steps = [
+      ...route.steps,
+      {
+        title: title.trim(),
+        actor,
+        action: action.trim() || "Выполнил шаг",
+        photo,
+        doc,
+        check: !photo && !doc,
+      },
+    ];
     dispatch({ type: "UPDATE_ROUTE", id: route.id, patch: { steps } });
-    notify("Шаг добавлен"); setTitle(""); setAction(""); setPhoto(false); setDoc(false);
+    notify("Шаг добавлен");
+    setTitle("");
+    setAction("");
+    setPhoto(false);
+    setDoc(false);
   };
-  const delStep = (i) => dispatch({ type: "UPDATE_ROUTE", id: route.id, patch: { steps: route.steps.filter((_, j) => j !== i) } });
+  const delStep = (i) =>
+    dispatch({
+      type: "UPDATE_ROUTE",
+      id: route.id,
+      patch: { steps: route.steps.filter((_, j) => j !== i) },
+    });
   return (
-    <div className="rounded-xl p-3" style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}>
-      <div className="flex items-center gap-2 mb-2"><ListChecks size={16} color={C.brandA} /><span style={{ fontWeight: 700, color: C.ink }}>{route.name}</span><Badge>{route.category}</Badge></div>
+    <div
+      className="rounded-xl p-3"
+      style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <ListChecks size={16} color={C.brandA} />
+        <span style={{ fontWeight: 700, color: C.ink }}>{route.name}</span>
+        <Badge>{route.category}</Badge>
+      </div>
       <div className="space-y-1.5 mb-3">
         {route.steps.map((st, i) => (
-          <div key={i} className="flex items-center gap-2 flex-wrap rounded-lg px-3 py-2" style={{ background: "#fff", border: `1px solid ${C.line}` }}>
-            <span style={{ width: 18, height: 18, borderRadius: 99, background: C.brandA, color: "#fff", fontSize: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800 }}>{i + 1}</span>
-            <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>{st.title}</span>
+          <div
+            key={i}
+            className="flex items-center gap-2 flex-wrap rounded-lg px-3 py-2"
+            style={{ background: "#fff", border: `1px solid ${C.line}` }}
+          >
+            <span
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 99,
+                background: C.brandA,
+                color: "#fff",
+                fontSize: 11,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+              }}
+            >
+              {i + 1}
+            </span>
+            <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+              {st.title}
+            </span>
             <span style={{ fontSize: 11.5, color: C.faint }}>· {st.actor}</span>
-            {st.photo && <Badge color={C.ok} bg="#E9F9EF">📷</Badge>}
-            {st.doc && <Badge color={C.violet} bg="#F5F0FE">📄</Badge>}
-            {st.check && <Badge color={C.brandA} bg="#EFF4FF">✔</Badge>}
-            {st.pay && <Badge color={C.violet} bg="#F5F0FE">💳</Badge>}
-            <button onClick={() => delStep(i)} className="ml-auto" title="Удалить шаг"><X size={14} color={C.faint} /></button>
+            {st.photo && (
+              <Badge color={C.ok} bg="#E9F9EF">
+                📷
+              </Badge>
+            )}
+            {st.doc && (
+              <Badge color={C.violet} bg="#F5F0FE">
+                📄
+              </Badge>
+            )}
+            {st.check && (
+              <Badge color={C.brandA} bg="#EFF4FF">
+                ✔
+              </Badge>
+            )}
+            {st.pay && (
+              <Badge color={C.violet} bg="#F5F0FE">
+                💳
+              </Badge>
+            )}
+            <button
+              onClick={() => delStep(i)}
+              className="ml-auto"
+              title="Удалить шаг"
+            >
+              <X size={14} color={C.faint} />
+            </button>
           </div>
         ))}
-        {route.steps.length === 0 && <div style={{ fontSize: 12.5, color: C.faint }}>Шагов пока нет — добавьте ниже.</div>}
+        {route.steps.length === 0 && (
+          <div style={{ fontSize: 12.5, color: C.faint }}>
+            Шагов пока нет — добавьте ниже.
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
-        <AdInput label="Название шага" value={title} onChange={setTitle} placeholder="Проверка договора" />
-        <Field label="Ответственный (должность)"><Select value={actor} onChange={setActor} options={s.positions.map((p) => ({ value: p.title, label: p.title }))} /></Field>
-        <AdInput label="Действие (кнопка)" value={action} onChange={setAction} placeholder="Проверил и согласовал" />
+        <AdInput
+          label="Название шага"
+          value={title}
+          onChange={setTitle}
+          placeholder="Проверка договора"
+        />
+        <Field label="Ответственный (должность)">
+          <Select
+            value={actor}
+            onChange={setActor}
+            options={s.positions.map((p) => ({
+              value: p.title,
+              label: p.title,
+            }))}
+          />
+        </Field>
+        <AdInput
+          label="Действие (кнопка)"
+          value={action}
+          onChange={setAction}
+          placeholder="Проверил и согласовал"
+        />
         <div className="flex items-center gap-3 pb-1">
-          <label className="flex items-center gap-1.5 cursor-pointer" style={{ fontSize: 13, color: C.ink }}><input type="checkbox" checked={photo} onChange={() => setPhoto((v) => !v)} style={{ width: 16, height: 16, accentColor: C.brandA }} /> фото</label>
-          <label className="flex items-center gap-1.5 cursor-pointer" style={{ fontSize: 13, color: C.ink }}><input type="checkbox" checked={doc} onChange={() => setDoc((v) => !v)} style={{ width: 16, height: 16, accentColor: C.brandA }} /> документ</label>
-          <button onClick={addStep} className="ml-auto rounded-lg px-3 py-2 font-bold text-white" style={{ background: C.brandA, fontSize: 13.5 }}>+ шаг</button>
+          <label
+            className="flex items-center gap-1.5 cursor-pointer"
+            style={{ fontSize: 13, color: C.ink }}
+          >
+            <input
+              type="checkbox"
+              checked={photo}
+              onChange={() => setPhoto((v) => !v)}
+              style={{ width: 16, height: 16, accentColor: C.brandA }}
+            />{" "}
+            фото
+          </label>
+          <label
+            className="flex items-center gap-1.5 cursor-pointer"
+            style={{ fontSize: 13, color: C.ink }}
+          >
+            <input
+              type="checkbox"
+              checked={doc}
+              onChange={() => setDoc((v) => !v)}
+              style={{ width: 16, height: 16, accentColor: C.brandA }}
+            />{" "}
+            документ
+          </label>
+          <button
+            onClick={addStep}
+            className="ml-auto rounded-lg px-3 py-2 font-bold text-white"
+            style={{ background: C.brandA, fontSize: 13.5 }}
+          >
+            + шаг
+          </button>
         </div>
       </div>
     </div>
@@ -4029,22 +10573,65 @@ function AdminRoutes({ s, dispatch, notify }) {
   const [name, setName] = useState("");
   const [cat, setCat] = useState(Object.keys(s.catDept)[0] || "Прочее");
   const addRoute = () => {
-    if (!name.trim()) { notify("Укажите название маршрута"); return; }
-    dispatch({ type: "ADD_ROUTE", route: { id: "r" + uid().slice(0, 4), name: name.trim(), category: cat, steps: [] } });
-    notify("Маршрут добавлен"); setName("");
+    if (!name.trim()) {
+      notify("Укажите название маршрута");
+      return;
+    }
+    dispatch({
+      type: "ADD_ROUTE",
+      route: {
+        id: "r" + uid().slice(0, 4),
+        name: name.trim(),
+        category: cat,
+        steps: [],
+      },
+    });
+    notify("Маршрут добавлен");
+    setName("");
   };
   return (
     <div className="space-y-5">
-      <AdCard title="Шаблоны процессов (маршруты)" desc="Маршрут — последовательность шагов с ответственными. Задача проходит шаги строго по очереди; на каждом шаге можно требовать фото и/или документ.">
+      <AdCard
+        title="Шаблоны процессов (маршруты)"
+        desc="Маршрут — последовательность шагов с ответственными. Задача проходит шаги строго по очереди; на каждом шаге можно требовать фото и/или документ."
+      >
         <div className="space-y-4">
-          {s.routes.map((r) => <AdRoute key={r.id} route={r} s={s} dispatch={dispatch} notify={notify} />)}
+          {s.routes.map((r) => (
+            <AdRoute
+              key={r.id}
+              route={r}
+              s={s}
+              dispatch={dispatch}
+              notify={notify}
+            />
+          ))}
         </div>
       </AdCard>
       <AdCard title="Добавить маршрут">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-          <AdInput label="Название" value={name} onChange={setName} placeholder="Согласование договора" />
-          <Field label="Категория"><Select value={cat} onChange={setCat} options={Object.keys(s.catDept).map((c) => ({ value: c, label: c }))} /></Field>
-          <button onClick={addRoute} className="rounded-xl px-4 py-2.5 font-bold text-white" style={{ background: C.brandA, fontSize: 14.5 }}>Добавить маршрут</button>
+          <AdInput
+            label="Название"
+            value={name}
+            onChange={setName}
+            placeholder="Согласование договора"
+          />
+          <Field label="Категория">
+            <Select
+              value={cat}
+              onChange={setCat}
+              options={Object.keys(s.catDept).map((c) => ({
+                value: c,
+                label: c,
+              }))}
+            />
+          </Field>
+          <button
+            onClick={addRoute}
+            className="rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{ background: C.brandA, fontSize: 14.5 }}
+          >
+            Добавить маршрут
+          </button>
         </div>
       </AdCard>
     </div>
