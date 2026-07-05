@@ -8895,6 +8895,7 @@ function IikoStaffPreview() {
     error: "",
     sample: "",
     rawFirst: "",
+    deptRawFirst: "",
   });
   const load = async () => {
     setSt((p) => ({ ...p, status: "loading", error: "" }));
@@ -8908,6 +8909,7 @@ function IikoStaffPreview() {
         error: "",
         sample: data.sample || "",
         rawFirst: data.rawFirst || "",
+        deptRawFirst: data.deptRawFirst || "",
       });
     } catch (e) {
       setSt({
@@ -8975,6 +8977,9 @@ function IikoStaffPreview() {
                 }}
               >
                 {st.rawFirst}
+                {st.deptRawFirst
+                  ? "\n\n--- Справочник подразделений ---\n" + st.deptRawFirst
+                  : ""}
               </pre>
             </details>
           ) : null}
@@ -9014,7 +9019,9 @@ function IikoStaffPreview() {
                         {e.position || "—"}
                       </td>
                       <td className="py-2 pr-2" style={{ color: C.sub }}>
-                        {(e.departmentCodes || []).join(", ") || "—"}
+                        {(e.departmentNames || e.departmentCodes || []).join(
+                          ", ",
+                        ) || "—"}
                       </td>
                       <td className="py-2 text-center">
                         <span
