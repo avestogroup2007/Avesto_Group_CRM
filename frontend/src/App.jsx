@@ -8894,6 +8894,7 @@ function IikoStaffPreview() {
     count: 0,
     error: "",
     sample: "",
+    rawFirst: "",
   });
   const load = async () => {
     setSt((p) => ({ ...p, status: "loading", error: "" }));
@@ -8906,6 +8907,7 @@ function IikoStaffPreview() {
         count: data.count ?? employees.length,
         error: "",
         sample: data.sample || "",
+        rawFirst: data.rawFirst || "",
       });
     } catch (e) {
       setSt({
@@ -9021,6 +9023,34 @@ function IikoStaffPreview() {
               </pre>
             </div>
           )}
+          {st.rawFirst ? (
+            <details style={{ marginTop: 14 }}>
+              <summary
+                style={{
+                  fontSize: 12.5,
+                  color: C.sub,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Структура ответа iiko (для отладки) — раскрыть и прислать
+              </summary>
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  background: "#F7F4EF",
+                  borderRadius: 10,
+                  border: `1px solid ${C.line}`,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: 11,
+                }}
+              >
+                {st.rawFirst}
+              </pre>
+            </details>
+          ) : null}
         </div>
       )}
     </AdCard>
