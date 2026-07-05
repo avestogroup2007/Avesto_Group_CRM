@@ -118,6 +118,114 @@ async function runOlap(key, { from, to, departments, groupByRowFields }) {
   return Array.isArray(json.data) ? json.data : [];
 }
 
+// ── Сотрудники ────────────────────────────────────────────────────────────
+// iikoServer отдаёт список сотрудников по /resto/api/employees. Ответ может
+// прийти как XML (по умолчанию) или JSON — обрабатываем оба варианта и
+// нормализуем к единому виду для фронтенда.
+
+function decodeXml(s) {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// Разбор плоского XML-списка сотрудников (best-effort: точные поля уточним,
+// когда увидим реальный ответ сервера).
+function parseEmployeesXml(xml) {
+  const blocks = xml.match(/<employee\b[^>]*>[\s\S]*?<\/employee>/g) || [];
+  return blocks.map((b) => {
+    const one = (tag) => {
+      const m = b.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+      return m ? decodeXml(m[1].trim()) : undefined;
+    };
+    const many = (tag) => {
+      const out = [];
+      const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "g");
+      let m;
+      while ((m = re.exec(b))) out.push(decodeXml(m[1].trim()));
+      return out;
+    };
+    return {
+      id: one("id"),
+      code: one("code"),
+      firstName: one("firstName"),
+      middleName: one("middleName"),
+      lastName: one("lastName"),
+      name: one("name"),
+      displayName: one("displayName"),
+      mainRoleCode: one("mainRoleCode"),
+      roleCodes: many("roleCode"),
+      departmentCodes: many("departmentCode"),
+      deleted: one("deleted"),
+      phone: one("phone"),
+      cellPhone: one("cellPhone"),
+      email: one("email"),
+    };
+  });
+}
+
+// Приведение одного сотрудника (из XML или JSON) к единому виду.
+function mapEmployee(e) {
+  const fio = [e.lastName, e.firstName, e.middleName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const name = (e.displayName || e.name || fio || "").trim();
+  const asArray = (v) => (v == null ? [] : [].concat(v).filter(Boolean));
+  return {
+    iikoId: e.id || e.iikoId || "",
+    code: e.code || "",
+    name,
+    // Должность/роль в iiko — уточним отображаемое имя роли на следующем шаге.
+    position: e.mainRoleCode || e.mainRole || "",
+    roleCodes: asArray(e.roleCodes),
+    departmentCodes: asArray(e.departmentCodes),
+    deleted: String(e.deleted) === "true",
+    phone: e.cellPhone || e.phone || "",
+    email: e.email || "",
+  };
+}
+
+function normalizeEmployees(text) {
+  const trimmed = (text || "").trim();
+  let raw = [];
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    const json = JSON.parse(trimmed);
+    raw = Array.isArray(json) ? json : json.employees || json.items || [];
+  } else {
+    raw = parseEmployeesXml(trimmed);
+  }
+  return raw.map(mapEmployee).filter((e) => e.iikoId || e.name);
+}
+
+// Список сотрудников из iiko (одна сессия). Возвращает нормализованный массив.
+// Если разобрать не удалось (пустой список) — отдаём короткий сырой образец,
+// чтобы уточнить формат ответа, как делали с OLAP.
+export async function listEmployees() {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await auth();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/employees?key=${encodeURIComponent(key)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`iiko employees → ${res.status} ${text}`.trim());
+    }
+    const employees = normalizeEmployees(text);
+    const result = { employees, count: employees.length };
+    if (!employees.length) result.sample = text.slice(0, 600);
+    return result;
+  } finally {
+    await logout(key);
+  }
+}
+
 // Полный отчёт продаж за период (одна сессия iiko, несколько OLAP-срезов):
 //  - byDay:   по дню и филиалу (выручка/график/KPI);
 //  - byPay:   по типам оплат (вкладка «Оплаты»);

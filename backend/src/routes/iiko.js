@@ -7,6 +7,7 @@ import {
   iikoConfigured,
   IikoNotConfiguredError,
   salesReport,
+  listEmployees,
 } from "../services/iikoServer.js";
 
 const r = Router();
@@ -45,6 +46,16 @@ r.post(
     }
     const departments = department ? [department] : undefined;
     res.json(await salesReport({ from, to, departments }));
+  })
+);
+
+// Список сотрудников из iiko (для импорта в справочник CRM). Пока только
+// чтение/предпросмотр: { employees: [...], count }. Возвращает ФИО, должность,
+// подразделения и признак «уволен» — источник правды по кадрам это iiko.
+r.get(
+  "/employees",
+  handleIiko(async (req, res) => {
+    res.json(await listEmployees());
   })
 );
 
