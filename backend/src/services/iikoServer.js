@@ -158,8 +158,11 @@ function parseEmployeesXml(xml) {
       name: one("name"),
       displayName: one("displayName"),
       mainRoleCode: one("mainRoleCode"),
-      roleCodes: many("roleCode"),
-      departmentCodes: many("departmentCode"),
+      // iiko сериализует списки как повторяющиеся теги по имени поля
+      // (<roleCodes>КОД</roleCodes>, <departmentCodes>КОД</departmentCodes>),
+      // а не как обёртку с вложенными элементами.
+      roleCodes: many("roleCodes"),
+      departmentCodes: many("departmentCodes"),
       deleted: one("deleted"),
       phone: one("phone"),
       cellPhone: one("cellPhone"),
@@ -175,15 +178,23 @@ function mapEmployee(e) {
     .join(" ")
     .trim();
   const name = (e.displayName || e.name || fio || "").trim();
-  const asArray = (v) => (v == null ? [] : [].concat(v).filter(Boolean));
+  // Значения списков очищаем от возможных вложенных тегов (на случай обёрток).
+  const clean = (v) =>
+    (v == null ? [] : [].concat(v))
+      .map((x) =>
+        String(x)
+          .replace(/<[^>]*>/g, "")
+          .trim()
+      )
+      .filter(Boolean);
   return {
     iikoId: e.id || e.iikoId || "",
     code: e.code || "",
     name,
     // Должность/роль в iiko — уточним отображаемое имя роли на следующем шаге.
     position: e.mainRoleCode || e.mainRole || "",
-    roleCodes: asArray(e.roleCodes),
-    departmentCodes: asArray(e.departmentCodes),
+    roleCodes: clean(e.roleCodes),
+    departmentCodes: clean(e.departmentCodes),
     deleted: String(e.deleted) === "true",
     phone: e.cellPhone || e.phone || "",
     email: e.email || "",

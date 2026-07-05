@@ -8950,6 +8950,34 @@ function IikoStaffPreview() {
           <p style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>
             Найдено сотрудников: <b>{st.count}</b>
           </p>
+          {st.rawFirst ? (
+            <details style={{ marginBottom: 12 }}>
+              <summary
+                style={{
+                  fontSize: 12.5,
+                  color: C.sub,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Структура ответа iiko (для отладки) — раскрыть и прислать
+              </summary>
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  background: "#F7F4EF",
+                  borderRadius: 10,
+                  border: `1px solid ${C.line}`,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: 11,
+                }}
+              >
+                {st.rawFirst}
+              </pre>
+            </details>
+          ) : null}
           {st.count > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full" style={{ fontSize: 13 }}>
@@ -9023,34 +9051,6 @@ function IikoStaffPreview() {
               </pre>
             </div>
           )}
-          {st.rawFirst ? (
-            <details style={{ marginTop: 14 }}>
-              <summary
-                style={{
-                  fontSize: 12.5,
-                  color: C.sub,
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
-              >
-                Структура ответа iiko (для отладки) — раскрыть и прислать
-              </summary>
-              <pre
-                style={{
-                  marginTop: 8,
-                  padding: 10,
-                  background: "#F7F4EF",
-                  borderRadius: 10,
-                  border: `1px solid ${C.line}`,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  fontSize: 11,
-                }}
-              >
-                {st.rawFirst}
-              </pre>
-            </details>
-          ) : null}
         </div>
       )}
     </AdCard>
