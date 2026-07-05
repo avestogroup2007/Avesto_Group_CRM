@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
-import { apiPost } from "./api.js";
+import { apiGet, apiPost } from "./api.js";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -8884,6 +8884,149 @@ function AdCard({ title, children, desc }) {
   );
 }
 
+// Предпросмотр списка сотрудников из iiko (шаг 1: только чтение). iiko —
+// источник правды по кадрам; на следующем шаге отсюда будем импортировать
+// учётные записи, назначать права и авто-блокировать уволенных.
+function IikoStaffPreview() {
+  const [st, setSt] = useState({
+    status: "idle",
+    employees: [],
+    count: 0,
+    error: "",
+    sample: "",
+  });
+  const load = async () => {
+    setSt((p) => ({ ...p, status: "loading", error: "" }));
+    try {
+      const data = await apiGet("/api/iiko/employees");
+      const employees = data.employees || [];
+      setSt({
+        status: "ok",
+        employees,
+        count: data.count ?? employees.length,
+        error: "",
+        sample: data.sample || "",
+      });
+    } catch (e) {
+      setSt({
+        status: "error",
+        employees: [],
+        count: 0,
+        error: e.message || "Ошибка запроса",
+        sample: "",
+      });
+    }
+  };
+  const loading = st.status === "loading";
+  return (
+    <AdCard
+      title="Сотрудники из iiko"
+      desc="Реальный список сотрудников из iiko — источник правды по кадрам. Пока это предпросмотр; на следующем шаге добавим импорт в учётные записи, настройку прав доступа и авто-блокировку уволенных."
+    >
+      <button
+        onClick={load}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+        style={{
+          background: C.brandA,
+          fontSize: 14.5,
+          opacity: loading ? 0.6 : 1,
+        }}
+      >
+        <Users size={17} />
+        {loading ? "Загрузка…" : "Загрузить из iiko"}
+      </button>
+
+      {st.status === "error" && (
+        <p style={{ color: "#B23", fontSize: 13, marginTop: 12 }}>
+          Не удалось получить сотрудников: {st.error}
+        </p>
+      )}
+
+      {st.status === "ok" && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>
+            Найдено сотрудников: <b>{st.count}</b>
+          </p>
+          {st.count > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full" style={{ fontSize: 13 }}>
+                <thead>
+                  <tr style={{ color: C.faint, textAlign: "left" }}>
+                    <th className="pb-2 font-semibold">ФИО</th>
+                    <th className="pb-2 font-semibold">Должность (iiko)</th>
+                    <th className="pb-2 font-semibold">Подразделения</th>
+                    <th className="pb-2 font-semibold text-center">Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {st.employees.map((e, i) => (
+                    <tr
+                      key={e.iikoId || i}
+                      style={{
+                        borderTop: `1px solid ${C.line}`,
+                        opacity: e.deleted ? 0.5 : 1,
+                      }}
+                    >
+                      <td
+                        className="py-2 pr-2"
+                        style={{ color: C.ink, fontWeight: 600 }}
+                      >
+                        {e.name || "—"}
+                        {e.code ? (
+                          <span style={{ color: C.faint, fontWeight: 400 }}>
+                            {" "}
+                            · таб. {e.code}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="py-2 pr-2" style={{ color: C.sub }}>
+                        {e.position || "—"}
+                      </td>
+                      <td className="py-2 pr-2" style={{ color: C.sub }}>
+                        {(e.departmentCodes || []).join(", ") || "—"}
+                      </td>
+                      <td className="py-2 text-center">
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: e.deleted ? "#B23" : "#2C7",
+                          }}
+                        >
+                          {e.deleted ? "Уволен" : "Активен"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.sub }}>
+              iiko вернул пустой список. Образец ответа (для уточнения формата):
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  background: "#F7F4EF",
+                  borderRadius: 10,
+                  border: `1px solid ${C.line}`,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: 11.5,
+                }}
+              >
+                {st.sample || "(пусто)"}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </AdCard>
+  );
+}
+
 function AdminStaff({ s, dispatch, notify }) {
   const blank = {
     name: "",
@@ -9001,6 +9144,8 @@ function AdminStaff({ s, dispatch, notify }) {
           <PlusCircle size={17} /> {tr("Добавить сотрудника")}
         </button>
       </AdCard>
+
+      <IikoStaffPreview />
 
       <AdCard
         title={`Сотрудники (${s.users.length})`}
