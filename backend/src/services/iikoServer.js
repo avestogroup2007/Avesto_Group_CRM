@@ -223,6 +223,10 @@ export async function listEmployees() {
     // Пока отлаживаем формат — если разобрать не удалось, отдаём образец
     // сырого ответа побольше, чтобы увидеть реальные названия полей.
     if (!employees.length) result.sample = text.slice(0, 1500);
+    // Структура одного сотрудника (сырой XML) — чтобы уточнить реальные теги
+    // подразделения/должности. Пока идёт настройка разбора.
+    const firstMatch = text.match(/<employee\b[^>]*>[\s\S]*?<\/employee>/);
+    result.rawFirst = firstMatch ? firstMatch[0].slice(0, 1800) : "";
     return result;
   } finally {
     await logout(key);
