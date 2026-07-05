@@ -209,9 +209,10 @@ export async function listEmployees() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await auth();
   try {
+    // Важно: НЕ просим application/json — этот эндпоинт при JSON отдаёт пустые
+    // объекты ([{},{}...]). Реальные данные приходят в XML, который и разбираем.
     const res = await fetch(
-      `${BASE}/resto/api/employees?key=${encodeURIComponent(key)}`,
-      { headers: { Accept: "application/json" } }
+      `${BASE}/resto/api/employees?key=${encodeURIComponent(key)}`
     );
     const text = await res.text();
     if (!res.ok) {
@@ -219,7 +220,9 @@ export async function listEmployees() {
     }
     const employees = normalizeEmployees(text);
     const result = { employees, count: employees.length };
-    if (!employees.length) result.sample = text.slice(0, 600);
+    // Пока отлаживаем формат — если разобрать не удалось, отдаём образец
+    // сырого ответа побольше, чтобы увидеть реальные названия полей.
+    if (!employees.length) result.sample = text.slice(0, 1500);
     return result;
   } finally {
     await logout(key);
