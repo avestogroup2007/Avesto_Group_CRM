@@ -213,6 +213,66 @@ function normalizeEmployees(text) {
   return raw.map(mapEmployee).filter((e) => e.iikoId || e.name);
 }
 
+// Справочник подразделений iiko: { code -> name }. Нужен, чтобы показывать у
+// сотрудников название филиала/подразделения вместо числового кода.
+function parseDepartments(text) {
+  const trimmed = (text || "").trim();
+  const out = [];
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const json = JSON.parse(trimmed);
+      const arr = Array.isArray(json)
+        ? json
+        : json.departments || json.items || [];
+      for (const d of arr) {
+        out.push({
+          code: String(d.code ?? "").trim(),
+          name: (d.name || "").trim(),
+        });
+      }
+    } catch {
+      // не удалось разобрать JSON — оставим пустым
+    }
+    return out.filter((d) => d.code);
+  }
+  // XML: iiko отдаёт элементы <corporateItemDto> с <code> и <name>.
+  const blocks =
+    trimmed.match(/<corporateItemDto\b[^>]*>[\s\S]*?<\/corporateItemDto>/g) ||
+    [];
+  for (const b of blocks) {
+    const code = (b.match(/<code>([\s\S]*?)<\/code>/) || [])[1];
+    const name = (b.match(/<name>([\s\S]*?)<\/name>/) || [])[1];
+    if (code != null) {
+      out.push({
+        code: decodeXml(code.trim()),
+        name: decodeXml((name || "").trim()),
+      });
+    }
+  }
+  return out.filter((d) => d.code);
+}
+
+// Забирает справочник подразделений под уже открытой сессией. Best-effort:
+// при любой ошибке возвращает пустую карту (тогда покажем сырые коды).
+async function fetchDepartmentMap(key) {
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/corporation/departments?key=${encodeURIComponent(key)}`
+    );
+    const text = await res.text();
+    if (!res.ok) return { map: {}, rawFirst: "" };
+    const depts = parseDepartments(text);
+    const map = {};
+    for (const d of depts) if (d.code && !(d.code in map)) map[d.code] = d.name;
+    const fm = text.match(
+      /<corporateItemDto\b[^>]*>[\s\S]*?<\/corporateItemDto>/
+    );
+    return { map, rawFirst: fm ? fm[0].slice(0, 1200) : "" };
+  } catch {
+    return { map: {}, rawFirst: "" };
+  }
+}
+
 // Список сотрудников из iiko (одна сессия). Возвращает нормализованный массив.
 // Если разобрать не удалось (пустой список) — отдаём короткий сырой образец,
 // чтобы уточнить формат ответа, как делали с OLAP.
@@ -230,6 +290,12 @@ export async function listEmployees() {
       throw new Error(`iiko employees → ${res.status} ${text}`.trim());
     }
     const employees = normalizeEmployees(text);
+    // Справочник подразделений (код -> название) — в той же сессии.
+    const { map: deptMap, rawFirst: deptRawFirst } =
+      await fetchDepartmentMap(key);
+    for (const e of employees) {
+      e.departmentNames = (e.departmentCodes || []).map((c) => deptMap[c] || c);
+    }
     const result = { employees, count: employees.length };
     // Пока отлаживаем формат — если разобрать не удалось, отдаём образец
     // сырого ответа побольше, чтобы увидеть реальные названия полей.
@@ -238,6 +304,8 @@ export async function listEmployees() {
     // подразделения/должности. Пока идёт настройка разбора.
     const firstMatch = text.match(/<employee\b[^>]*>[\s\S]*?<\/employee>/);
     result.rawFirst = firstMatch ? firstMatch[0].slice(0, 1800) : "";
+    // Если названий подразделений сопоставить не удалось — образец справочника.
+    if (!Object.keys(deptMap).length) result.deptRawFirst = deptRawFirst;
     return result;
   } finally {
     await logout(key);
