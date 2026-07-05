@@ -157,13 +157,18 @@ function parseEmployeesXml(xml) {
       lastName: one("lastName"),
       name: one("name"),
       displayName: one("displayName"),
+      login: one("login"),
       mainRoleCode: one("mainRoleCode"),
       // iiko сериализует списки как повторяющиеся теги по имени поля
       // (<roleCodes>КОД</roleCodes>, <departmentCodes>КОД</departmentCodes>),
       // а не как обёртку с вложенными элементами.
       roleCodes: many("roleCodes"),
       departmentCodes: many("departmentCodes"),
+      // Основной филиал сотрудника — если departmentCodes пуст, берём его.
+      preferredDepartmentCode: one("preferredDepartmentCode"),
       deleted: one("deleted"),
+      hireDate: one("hireDate"),
+      fireDate: one("fireDate"),
       phone: one("phone"),
       cellPhone: one("cellPhone"),
       email: one("email"),
@@ -177,7 +182,8 @@ function mapEmployee(e) {
     .filter(Boolean)
     .join(" ")
     .trim();
-  const name = (e.displayName || e.name || fio || "").trim();
+  // Предпочитаем настоящее ФИО (фамилия имя), затем displayName, затем name.
+  const name = (fio || e.displayName || e.name || "").trim();
   // Значения списков очищаем от возможных вложенных тегов (на случай обёрток).
   const clean = (v) =>
     (v == null ? [] : [].concat(v))
@@ -187,15 +193,21 @@ function mapEmployee(e) {
           .trim()
       )
       .filter(Boolean);
+  const pref = (e.preferredDepartmentCode || "").trim();
+  const deptCodes = clean(e.departmentCodes);
   return {
     iikoId: e.id || e.iikoId || "",
     code: e.code || "",
     name,
+    login: (e.login || "").trim(),
     // Должность/роль в iiko — уточним отображаемое имя роли на следующем шаге.
     position: e.mainRoleCode || e.mainRole || "",
     roleCodes: clean(e.roleCodes),
-    departmentCodes: clean(e.departmentCodes),
+    // Если явных подразделений нет — используем основной филиал (preferred).
+    departmentCodes: deptCodes.length ? deptCodes : pref ? [pref] : [],
     deleted: String(e.deleted) === "true",
+    hireDate: (e.hireDate || "").trim(),
+    fireDate: (e.fireDate || "").trim(),
     phone: e.cellPhone || e.phone || "",
     email: e.email || "",
   };
