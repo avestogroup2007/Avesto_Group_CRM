@@ -4708,6 +4708,7 @@ function NiceSelect({
   disabled,
   width,
   placeholder,
+  align = "left",
 }) {
   const [open, setOpen] = useState(false);
   const cur = options.find((o) => String(o.value) === String(value));
@@ -4757,14 +4758,23 @@ function NiceSelect({
         <>
           <div
             onClick={() => setOpen(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 59 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 59,
+              // Затемняем фон, пока список открыт — чтобы он читался как меню
+              // поверх страницы, а не «наезжал» на контент.
+              background: "rgba(24,14,9,0.28)",
+            }}
           />
           <div
             className="rounded-2xl bg-white py-1.5"
             style={{
               position: "absolute",
               top: "calc(100% + 6px)",
-              left: 0,
+              // Выравнивание списка: по правому краю триггера (для селектов у
+              // правого края экрана — не вылезает за границу) или по левому.
+              ...(align === "right" ? { right: 0 } : { left: 0 }),
               minWidth: "100%",
               width: "max-content",
               maxWidth: "min(280px, calc(100vw - 32px))",
@@ -4905,7 +4915,12 @@ function NiceDate({ label, value, onChange, min, max, disabled, width }) {
         <>
           <div
             onClick={() => setOpen(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 59 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 59,
+              background: "rgba(24,14,9,0.28)",
+            }}
           />
           <div
             className="rounded-2xl bg-white p-3"
@@ -9914,6 +9929,7 @@ export default function App({ authUser, onLogout }) {
                     <NiceSelect
                       value={branchScope}
                       width={186}
+                      align="right"
                       onChange={(v) =>
                         dispatch({
                           type: "SET_SETTING",
