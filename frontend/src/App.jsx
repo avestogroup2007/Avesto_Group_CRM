@@ -7055,7 +7055,11 @@ function useIikoRisky({ from, to, department, enabled }) {
     if (!enabled) return;
     let alive = true;
     setState({ status: "loading" });
-    apiPost("/api/iiko/risky", { from, to, department: department || undefined })
+    apiPost("/api/iiko/risky", {
+      from,
+      to,
+      department: department || undefined,
+    })
       .then((res) => {
         if (alive) setState({ status: "ok", data: res });
       })
@@ -7395,6 +7399,262 @@ function PnlView({ data }) {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// Финансовый анализ ОПиУ: по цифрам отчёта строим оценку состояния бизнеса
+// точки, ключевые показатели (маржи, доли затрат), проблемы и рекомендации.
+// Правила детерминированные (без ИИ-ключа) и опираются на бенчмарки общепита,
+// поэтому переносятся на любую базу без настройки.
+function PnlAnalysis({ data }) {
+  const t = (data && data.totals) || {};
+  const rev = t.revenue || 0;
+  if (!rev) return null;
+  const r = (v) => v / rev; // доля к выручке
+  const gm = r(t.grossProfit || 0); // валовая маржа
+  const om = r(t.operatingProfit || 0); // операционная маржа
+  const nm = r(t.netProfit || 0); // чистая маржа
+  const food = r(t.cogs || 0); // доля себестоимости (фудкост)
+  const opex = r(t.expenses || 0); // доля операционных расходов
+  const p1 = (v) => `${(v * 100).toFixed(1)}%`;
+
+  // Крупнейшая статья расходов (верхний уровень раздела «Расходы»).
+  const expLines = (data.sections && data.sections.EXPENSES) || { lines: [] };
+  const topExp = [...(expLines.lines || [])]
+    .filter((x) => x && x.value > 0)
+    .sort((a, b) => b.value - a.value)[0];
+
+  // Бенчмарки общепита (кафе/ресторан): фудкост 25–35%, чистая маржа 8–15%.
+  const good = C.ok;
+  const warn = "#B7791F";
+  const bad = C.bad;
+  const foodTone = food <= 0.35 ? good : food <= 0.42 ? warn : bad;
+  const opexTone = opex <= 0.35 ? good : opex <= 0.5 ? warn : bad;
+  const nmTone = nm < 0 ? bad : nm < 0.05 ? warn : nm < 0.12 ? C.brandA : good;
+
+  // Общая оценка состояния точки.
+  let verdict, verdictTone, verdictText;
+  if ((t.netProfit || 0) < 0) {
+    verdict = "Убыток";
+    verdictTone = bad;
+    verdictText =
+      "Точка работает в минус: расходы превышают доходы. Нужен план сокращения затрат и роста выручки.";
+  } else if (nm < 0.05) {
+    verdict = "Низкая прибыльность";
+    verdictTone = warn;
+    verdictText =
+      "Бизнес прибыльный, но маржа очень тонкая — небольшое падение выручки уводит точку в минус.";
+  } else if (nm < 0.12) {
+    verdict = "Умеренная прибыльность";
+    verdictTone = C.brandA;
+    verdictText =
+      "Точка устойчиво прибыльна. Есть резерв роста маржи за счёт контроля затрат.";
+  } else {
+    verdict = "Здоровое состояние";
+    verdictTone = good;
+    verdictText =
+      "Показатели здоровые. Можно реинвестировать прибыль в развитие точки и маркетинг.";
+  }
+
+  // Проблемы (по правилам).
+  const problems = [];
+  if ((t.netProfit || 0) < 0)
+    problems.push(
+      `Чистый убыток ${fmtSum(t.netProfit)}. Операционная деятельность не покрывает расходы.`,
+    );
+  if (food > 0.42)
+    problems.push(
+      `Себестоимость ${p1(food)} выручки — выше нормы (для общепита 25–35%). Вероятны завышенные закупки, большие списания или недоучёт порций.`,
+    );
+  else if (food > 0.35)
+    problems.push(
+      `Себестоимость ${p1(food)} — у верхней границы нормы; есть резерв на оптимизации закупок и порционирования.`,
+    );
+  if (opex > 0.5)
+    problems.push(
+      `Операционные расходы ${p1(opex)} выручки — очень высокие. Крупнейшие статьи (аренда, ФОТ, коммуналка) требуют пересмотра.`,
+    );
+  if (nm >= 0 && nm < 0.05)
+    problems.push(
+      `Чистая маржа всего ${p1(nm)} — запас прочности минимальный.`,
+    );
+  if (
+    (t.otherExpenses || 0) > (t.operatingProfit || 0) &&
+    (t.operatingProfit || 0) > 0
+  )
+    problems.push(
+      `Прочие расходы (${fmtSum(t.otherExpenses)}) съедают почти всю операционную прибыль — проверьте их природу.`,
+    );
+  if (topExp && topExp.value > (t.revenue || 0) * 0.25)
+    problems.push(
+      `Одна статья расходов — «${topExp.name}» (${fmtSum(topExp.value)}, ${p1(r(topExp.value))}) — очень весома; контролируйте её отдельно.`,
+    );
+
+  // Рекомендации / направления.
+  const recs = [];
+  if (food > 0.35)
+    recs.push(
+      "Пересмотреть закупочные цены и поставщиков, ввести контроль списаний и порций. Сверьтесь с отчётом «Подозрительные операции» по удалениям и скидкам.",
+    );
+  if (opex > 0.4)
+    recs.push(
+      "Разобрать крупнейшие статьи в разделе «Расходы» выше и сократить необязательные; пересмотреть условия аренды и график смен под фактическую загрузку.",
+    );
+  if ((t.netProfit || 0) < 0)
+    recs.push(
+      "Сфокусироваться на выручке: средний чек, допродажи, загрузка в пиковые часы (см. «Аналитика продаж → По времени») и работа с меню по ABC.",
+    );
+  if (nm >= 0.12)
+    recs.push(
+      "Состояние сильное — рассмотрите масштабирование успешных практик этой точки на другие филиалы.",
+    );
+  if (!recs.length)
+    recs.push(
+      "Удерживать текущие показатели; точечно работать над средним чеком и составом меню (ABC-анализ).",
+    );
+
+  const Tile = ({ label, value, tone, hint }) => (
+    <div
+      className="rounded-2xl bg-white p-3"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: tone || C.ink }}>
+        {value}
+      </div>
+      {hint ? (
+        <div style={{ fontSize: 10.5, color: C.faint, marginTop: 2 }}>
+          {hint}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div
+      className="rounded-2xl p-4 sm:p-5 mt-4"
+      style={{
+        background: "linear-gradient(135deg, #F3F7FF, #FBF6FF)",
+        border: `1px solid ${C.border}`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Sparkles size={18} color={C.violet} />
+        <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+          Финансовый анализ
+        </h3>
+      </div>
+      <p style={{ fontSize: 12, color: C.sub, marginBottom: 12 }}>
+        {data.departmentResolved
+          ? `Оценка по филиалу: ${data.departmentResolved}`
+          : "Оценка по всей корпорации (для точечного анализа выберите филиал вверху)"}
+      </p>
+
+      {/* Ключевые показатели */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+        <Tile
+          label="Валовая маржа"
+          value={p1(gm)}
+          tone={gm >= 0.6 ? good : warn}
+          hint="норма 65–75%"
+        />
+        <Tile
+          label="Операционная маржа"
+          value={p1(om)}
+          tone={om >= 0.1 ? good : warn}
+        />
+        <Tile
+          label="Чистая маржа"
+          value={p1(nm)}
+          tone={nmTone}
+          hint="норма 8–15%"
+        />
+        <Tile
+          label="Доля себестоимости"
+          value={p1(food)}
+          tone={foodTone}
+          hint="норма 25–35%"
+        />
+        <Tile label="Доля расходов" value={p1(opex)} tone={opexTone} />
+      </div>
+
+      {/* Общая оценка */}
+      <div
+        className="rounded-xl p-3 mb-3 flex items-start gap-2.5"
+        style={{ background: "#fff", border: `1px solid ${C.border}` }}
+      >
+        <Activity size={18} color={verdictTone} style={{ marginTop: 1 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: verdictTone }}>
+            {verdict}
+          </div>
+          <div style={{ fontSize: 12.5, color: C.sub, marginTop: 2 }}>
+            {verdictText}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        {/* Проблемы */}
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "#fff", border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center gap-1.5 mb-2">
+            <AlertTriangle size={15} color={bad} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
+              Проблемы и риски
+            </span>
+          </div>
+          {problems.length ? (
+            <ul style={{ margin: 0, paddingLeft: 16 }}>
+              {problems.map((x, i) => (
+                <li
+                  key={i}
+                  style={{ fontSize: 12.5, color: C.sub, marginBottom: 5 }}
+                >
+                  {x}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p style={{ fontSize: 12.5, color: C.faint }}>
+              Критичных отклонений по цифрам не выявлено.
+            </p>
+          )}
+        </div>
+
+        {/* Рекомендации */}
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "#fff", border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp size={15} color={C.ok} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
+              Рекомендации и направления
+            </span>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 16 }}>
+            {recs.map((x, i) => (
+              <li
+                key={i}
+                style={{ fontSize: 12.5, color: C.sub, marginBottom: 5 }}
+              >
+                {x}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 10.5, color: C.faint, marginTop: 10 }}>
+        Анализ построен автоматически по цифрам отчёта и отраслевым нормам
+        общепита; используйте как ориентир, а не как готовое решение.
+      </p>
     </div>
   );
 }
@@ -8735,7 +8995,12 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
               </span>
             </div>
           )}
-          {pnl.status === "ok" && <PnlView data={pnl.data} />}
+          {pnl.status === "ok" && (
+            <>
+              <PnlView data={pnl.data} />
+              <PnlAnalysis data={pnl.data} />
+            </>
+          )}
         </div>
       )}
 
