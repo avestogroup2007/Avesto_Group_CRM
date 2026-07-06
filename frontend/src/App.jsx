@@ -6259,10 +6259,14 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
         )}
 
         {sorted.length > 0 && (
-          <div className="hidden lg:block">
+          <div className="hidden lg:block" style={{ overflowX: "auto" }}>
             <table
               className="w-full cash-table"
-              style={{ borderCollapse: "collapse", fontSize: 13 }}
+              style={{
+                borderCollapse: "collapse",
+                fontSize: 13,
+                minWidth: 920,
+              }}
             >
               <thead>
                 <tr style={{ color: C.faint, textAlign: "right" }}>
