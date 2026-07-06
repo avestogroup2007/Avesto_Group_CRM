@@ -61,11 +61,13 @@ r.post(
 r.post(
   "/pnl",
   handleIiko(async (req, res) => {
-    const { from, to } = req.body || {};
+    const { from, to, department } = req.body || {};
     if (!from || !to) {
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
-    res.json(await pnlReport({ from, to }));
+    res.json(
+      await pnlReport({ from, to, department: department || undefined })
+    );
   })
 );
 

@@ -7023,13 +7023,13 @@ function useIikoSales({ from, to, department }) {
 
 // Отчёт о прибылях и убытках (ОПиУ) из iiko — тянется по требованию (тяжёлый
 // отчёт по балансам), поэтому только когда открыта вкладка.
-function useIikoPnl({ from, to, enabled }) {
+function useIikoPnl({ from, to, department, enabled }) {
   const [state, setState] = useState({ status: "idle" });
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     setState({ status: "loading" });
-    apiPost("/api/iiko/pnl", { from, to })
+    apiPost("/api/iiko/pnl", { from, to, department: department || undefined })
       .then((res) => {
         if (alive) setState({ status: "ok", data: res });
       })
@@ -7042,7 +7042,7 @@ function useIikoPnl({ from, to, enabled }) {
     return () => {
       alive = false;
     };
-  }, [from, to, enabled]);
+  }, [from, to, department, enabled]);
   return state;
 }
 
@@ -7113,12 +7113,17 @@ function PnlView({ data }) {
       className="rounded-2xl bg-white p-4 sm:p-5"
       style={{ border: `1px solid ${C.border}` }}
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1">
         <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
           Отчёт о прибылях и убытках
         </h3>
         <span style={{ fontSize: 12, color: C.faint }}>● данные из iiko</span>
       </div>
+      <p style={{ fontSize: 12, color: C.sub, marginBottom: 10 }}>
+        {data.departmentResolved
+          ? `Филиал: ${data.departmentResolved}`
+          : "Вся корпорация (для сверки с iiko выберите филиал вверху — по всей сети суммируются внутренние передачи)"}
+      </p>
       {!hasData ? (
         <div>
           <p style={{ fontSize: 13, color: C.faint }}>
@@ -7438,7 +7443,12 @@ function SalesAnalytics({ s, me, branchScope }) {
   // Активность персонала из iiko — для вкладки «Персонал».
   const liveStaff = liveOn && live.staff ? live.staff : null;
   // ОПиУ — тянем только при открытой вкладке «Прибыль / убыток».
-  const pnl = useIikoPnl({ from, to, enabled: tab === "pnl" });
+  const pnl = useIikoPnl({
+    from,
+    to,
+    department: selDept,
+    enabled: tab === "pnl",
+  });
   // Список блюд, отсортированный для вкладки «Блюда»: по выручке или по
   // количеству («что чаще покупают»).
   const dishRows = [...products].sort((a, b) =>
