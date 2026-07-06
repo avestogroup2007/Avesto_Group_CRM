@@ -16,10 +16,13 @@ permissions:
   pages: write
   id-token: write
 
-# Один деплой за раз; новый отменяет незавершённый.
+# Один деплой Pages за раз. НЕ отменяем идущий деплой (рекомендация GitHub для
+# Pages): отмена на середине публикации даёт ошибку «Deployment failed, try
+# again later» и оставляет сайт неопубликованным. Промежуточные запуски в
+# очереди пропускаются, но текущий доводится до конца.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
