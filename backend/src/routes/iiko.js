@@ -10,6 +10,7 @@ import {
   salesReport,
   listEmployees,
   pnlReport,
+  riskyReport,
 } from "../services/iikoServer.js";
 import {
   syncEmployeesToDb,
@@ -67,6 +68,26 @@ r.post(
     }
     res.json(
       await pnlReport({ from, to, department: department || undefined })
+    );
+  })
+);
+
+// Подозрительные операции за период: удаления/сторно заказов и крупные
+// скидки в разрезе сотрудников. Тело: { from, to, department?, discountPct? }.
+r.post(
+  "/risky",
+  handleIiko(async (req, res) => {
+    const { from, to, department, discountPct } = req.body || {};
+    if (!from || !to) {
+      return res.status(400).json({ error: "Нужны параметры from и to" });
+    }
+    res.json(
+      await riskyReport({
+        from,
+        to,
+        department: department || undefined,
+        discountPct: typeof discountPct === "number" ? discountPct : undefined,
+      })
     );
   })
 );

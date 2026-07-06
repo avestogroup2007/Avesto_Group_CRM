@@ -71,7 +71,12 @@ function nextDayStart(ymd) {
 }
 
 // Один OLAP-запрос под открытой сессией (key). Возвращает массив data.
-async function runOlap(key, { from, to, departments, groupByRowFields }) {
+// deleted:true — вместо активных заказов берём УДАЛЁННЫЕ/сторнированные
+// (для отчёта по подозрительным операциям).
+async function runOlap(
+  key,
+  { from, to, departments, groupByRowFields, deleted }
+) {
   const filters = {
     // Этот сервер требует фильтр именно по «Учётному дню» (OpenDate.Typed).
     "OpenDate.Typed": {
@@ -80,14 +85,27 @@ async function runOlap(key, { from, to, departments, groupByRowFields }) {
       from: dayStart(from),
       to: nextDayStart(to),
     },
-    DeletedWithWriteoff: {
-      filterType: "ExcludeValues",
-      values: ["DELETED_WITH_WRITEOFF", "DELETED_WITHOUT_WRITEOFF"],
-    },
-    OrderDeleted: {
-      filterType: "IncludeValues",
-      values: ["NOT_DELETED"],
-    },
+    ...(deleted
+      ? {
+          DeletedWithWriteoff: {
+            filterType: "IncludeValues",
+            values: ["DELETED_WITH_WRITEOFF", "DELETED_WITHOUT_WRITEOFF"],
+          },
+          OrderDeleted: {
+            filterType: "IncludeValues",
+            values: ["DELETED"],
+          },
+        }
+      : {
+          DeletedWithWriteoff: {
+            filterType: "ExcludeValues",
+            values: ["DELETED_WITH_WRITEOFF", "DELETED_WITHOUT_WRITEOFF"],
+          },
+          OrderDeleted: {
+            filterType: "IncludeValues",
+            values: ["NOT_DELETED"],
+          },
+        }),
   };
   if (Array.isArray(departments) && departments.length) {
     filters.Department = { filterType: "IncludeValues", values: departments };
@@ -396,6 +414,92 @@ export async function salesReport({ from, to, departments }) {
       groupByRowFields: ["HourOpen", "DishName"],
     }).catch(() => []);
     return { byDay, byPay, byDish, byGroups, byHour, byStaff, byHourDish };
+  } finally {
+    await logout(key);
+  }
+}
+
+// ── Подозрительные операции ────────────────────────────────────────────────
+// Контроль злоупотреблений персонала за период по данным iiko:
+//  - удаления/сторно заказов в разрезе сотрудника (кто и на какую сумму
+//    удаляет заказы — частый способ вывести деньги из кассы);
+//  - крупные скидки в разрезе сотрудника (скидка = сумма без скидки −
+//    сумма со скидкой; доля скидки к обороту сотрудника).
+// Порог доли скидки для «флага» настраивается (по умолчанию 30 %).
+export async function riskyReport({ from, to, department, discountPct = 0.3 }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await auth();
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const waiter = (r) =>
+    (r["OrderWaiter"] || r["Waiter"] || r["Cashier"] || "").trim();
+  try {
+    const departments =
+      Array.isArray(department) && department.length
+        ? department
+        : department
+          ? [department]
+          : undefined;
+    const opts = { from, to, departments };
+    // Удалённые/сторнированные заказы по официанту.
+    const delRows = await runOlap(key, {
+      ...opts,
+      deleted: true,
+      groupByRowFields: ["OrderWaiter"],
+    }).catch(() => []);
+    // Активные заказы по официанту — для расчёта скидок.
+    const actRows = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["OrderWaiter"],
+    }).catch(() => []);
+
+    const delMap = {};
+    delRows.forEach((r) => {
+      const name = waiter(r) || "—";
+      if (!delMap[name]) delMap[name] = { name, count: 0, sum: 0 };
+      delMap[name].count += num(r["UniqOrderId"]);
+      delMap[name].sum += num(r["DishSumInt"]);
+    });
+    const deletions = Object.values(delMap)
+      .filter((x) => x.name && x.name !== "—" && (x.count || x.sum))
+      .sort((a, b) => b.count - a.count || b.sum - a.sum);
+
+    const discMap = {};
+    actRows.forEach((r) => {
+      const name = waiter(r) || "—";
+      if (!discMap[name]) discMap[name] = { name, gross: 0, net: 0 };
+      // DishSumInt — сумма без скидки, DishDiscountSumInt — со скидкой.
+      discMap[name].gross += num(r["DishSumInt"]);
+      discMap[name].net += num(r["DishDiscountSumInt"]);
+    });
+    const discounts = Object.values(discMap)
+      .map((x) => {
+        const discount = x.gross - x.net;
+        const share = x.gross > 0 ? discount / x.gross : 0;
+        return { ...x, discount, share, flagged: share >= discountPct };
+      })
+      .filter((x) => x.name && x.name !== "—" && x.discount > 0)
+      .sort((a, b) => b.discount - a.discount);
+
+    const totals = {
+      delCount: deletions.reduce((a, x) => a + x.count, 0),
+      delSum: deletions.reduce((a, x) => a + x.sum, 0),
+      discountSum: discounts.reduce((a, x) => a + x.discount, 0),
+      flagged: discounts.filter((x) => x.flagged).length,
+    };
+
+    return {
+      from,
+      to,
+      department: department || null,
+      discountPct,
+      deletions,
+      discounts,
+      totals,
+      diagnostics: { delRows: delRows.length, actRows: actRows.length },
+    };
   } finally {
     await logout(key);
   }

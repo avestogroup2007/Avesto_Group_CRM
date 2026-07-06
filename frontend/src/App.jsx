@@ -7047,6 +7047,213 @@ function useIikoPnl({ from, to, department, enabled }) {
   return state;
 }
 
+// Подозрительные операции (удаления/сторно заказов + крупные скидки в разрезе
+// сотрудников) — тянем только при открытой вкладке.
+function useIikoRisky({ from, to, department, enabled }) {
+  const [state, setState] = useState({ status: "idle" });
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    setState({ status: "loading" });
+    apiPost("/api/iiko/risky", { from, to, department: department || undefined })
+      .then((res) => {
+        if (alive) setState({ status: "ok", data: res });
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = (e && e.message) || "";
+        if (/configured|не настро/i.test(msg)) setState({ status: "off" });
+        else setState({ status: "error", error: msg });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [from, to, department, enabled]);
+  return state;
+}
+
+// Рендер отчёта по подозрительным операциям: удаления/сторно заказов и крупные
+// скидки в разрезе сотрудников. Данные приходят из iiko (OLAP).
+function RiskyView({ data }) {
+  const t = data.totals || {};
+  const deletions = data.deletions || [];
+  const discounts = data.discounts || [];
+  const pctThreshold = Math.round((data.discountPct || 0.3) * 100);
+  const Card = ({ children }) => (
+    <div
+      className="rounded-2xl bg-white p-4 sm:p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      {children}
+    </div>
+  );
+  const maxDel = Math.max(...deletions.map((x) => x.count), 1);
+  const maxDisc = Math.max(...discounts.map((x) => x.discount), 1);
+  return (
+    <div className="space-y-4">
+      {/* Сводка */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          ["Удалённых заказов", t.delCount || 0],
+          ["Сумма удалений", fmtSum(t.delSum || 0)],
+          ["Сумма скидок", fmtSum(t.discountSum || 0)],
+          [`Сотрудников с высокой скидкой (>${pctThreshold}%)`, t.flagged || 0],
+        ].map(([label, value], i) => (
+          <div
+            key={i}
+            className="rounded-2xl bg-white p-3"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 4 }}>
+              {label}
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Удаления/сторно заказов */}
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+            Удаления и сторно заказов
+          </h3>
+          <span style={{ fontSize: 12, color: C.faint }}>● данные из iiko</span>
+        </div>
+        {deletions.length ? (
+          <div className="space-y-1">
+            {deletions.slice(0, 30).map((x, i) => (
+              <div
+                key={x.name}
+                className="flex items-center gap-2"
+                style={{ fontSize: 12 }}
+              >
+                <div style={{ width: 22, color: C.faint }}>{i + 1}.</div>
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 80,
+                    color: C.ink,
+                    fontWeight: 600,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {x.name}
+                </div>
+                <div
+                  style={{
+                    width: 120,
+                    background: "#F1EBE1",
+                    borderRadius: 6,
+                    height: 14,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.round((x.count / maxDel) * 100)}%`,
+                      background: "#C0392B",
+                      height: "100%",
+                    }}
+                  />
+                </div>
+                <div style={{ width: 74, textAlign: "right", color: C.ink }}>
+                  {x.count} зак.
+                </div>
+                <div style={{ width: 120, textAlign: "right", color: C.sub }}>
+                  {fmtSum(x.sum)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: C.faint }}>
+            Удалённых или сторнированных заказов за период не найдено.
+          </p>
+        )}
+      </Card>
+
+      {/* Крупные скидки */}
+      <Card>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+            Скидки в разрезе сотрудников
+          </h3>
+          <span style={{ fontSize: 12, color: C.faint }}>● данные из iiko</span>
+        </div>
+        <p style={{ fontSize: 12, color: C.sub, marginBottom: 10 }}>
+          Красным отмечены сотрудники, у которых доля скидки превышает{" "}
+          {pctThreshold}% оборота.
+        </p>
+        {discounts.length ? (
+          <div className="space-y-1">
+            {discounts.slice(0, 30).map((x, i) => (
+              <div
+                key={x.name}
+                className="flex items-center gap-2"
+                style={{ fontSize: 12 }}
+              >
+                <div style={{ width: 22, color: C.faint }}>{i + 1}.</div>
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: 80,
+                    color: x.flagged ? "#C0392B" : C.ink,
+                    fontWeight: 600,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {x.name}
+                </div>
+                <div
+                  style={{
+                    width: 120,
+                    background: "#F1EBE1",
+                    borderRadius: 6,
+                    height: 14,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.round((x.discount / maxDisc) * 100)}%`,
+                      background: x.flagged ? "#C0392B" : "#C99A6A",
+                      height: "100%",
+                    }}
+                  />
+                </div>
+                <div
+                  style={{
+                    width: 54,
+                    textAlign: "right",
+                    color: x.flagged ? "#C0392B" : C.sub,
+                    fontWeight: x.flagged ? 700 : 400,
+                  }}
+                >
+                  {(x.share * 100).toFixed(1)}%
+                </div>
+                <div style={{ width: 120, textAlign: "right", color: C.sub }}>
+                  {fmtSum(x.discount)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: 13, color: C.faint }}>
+            Скидок за период не найдено.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // Рендер ОПиУ: разделы и статьи приходят из iiko (по типам счетов), проценты
 // считаются к выручке.
 function PnlView({ data }) {
@@ -7282,7 +7489,10 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     ["staff", "Персонал"],
     ["insights", "Выводы"],
   ];
-  const REPORT_REPORTS = [["pnl", "Прибыль / убыток"]];
+  const REPORT_REPORTS = [
+    ["pnl", "Прибыль / убыток"],
+    ["risky", "Подозрительные операции"],
+  ];
   const REPORTS = isReports ? REPORT_REPORTS : ANALYTICS_REPORTS;
   const [tab, setTab] = usePersisted(
     isReports ? "avesto.reports.tab" : "avesto.sales.tab",
@@ -7460,6 +7670,13 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     to,
     department: selDept,
     enabled: tab === "pnl",
+  });
+  // Подозрительные операции — тянем только при открытой вкладке.
+  const risky = useIikoRisky({
+    from,
+    to,
+    department: selDept,
+    enabled: tab === "risky",
   });
   // Список блюд, отсортированный для вкладки «Блюда»: по выручке или по
   // количеству («что чаще покупают»).
@@ -8519,6 +8736,47 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
             </div>
           )}
           {pnl.status === "ok" && <PnlView data={pnl.data} />}
+        </div>
+      )}
+
+      {/* подозрительные операции */}
+      {tab === "risky" && (
+        <div>
+          {risky.status === "loading" && (
+            <div
+              className="rounded-2xl bg-white p-5"
+              style={{
+                border: `1px solid ${C.border}`,
+                fontSize: 13,
+                color: C.faint,
+              }}
+            >
+              Загрузка данных из iiko…
+            </div>
+          )}
+          {risky.status === "off" && (
+            <div
+              className="rounded-2xl bg-white p-5"
+              style={{
+                border: `1px solid ${C.border}`,
+                fontSize: 13,
+                color: C.faint,
+              }}
+            >
+              Интеграция iiko не настроена.
+            </div>
+          )}
+          {risky.status === "error" && (
+            <div
+              className="rounded-2xl bg-white p-5"
+              style={{ border: `1px solid ${C.border}`, fontSize: 13 }}
+            >
+              <span style={{ color: "#B23" }}>
+                Не удалось получить данные: {risky.error}
+              </span>
+            </div>
+          )}
+          {risky.status === "ok" && <RiskyView data={risky.data} />}
         </div>
       )}
 
