@@ -105,7 +105,7 @@ const M = 60_000,
   H = 3_600_000,
   D = 86_400_000;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-const STORAGE_KEY = "avesto.crm.v9"; // бренд + реальные филиалы — старые локальные данные игнорируются
+const STORAGE_KEY = "avesto.crm.v10"; // реальные юрлица и филиалы Avesto — старые локальные данные игнорируются
 
 /* ============================ ДВУЯЗЫЧНОСТЬ (RU / UZ) ======================== */
 let LANG = "ru";
@@ -480,26 +480,86 @@ function slaInfo(t, now) {
 const lightTone = (rate) => (rate >= 90 ? C.ok : rate >= 80 ? C.warn : C.bad);
 
 /* ----------------------------- оргструктура ------------------------------- */
+// Реальные юрлица группы Avesto (из iiko / реквизитов).
 const COMPANIES = [
-  { id: 1, name: "ООО «Take Eat»", inn: "7701234567" },
-  { id: 2, name: "ИП Ахмедов", inn: "770987654321" },
+  {
+    id: 1,
+    name: "«AVESTO CAFE» OK",
+    inn: "309235475",
+    address: "г. Самарканд, ул. Узбекистанский 37",
+    bank: "ЧАКБ «Orient Finans»",
+    bik: "01071",
+    account: "20208000205484120001",
+  },
+  {
+    id: 2,
+    name: "«AVESTO SWEETS» OK",
+    inn: "302553964",
+    address: "г. Самарканд, ул. Наврузи 15",
+    bank: "ЧАКБ «Orient Finans»",
+    bik: "01071",
+    account: "20208000900208609001",
+  },
+  {
+    id: 3,
+    name: "«INTERNATIONAL CATERING GROUP» MChJ",
+    inn: "311869139",
+    description: "Кейтеринг и выездное обслуживание мероприятий",
+    address: "г. Самарканд, МФИ Бунёдкор, ул. Наврузи 15",
+    bank: "ЧАКБ «Orient Finans»",
+    bik: "01071",
+    account: "20208000107192681001",
+  },
 ];
 // iikoDept — имя торгового предприятия (Department) в iikoServer,
 // нужно для фильтра реальных продаж по конкретному филиалу.
 const BRANCHES = [
-  { id: 1, companyId: 1, name: "Микрорайон", iikoDept: "Микрорайон" },
-  { id: 2, companyId: 1, name: "Узбекистанская", iikoDept: "Uzbekistanskaya" },
-  { id: 3, companyId: 1, name: "Аэропорт", iikoDept: "Aeroport" },
-  { id: 4, companyId: 2, name: "Цех «Навруз»", iikoDept: "Navruzi Цех" },
+  {
+    id: 1,
+    companyId: 1,
+    name: "Avesto Cafe — Микрорайон",
+    iikoDept: "Микрорайон",
+  },
+  {
+    id: 2,
+    companyId: 1,
+    name: "Avesto Cafe — Узбекистанская",
+    iikoDept: "Uzbekistanskaya",
+  },
+  {
+    id: 3,
+    companyId: 2,
+    name: "Avesto Sweets — Аэропорт",
+    iikoDept: "Aeroport",
+  },
+  {
+    id: 4,
+    companyId: 2,
+    name: "Avesto Sweets — Наврузий цех",
+    iikoDept: "Navruzi Цех",
+  },
   {
     id: 5,
-    companyId: 1,
-    name: "Магазин «Навруз»",
+    companyId: 2,
+    name: "Avesto Sweets — Наврузий Магазин",
     iikoDept: "Наврузи Магазин",
+  },
+  {
+    id: 6,
+    companyId: 3,
+    name: "ICG — Кейтеринг (основной)",
+    iikoDept: "Кейтеринг (основной)",
   },
 ];
 // Месячные бюджетные лимиты по филиалам (Этап улучшений: контроль перерасхода)
-const BRANCH_BUDGET = { 1: 500000, 2: 300000, 3: 400000, 4: 250000, 5: 300000 };
+const BRANCH_BUDGET = {
+  1: 500000,
+  2: 300000,
+  3: 400000,
+  4: 250000,
+  5: 300000,
+  6: 300000,
+};
 
 const USERS = [
   {
