@@ -9,6 +9,7 @@ import {
   IikoNotConfiguredError,
   salesReport,
   listEmployees,
+  pnlReport,
 } from "../services/iikoServer.js";
 import {
   syncEmployeesToDb,
@@ -52,6 +53,19 @@ r.post(
     }
     const departments = department ? [department] : undefined;
     res.json(await salesReport({ from, to, departments }));
+  })
+);
+
+// Отчёт о прибылях и убытках (ОПиУ) за период. Тело: { from, to }.
+// Структура берётся из плана счетов iiko (по типам счетов) — динамически.
+r.post(
+  "/pnl",
+  handleIiko(async (req, res) => {
+    const { from, to } = req.body || {};
+    if (!from || !to) {
+      return res.status(400).json({ error: "Нужны параметры from и to" });
+    }
+    res.json(await pnlReport({ from, to }));
   })
 );
 

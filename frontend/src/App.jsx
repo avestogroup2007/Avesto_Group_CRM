@@ -7021,6 +7021,171 @@ function useIikoSales({ from, to, department }) {
   return state;
 }
 
+// Отчёт о прибылях и убытках (ОПиУ) из iiko — тянется по требованию (тяжёлый
+// отчёт по балансам), поэтому только когда открыта вкладка.
+function useIikoPnl({ from, to, enabled }) {
+  const [state, setState] = useState({ status: "idle" });
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    setState({ status: "loading" });
+    apiPost("/api/iiko/pnl", { from, to })
+      .then((res) => {
+        if (alive) setState({ status: "ok", data: res });
+      })
+      .catch((e) => {
+        if (!alive) return;
+        const msg = (e && e.message) || "";
+        if (/configured|не настро/i.test(msg)) setState({ status: "off" });
+        else setState({ status: "error", error: msg });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [from, to, enabled]);
+  return state;
+}
+
+// Рендер ОПиУ: разделы и статьи приходят из iiko (по типам счетов), проценты
+// считаются к выручке.
+function PnlView({ data }) {
+  const t = data.totals || {};
+  const rev = t.revenue || 1;
+  const pct = (v) => `${((v / rev) * 100).toFixed(2)}%`;
+  const flat = (lines) => {
+    const out = [];
+    const walk = (arr, level) =>
+      (arr || []).forEach((n) => {
+        out.push({ n, level });
+        if (n.children && n.children.length) walk(n.children, level + 1);
+      });
+    walk(lines, 0);
+    return out;
+  };
+  const Row = ({ label, value, level = 0, bold, big, color, top }) => (
+    <div
+      className="flex items-center justify-between gap-2"
+      style={{
+        fontSize: big ? 15 : 13.5,
+        fontWeight: bold ? 700 : 400,
+        color: color || C.ink,
+        padding: big ? "8px 0" : "3px 0",
+        paddingLeft: 8 + level * 16,
+        borderTop: top ? `1px solid ${C.line}` : "none",
+      }}
+    >
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+        {label}
+      </span>
+      <span style={{ display: "flex", gap: 12, flexShrink: 0 }}>
+        <span style={{ width: 130, textAlign: "right" }}>{fmtSum(value)}</span>
+        <span style={{ width: 56, textAlign: "right", color: C.faint }}>
+          {pct(value)}
+        </span>
+      </span>
+    </div>
+  );
+  const section = (typeKey, title, itogo) => {
+    const sec = (data.sections && data.sections[typeKey]) || { lines: [] };
+    if (!sec.lines.length && !sec.total) return null;
+    return (
+      <div>
+        <div
+          style={{
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: C.sub,
+            padding: "8px 0 2px",
+          }}
+        >
+          {title}
+        </div>
+        {flat(sec.lines).map((x, i) => (
+          <Row key={i} label={x.n.name} value={x.n.value} level={x.level + 1} />
+        ))}
+        <Row label={itogo} value={sec.total} bold top />
+      </div>
+    );
+  };
+  const hasData = Object.values(t).some((v) => v);
+  return (
+    <div
+      className="rounded-2xl bg-white p-4 sm:p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+          Отчёт о прибылях и убытках
+        </h3>
+        <span style={{ fontSize: 12, color: C.faint }}>● данные из iiko</span>
+      </div>
+      {!hasData ? (
+        <div>
+          <p style={{ fontSize: 13, color: C.faint }}>
+            Нет данных за период (или требуется настройка полей ответа iiko).
+          </p>
+          {data.diagnostics ? (
+            <details style={{ marginTop: 10 }}>
+              <summary
+                style={{ fontSize: 12.5, color: C.sub, cursor: "pointer" }}
+              >
+                Диагностика (прислать для настройки)
+              </summary>
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 10,
+                  background: "#F7F4EF",
+                  borderRadius: 10,
+                  border: `1px solid ${C.line}`,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: 11,
+                }}
+              >
+                {`счетов: ${data.diagnostics.accounts}, балансы к/н: ${data.diagnostics.balEndRows}/${data.diagnostics.balStartRows}`}
+                {data.diagnostics.accSample
+                  ? "\n\n[accounts]\n" + data.diagnostics.accSample
+                  : ""}
+                {data.diagnostics.balSample
+                  ? "\n\n[balance]\n" + data.diagnostics.balSample
+                  : ""}
+              </pre>
+            </details>
+          ) : null}
+        </div>
+      ) : (
+        <div>
+          {section("INCOME", "Выручка", "Итого Выручка")}
+          {section(
+            "COST_OF_GOODS_SOLD",
+            "Себестоимость",
+            "Итого Себестоимость",
+          )}
+          <Row label="Валовая прибыль" value={t.grossProfit} bold top />
+          {section("EXPENSES", "Расходы", "Итого Расходы")}
+          <Row
+            label="Прибыль от основной деятельности"
+            value={t.operatingProfit}
+            bold
+            top
+          />
+          {section("OTHER_INCOME", "Прочие доходы", "Итого Прочие доходы")}
+          {section("OTHER_EXPENSES", "Прочие расходы", "Итого Прочие расходы")}
+          <Row
+            label="ИТОГО ЧИСТАЯ ПРИБЫЛЬ"
+            value={t.netProfit}
+            bold
+            big
+            top
+            color={t.netProfit >= 0 ? C.ok : C.bad}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SalesAnalytics({ s, me, branchScope }) {
   const branches = s.branches || [];
   const isMgr = me.role === "manager";
@@ -7107,6 +7272,7 @@ function SalesAnalytics({ s, me, branchScope }) {
     ["dishes", "Блюда"],
     ["abc", "ABC"],
     ["staff", "Персонал"],
+    ["pnl", "Прибыль / убыток"],
     ["insights", "Выводы"],
   ];
   const [tab, setTab] = usePersisted("avesto.sales.tab", "revenue");
@@ -7271,6 +7437,8 @@ function SalesAnalytics({ s, me, branchScope }) {
     liveOn && live.hourProducts ? live.hourProducts : null;
   // Активность персонала из iiko — для вкладки «Персонал».
   const liveStaff = liveOn && live.staff ? live.staff : null;
+  // ОПиУ — тянем только при открытой вкладке «Прибыль / убыток».
+  const pnl = useIikoPnl({ from, to, enabled: tab === "pnl" });
   // Список блюд, отсортированный для вкладки «Блюда»: по выручке или по
   // количеству («что чаще покупают»).
   const dishRows = [...products].sort((a, b) =>
@@ -8288,6 +8456,47 @@ function SalesAnalytics({ s, me, branchScope }) {
               заказов по сотруднику за период).
             </p>
           )}
+        </div>
+      )}
+
+      {/* отчёт о прибылях и убытках */}
+      {tab === "pnl" && (
+        <div>
+          {pnl.status === "loading" && (
+            <div
+              className="rounded-2xl bg-white p-5"
+              style={{
+                border: `1px solid ${C.border}`,
+                fontSize: 13,
+                color: C.faint,
+              }}
+            >
+              Загрузка отчёта из iiko…
+            </div>
+          )}
+          {pnl.status === "off" && (
+            <div
+              className="rounded-2xl bg-white p-5"
+              style={{
+                border: `1px solid ${C.border}`,
+                fontSize: 13,
+                color: C.faint,
+              }}
+            >
+              Интеграция iiko не настроена.
+            </div>
+          )}
+          {pnl.status === "error" && (
+            <div
+              className="rounded-2xl bg-white p-5"
+              style={{ border: `1px solid ${C.border}`, fontSize: 13 }}
+            >
+              <span style={{ color: "#B23" }}>
+                Не удалось получить отчёт: {pnl.error}
+              </span>
+            </div>
+          )}
+          {pnl.status === "ok" && <PnlView data={pnl.data} />}
         </div>
       )}
 

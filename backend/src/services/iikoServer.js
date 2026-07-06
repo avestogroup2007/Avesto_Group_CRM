@@ -400,3 +400,151 @@ export async function salesReport({ from, to, departments }) {
     await logout(key);
   }
 }
+
+// ── Отчёт о прибылях и убытках (ОПиУ) ──────────────────────────────────────
+// Собираем ДИНАМИЧЕСКИ из плана счетов iiko (тип счёта — системный, одинаков
+// на любой базе): INCOME/COST_OF_GOODS_SOLD/EXPENSES/OTHER_INCOME/OTHER_EXPENSES.
+// Оборот за период = баланс(конец) − баланс(начало) по каждому счёту.
+
+// Разделы ОПиУ по системному типу счёта iiko (порядок как в отчёте).
+const PNL_TYPES = {
+  INCOME: "Выручка",
+  COST_OF_GOODS_SOLD: "Себестоимость",
+  EXPENSES: "Расходы",
+  OTHER_INCOME: "Прочие доходы",
+  OTHER_EXPENSES: "Прочие расходы",
+};
+
+// Балансы по счетам на учётную дату (timestamp: yyyy-MM-ddTHH:mm:ss).
+async function fetchAccountBalances(key, timestamp) {
+  const res = await fetch(
+    `${BASE}/resto/api/v2/reports/balance/counteragents?key=${encodeURIComponent(
+      key
+    )}&timestamp=${encodeURIComponent(timestamp)}`,
+    { headers: { Accept: "application/json" } }
+  );
+  const text = await res.text();
+  if (!res.ok) return { rows: [], sample: text.slice(0, 800) };
+  let rows = [];
+  try {
+    const json = text ? JSON.parse(text) : [];
+    rows = Array.isArray(json) ? json : json.rows || json.data || [];
+  } catch {
+    /* оставим пустым */
+  }
+  return { rows, sample: rows.length ? "" : text.slice(0, 800) };
+}
+
+// Сумма баланса по счёту (id -> сумма). Поля ответа разбираем терпимо.
+function balanceById(rows) {
+  const m = {};
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const id =
+      r.account || r.accountId || r.accountUuid || r.accountUUID || null;
+    if (!id) continue;
+    const val = Number(r.sum ?? r.balance ?? r.amount ?? r.value ?? 0) || 0;
+    m[id] = (m[id] || 0) + val;
+  }
+  return m;
+}
+
+// Строит поддерево счетов заданного типа (по accountParentId) с оборотами.
+// value узла = оборот его листьев (родителям берём сумму детей, чтобы не
+// задваивать). Возвращает { total, lines }.
+function buildPnlSection(accounts, type, turnover) {
+  const inType = accounts.filter((a) => a.type === type && !a.deleted);
+  const ids = new Set(inType.map((a) => a.id));
+  const childrenOf = {};
+  inType.forEach((a) => {
+    const p = ids.has(a.accountParentId) ? a.accountParentId : "__root__";
+    (childrenOf[p] = childrenOf[p] || []).push(a);
+  });
+  const isLeaf = (a) => !(childrenOf[a.id] && childrenOf[a.id].length);
+  const node = (a) => {
+    const kids = (childrenOf[a.id] || []).map(node);
+    const own = isLeaf(a) ? Math.abs(turnover[a.id] || 0) : 0;
+    const value = own + kids.reduce((s, k) => s + k.value, 0);
+    return { name: a.name || a.code || "—", value, children: kids };
+  };
+  const roots = (childrenOf.__root__ || [])
+    .map(node)
+    .filter((n) => n.value !== 0)
+    .sort((x, y) => y.value - x.value);
+  const total = roots.reduce((s, n) => s + n.value, 0);
+  return { total, lines: roots };
+}
+
+// Полный ОПиУ за период. departments — id подразделений (необязательно).
+export async function pnlReport({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await auth();
+  try {
+    // План счетов (структуру берёт iiko — переносимо на другую базу).
+    const accRes = await fetch(
+      `${BASE}/resto/api/v2/entities/accounts/list?key=${encodeURIComponent(
+        key
+      )}`,
+      { headers: { Accept: "application/json" } }
+    );
+    const accText = await accRes.text();
+    let accounts = [];
+    try {
+      const json = accText ? JSON.parse(accText) : [];
+      accounts = Array.isArray(json) ? json : json.accounts || [];
+    } catch {
+      /* оставим пустым */
+    }
+
+    // Обороты за период = баланс(конец) − баланс(начало).
+    const startTs = `${from}T00:00:00`;
+    const endTs = nextDayStart(to).replace(".000", "");
+    const balEnd = await fetchAccountBalances(key, endTs);
+    const balStart = await fetchAccountBalances(key, startTs);
+    const endM = balanceById(balEnd.rows);
+    const startM = balanceById(balStart.rows);
+    const turnover = {};
+    const allIds = new Set([...Object.keys(endM), ...Object.keys(startM)]);
+    allIds.forEach((id) => {
+      turnover[id] = (endM[id] || 0) - (startM[id] || 0);
+    });
+
+    const sections = {};
+    for (const type of Object.keys(PNL_TYPES)) {
+      sections[type] = buildPnlSection(accounts, type, turnover);
+    }
+    const revenue = sections.INCOME.total;
+    const cogs = sections.COST_OF_GOODS_SOLD.total;
+    const grossProfit = revenue - cogs;
+    const expenses = sections.EXPENSES.total;
+    const operatingProfit = grossProfit - expenses;
+    const otherIncome = sections.OTHER_INCOME.total;
+    const otherExpenses = sections.OTHER_EXPENSES.total;
+    const netProfit = operatingProfit + otherIncome - otherExpenses;
+
+    return {
+      from,
+      to,
+      sections,
+      totals: {
+        revenue,
+        cogs,
+        grossProfit,
+        expenses,
+        operatingProfit,
+        otherIncome,
+        otherExpenses,
+        netProfit,
+      },
+      // Диагностика на время настройки: сколько счетов, есть ли балансы.
+      diagnostics: {
+        accounts: accounts.length,
+        balEndRows: balEnd.rows.length,
+        balStartRows: balStart.rows.length,
+        balSample: balEnd.sample || balStart.sample || "",
+        accSample: accounts.length ? "" : accText.slice(0, 800),
+      },
+    };
+  } finally {
+    await logout(key);
+  }
+}
