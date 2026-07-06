@@ -6248,7 +6248,7 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
         {sorted.length > 0 && (
           <div className="hidden lg:block">
             <table
-              className="w-full"
+              className="w-full cash-table"
               style={{ borderCollapse: "collapse", fontSize: 13 }}
             >
               <thead>
@@ -9778,6 +9778,8 @@ export default function App({ authUser, onLogout }) {
           padding-right:34px !important;border-radius:12px;cursor:pointer}
         select:focus-visible{outline:2px solid ${C.brandA};outline-offset:2px}
         input[type=date],input[type=month]{border-radius:12px}
+        .cash-table th,.cash-table td{padding-left:16px}
+        .cash-table th:first-child,.cash-table td:first-child{padding-left:0}
         @media(min-width:768px){.desk-shift{margin-left:250px}}`}</style>
 
       <div className="flex" style={{ minHeight: "100vh" }}>
