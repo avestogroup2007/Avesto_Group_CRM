@@ -379,7 +379,13 @@ export async function salesReport({ from, to, departments }) {
         "DishName",
       ],
     }).catch(() => []);
-    return { byDay, byPay, byDish, byGroups };
+    // По часу открытия заказа — для аналитики продаж по времени (пиковые часы,
+    // средний чек по часам).
+    const byHour = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["HourOpen"],
+    }).catch(() => []);
+    return { byDay, byPay, byDish, byGroups, byHour };
   } finally {
     await logout(key);
   }
