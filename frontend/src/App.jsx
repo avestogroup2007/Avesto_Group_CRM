@@ -50,6 +50,7 @@ import {
   Wallet,
   Menu,
   CalendarDays,
+  ArrowUp,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
@@ -9182,6 +9183,39 @@ const VIEW_TITLE = {
   admin: "Админ-панель",
 };
 
+// Кнопка «Наверх»: появляется только когда страница прокручена вниз (по
+// необходимости), плавно возвращает к началу. На мобильных поднята над нижней
+// навигацией. Скролл идёт по окну (боковое меню зафиксировано).
+function ScrollTopButton() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 400);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  if (!show) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      aria-label="Наверх"
+      title="Наверх"
+      className="fixed right-4 md:right-6 bottom-24 md:bottom-6 z-40 flex items-center justify-center rounded-full shadow-lg"
+      style={{
+        width: 46,
+        height: 46,
+        background: C.brandA,
+        color: "#fff",
+        border: "none",
+        cursor: "pointer",
+      }}
+    >
+      <ArrowUp size={22} />
+    </button>
+  );
+}
+
 function Sidebar({ view, setView, role }) {
   const items = NAV.filter((n) => navAllowed(n, role));
   return (
@@ -9953,6 +9987,8 @@ export default function App({ authUser, onLogout }) {
           </main>
         </div>
       </div>
+
+      <ScrollTopButton />
 
       <BottomNav
         view={s.view}
