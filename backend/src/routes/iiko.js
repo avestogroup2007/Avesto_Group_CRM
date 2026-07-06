@@ -10,7 +10,11 @@ import {
   salesReport,
   listEmployees,
 } from "../services/iikoServer.js";
-import { syncEmployeesToDb, listDbEmployees } from "../services/iikoSync.js";
+import {
+  syncEmployeesToDb,
+  listDbEmployees,
+  updateEmployeeAccess,
+} from "../services/iikoSync.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -77,6 +81,20 @@ r.get(
   requireRole("director", "sysadmin"),
   asyncHandler(async (req, res) => {
     res.json({ employees: await listDbEmployees() });
+  })
+);
+
+// Настройка прав сотрудника из iiko: роль и/или активность (доступ ко входу).
+r.patch(
+  "/employees/:id",
+  requireRole("director", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const { role, active } = req.body || {};
+    try {
+      res.json(await updateEmployeeAccess(req.params.id, { role, active }));
+    } catch (e) {
+      res.status(400).json({ error: e.message || "Не удалось обновить" });
+    }
   })
 );
 

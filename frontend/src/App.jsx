@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
-import { apiGet, apiPost } from "./api.js";
+import { apiGet, apiPost, apiPatch } from "./api.js";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -9166,6 +9166,152 @@ function IikoStaffPreview() {
   );
 }
 
+// Управление учётными записями сотрудников из iiko (права доступа): роль и
+// доступ ко входу. Уволенные в iiko заблокированы автоматически.
+function IikoStaffAccounts() {
+  const [st, setSt] = useState({ status: "idle", list: [], error: "" });
+  const load = async () => {
+    setSt((p) => ({ ...p, status: "loading", error: "" }));
+    try {
+      const data = await apiGet("/api/iiko/employees/db");
+      setSt({ status: "ok", list: data.employees || [], error: "" });
+    } catch (e) {
+      setSt({ status: "error", list: [], error: e.message || "Ошибка" });
+    }
+  };
+  const patch = async (id, body) => {
+    setSt((p) => ({
+      ...p,
+      list: p.list.map((u) => (u.id === id ? { ...u, ...body } : u)),
+    }));
+    try {
+      await apiPatch(`/api/iiko/employees/${id}`, body);
+    } catch {
+      load(); // при ошибке перечитываем актуальное состояние
+    }
+  };
+  const roleOpts = ROLE_OPTS.map(([value, label]) => ({
+    value,
+    label: tr(label),
+  }));
+  return (
+    <AdCard
+      title="Учётные записи из iiko — права доступа"
+      desc="Роль и доступ ко входу реальных сотрудников. Уволенные в iiko заблокированы автоматически. Сначала синхронизируйте, затем «Загрузить учётные записи»."
+    >
+      <button
+        onClick={load}
+        disabled={st.status === "loading"}
+        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+        style={{
+          background: C.brandA,
+          fontSize: 14.5,
+          opacity: st.status === "loading" ? 0.6 : 1,
+        }}
+      >
+        <Users size={17} />
+        {st.status === "loading" ? "Загрузка…" : "Загрузить учётные записи"}
+      </button>
+
+      {st.status === "error" && (
+        <p style={{ color: "#B23", fontSize: 13, marginTop: 12 }}>
+          Не удалось загрузить: {st.error}
+        </p>
+      )}
+
+      {st.status === "ok" && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>
+            Учётных записей: <b>{st.list.length}</b>
+          </p>
+          {st.list.length === 0 ? (
+            <p style={{ fontSize: 13, color: C.sub }}>
+              Пока пусто — нажмите «Синхронизировать в систему» выше.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full" style={{ fontSize: 13 }}>
+                <thead>
+                  <tr style={{ color: C.faint, textAlign: "left" }}>
+                    <th className="pb-2 font-semibold">Сотрудник</th>
+                    <th className="pb-2 font-semibold">Должность</th>
+                    <th className="pb-2 font-semibold">Филиал</th>
+                    <th className="pb-2 font-semibold">Роль (доступ)</th>
+                    <th className="pb-2 font-semibold text-center">Вход</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {st.list.map((u) => (
+                    <tr
+                      key={u.id}
+                      style={{
+                        borderTop: `1px solid ${C.line}`,
+                        opacity: u.active ? 1 : 0.5,
+                      }}
+                    >
+                      <td
+                        className="py-2 pr-2"
+                        style={{ color: C.ink, fontWeight: 600 }}
+                      >
+                        {u.displayName || "—"}
+                        {u.login ? (
+                          <span style={{ color: C.faint, fontWeight: 400 }}>
+                            {" "}
+                            · {u.login}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="py-2 pr-2" style={{ color: C.sub }}>
+                        {u.position || "—"}
+                      </td>
+                      <td className="py-2 pr-2" style={{ color: C.sub }}>
+                        {u.iikoDepartment || "—"}
+                      </td>
+                      <td className="py-2 pr-2" style={{ minWidth: 160 }}>
+                        <Select
+                          value={u.role}
+                          onChange={(v) => patch(u.id, { role: v })}
+                          options={roleOpts}
+                        />
+                      </td>
+                      <td className="py-2 text-center">
+                        {u.iikoDeleted ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#B23",
+                            }}
+                          >
+                            Уволен в iiko
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => patch(u.id, { active: !u.active })}
+                            className="rounded-lg px-2.5 py-1 font-semibold"
+                            style={{
+                              fontSize: 12,
+                              border: `1px solid ${C.line}`,
+                              background: u.active ? "#EAF7EE" : "#FDECEC",
+                              color: u.active ? "#2C7" : "#B23",
+                            }}
+                          >
+                            {u.active ? "Разрешён" : "Заблокирован"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </AdCard>
+  );
+}
+
 function AdminStaff({ s, dispatch, notify }) {
   const blank = {
     name: "",
@@ -9285,6 +9431,8 @@ function AdminStaff({ s, dispatch, notify }) {
       </AdCard>
 
       <IikoStaffPreview />
+
+      <IikoStaffAccounts />
 
       <AdCard
         title={`Сотрудники (${s.users.length})`}
