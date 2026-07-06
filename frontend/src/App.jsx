@@ -4769,6 +4769,7 @@ function NiceSelect({
               width: "max-content",
               maxWidth: "min(280px, calc(100vw - 32px))",
               zIndex: 60,
+              background: "#fff",
               border: `1px solid ${C.border}`,
               boxShadow: "0 14px 36px rgba(15,23,42,.16)",
               maxHeight: 320,
@@ -4915,6 +4916,7 @@ function NiceDate({ label, value, onChange, min, max, disabled, width }) {
               zIndex: 60,
               width: 268,
               maxWidth: "calc(100vw - 32px)",
+              background: "#fff",
               border: `1px solid ${C.border}`,
               boxShadow: "0 14px 36px rgba(15,23,42,.16)",
             }}
@@ -9812,14 +9814,13 @@ export default function App({ authUser, onLogout }) {
         /* Жидкое стекло: матовые полупрозрачные поверхности хрома */
         .glass{background:${C.glass};-webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);border:1px solid ${C.glassBorder}}
         .glass-chrome{background:${C.glassStrong};-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%)}
-        /* Карточки-контент как матовое стекло: тёплый градиент просвечивает,
-           но текст/данные остаются читаемыми (высокая непрозрачность). Поповеры
-           с явной тенью (shadow-xl/lg/2xl) не трогаем — они остаются плотными. */
+        /* Карточки-контент: полупрозрачные (тёплый градиент чуть просвечивает) +
+           премиальная тень и подсветка. БЕЗ backdrop-filter — иначе карточки
+           создают stacking-контекст и перекрывают выпадающие списки/календари.
+           Стекло с размытием оставляем только на «хроме» (меню/шапка/модалки). */
         .rounded-2xl.bg-white:not(.shadow-xl):not(.shadow-lg):not(.shadow-2xl){
-          background:rgba(255,255,255,.70)!important;
-          -webkit-backdrop-filter:blur(16px) saturate(150%);
-          backdrop-filter:blur(16px) saturate(150%);
-          border-color:rgba(255,255,255,.6);
+          background:rgba(255,255,255,.86);
+          border-color:rgba(255,255,255,.7);
           box-shadow:0 1px 2px rgba(74,38,22,.05),0 14px 32px rgba(74,38,22,.10),inset 0 1px 0 rgba(255,255,255,.55);
           transition:box-shadow .22s ease,transform .22s ease}
         /* Утилита приподнимания при наведении (для кликабельных карточек) */
