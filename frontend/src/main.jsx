@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import Login from "./Login.jsx";
+import ChangePassword from "./ChangePassword.jsx";
 import { me, logout } from "./api.js";
 import "./index.css";
 
@@ -64,7 +65,10 @@ class ErrorBoundary extends React.Component {
         >
           {String(e && e.message ? e.message : e)}
           {"\n\n"}
-          {String((e && e.stack) || "").split("\n").slice(0, 6).join("\n")}
+          {String((e && e.stack) || "")
+            .split("\n")
+            .slice(0, 6)
+            .join("\n")}
         </pre>
         <button
           onClick={() => window.location.reload()}
@@ -119,6 +123,21 @@ function AuthGate() {
     return <Login onSuccess={(user) => setState({ loading: false, user })} />;
   }
 
+  // Первый вход по временному паролю — сначала обязательная смена пароля.
+  if (state.user.mustChangePassword) {
+    return (
+      <ChangePassword
+        user={state.user}
+        onDone={() =>
+          setState((s) => ({
+            ...s,
+            user: { ...s.user, mustChangePassword: false },
+          }))
+        }
+      />
+    );
+  }
+
   return (
     <App
       authUser={state.user}
@@ -135,5 +154,5 @@ createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <AuthGate />
     </ErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
