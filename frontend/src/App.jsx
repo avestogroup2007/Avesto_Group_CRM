@@ -46,6 +46,7 @@ import {
   Lock,
   Activity,
   TrendingUp,
+  FileText,
   Wallet,
   Menu,
   CalendarDays,
@@ -7191,7 +7192,8 @@ function PnlView({ data }) {
   );
 }
 
-function SalesAnalytics({ s, me, branchScope }) {
+function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
+  const isReports = mode === "reports";
   const branches = s.branches || [];
   const isMgr = me.role === "manager";
   const myBranch = me.branchId || (branches[0] && branches[0].id) || 1;
@@ -7269,18 +7271,28 @@ function SalesAnalytics({ s, me, branchScope }) {
       setTo(r.to);
     }
   };
-  // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
-  const REPORTS = [
+  // Разделили экран на «Аналитику» (оперативные срезы) и «Отчёты» (формальные
+  // отчёты вроде ОПиУ). Набор вкладок зависит от режима.
+  const ANALYTICS_REPORTS = [
     ["revenue", "Динамика выручки"],
     ["time", "По времени"],
     ["pay", "Оплаты"],
     ["dishes", "Блюда"],
     ["abc", "ABC"],
     ["staff", "Персонал"],
-    ["pnl", "Прибыль / убыток"],
     ["insights", "Выводы"],
   ];
-  const [tab, setTab] = usePersisted("avesto.sales.tab", "revenue");
+  const REPORT_REPORTS = [["pnl", "Прибыль / убыток"]];
+  const REPORTS = isReports ? REPORT_REPORTS : ANALYTICS_REPORTS;
+  const [tab, setTab] = usePersisted(
+    isReports ? "avesto.reports.tab" : "avesto.sales.tab",
+    isReports ? "pnl" : "revenue",
+  );
+  // Если сохранённая вкладка не из текущего набора (после разделения экранов) —
+  // сбрасываем на первую доступную.
+  useEffect(() => {
+    if (!REPORTS.some(([k]) => k === tab)) setTab(REPORTS[0][0]);
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const [abcMode, setAbcMode] = usePersisted("avesto.sales.abcMode", "dish"); // dish | g1 | g2 | g3
   const [dishSort, setDishSort] = usePersisted("avesto.sales.dishSort", "sum"); // sum | qty
   const [abcDrill, setAbcDrill] = useState(null); // раскрытая группа (имя)
@@ -8620,6 +8632,12 @@ const NAV = [
     icon: TrendingUp,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
+  {
+    key: "reports",
+    label: "Отчёты",
+    icon: FileText,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
   { key: "org", label: "Оргструктура", icon: Building2, roles: "all" },
   { key: "about", label: "О системе", icon: Info, roles: "all" },
   { key: "admin", label: "Админ-панель", icon: Settings, roles: ["sysadmin"] },
@@ -8635,6 +8653,7 @@ const VIEW_TITLE = {
   time: "Учёт рабочего времени",
   cash: "Кассы филиалов",
   sales: "Аналитика продаж",
+  reports: "Отчёты",
   org: "Оргструктура и филиалы",
   about: "О системе",
   admin: "Админ-панель",
@@ -9382,7 +9401,26 @@ export default function App({ authUser, onLogout }) {
               navAllowed(
                 { roles: NAV.find((n) => n.key === "sales").roles },
                 me.role,
-              ) && <SalesAnalytics s={s} me={me} branchScope={branchScope} />}
+              ) && (
+                <SalesAnalytics
+                  s={s}
+                  me={me}
+                  branchScope={branchScope}
+                  mode="analytics"
+                />
+              )}
+            {s.view === "reports" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "reports").roles },
+                me.role,
+              ) && (
+                <SalesAnalytics
+                  s={s}
+                  me={me}
+                  branchScope={branchScope}
+                  mode="reports"
+                />
+              )}
             {s.view === "org" && <OrgStructure />}
             {s.view === "about" && <AboutView />}
             {s.view === "admin" && me.role === "sysadmin" && (
