@@ -37,8 +37,12 @@ r.post(
       return res.status(400).json({ error: "Неверный формат" });
     }
 
+    // Вход по логину из iiko ИЛИ по внутреннему имени (демо-учётки, ручные).
     const user = await db.user.findFirst({
-      where: { name: parsed.data.login, active: true },
+      where: {
+        active: true,
+        OR: [{ login: parsed.data.login }, { name: parsed.data.login }],
+      },
     });
 
     // Одинаковый ответ и текст для «нет пользователя» и «неверный пароль» —
@@ -74,9 +78,11 @@ r.post(
       token,
       id: user.id,
       name: user.name,
+      displayName: user.displayName || user.name,
       role: user.role,
       branchId: user.branchId,
       position: user.position,
+      mustChangePassword: user.mustChangePassword,
     });
   })
 );
@@ -97,16 +103,53 @@ r.get(
       select: {
         id: true,
         name: true,
+        displayName: true,
         role: true,
         branchId: true,
         position: true,
         active: true,
+        mustChangePassword: true,
       },
     });
     if (!user || !user.active) {
       return res.status(401).json({ error: "Пользователь недоступен" });
     }
     res.json(user);
+  })
+);
+
+// POST /api/auth/change-password — смена собственного пароля (в т.ч. первичная).
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6),
+});
+r.post(
+  "/change-password",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const parsed = ChangePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "Новый пароль — минимум 6 символов" });
+    }
+    const user = await db.user.findUnique({ where: { id: req.user.uid } });
+    if (!user || !user.active) {
+      return res.status(401).json({ error: "Пользователь недоступен" });
+    }
+    const ok = await bcrypt.compare(
+      parsed.data.currentPassword,
+      user.passwordHash
+    );
+    if (!ok) {
+      return res.status(400).json({ error: "Текущий пароль неверный" });
+    }
+    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
+    await db.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustChangePassword: false },
+    });
+    res.json({ ok: true });
   })
 );
 

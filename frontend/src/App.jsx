@@ -8897,6 +8897,16 @@ function IikoStaffPreview() {
     rawFirst: "",
     deptRawFirst: "",
   });
+  const [sync, setSync] = useState({ status: "idle", error: "", result: null });
+  const runSync = async () => {
+    setSync({ status: "loading", error: "", result: null });
+    try {
+      const result = await apiPost("/api/iiko/employees/sync", {});
+      setSync({ status: "ok", error: "", result });
+    } catch (e) {
+      setSync({ status: "error", error: e.message || "Ошибка", result: null });
+    }
+  };
   const load = async () => {
     setSt((p) => ({ ...p, status: "loading", error: "" }));
     try {
@@ -8925,21 +8935,53 @@ function IikoStaffPreview() {
   return (
     <AdCard
       title="Сотрудники из iiko"
-      desc="Реальный список сотрудников из iiko — источник правды по кадрам. Пока это предпросмотр; на следующем шаге добавим импорт в учётные записи, настройку прав доступа и авто-блокировку уволенных."
+      desc="iiko — источник правды по кадрам. «Загрузить из iiko» — предпросмотр. «Синхронизировать в систему» — завести/обновить учётные записи в базе: вход по логину из iiko, уволенных в iiko система блокирует автоматически."
     >
-      <button
-        onClick={load}
-        disabled={loading}
-        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
-        style={{
-          background: C.brandA,
-          fontSize: 14.5,
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        <Users size={17} />
-        {loading ? "Загрузка…" : "Загрузить из iiko"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={load}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+          style={{
+            background: C.brandA,
+            fontSize: 14.5,
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          <Users size={17} />
+          {loading ? "Загрузка…" : "Загрузить из iiko"}
+        </button>
+        <button
+          onClick={runSync}
+          disabled={sync.status === "loading"}
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold"
+          style={{
+            background: "#fff",
+            color: C.brandA,
+            border: `1.5px solid ${C.brandA}`,
+            fontSize: 14.5,
+            opacity: sync.status === "loading" ? 0.6 : 1,
+          }}
+        >
+          <Users size={17} />
+          {sync.status === "loading"
+            ? "Синхронизация…"
+            : "Синхронизировать в систему"}
+        </button>
+      </div>
+
+      {sync.status === "ok" && sync.result && (
+        <p style={{ color: "#2C7", fontSize: 13, marginTop: 10 }}>
+          Синхронизировано: создано <b>{sync.result.created}</b>, обновлено{" "}
+          <b>{sync.result.updated}</b>, заблокировано (уволены в iiko){" "}
+          <b>{sync.result.blocked}</b> из <b>{sync.result.total}</b>.
+        </p>
+      )}
+      {sync.status === "error" && (
+        <p style={{ color: "#B23", fontSize: 13, marginTop: 10 }}>
+          Ошибка синхронизации: {sync.error}
+        </p>
+      )}
 
       {st.status === "error" && (
         <p style={{ color: "#B23", fontSize: 13, marginTop: 12 }}>
