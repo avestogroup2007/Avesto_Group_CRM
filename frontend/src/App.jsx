@@ -6866,6 +6866,7 @@ function useIikoSales({ from, to, department }) {
         const byGroups = arr(res?.byGroups);
         const byHour = arr(res?.byHour);
         const byStaff = arr(res?.byStaff);
+        const byHourDish = arr(res?.byHourDish);
         const num = (v) => {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
@@ -6969,6 +6970,28 @@ function useIikoSales({ from, to, department }) {
         const staff = Object.values(staffMap)
           .filter((x) => x.name && x.name !== "—")
           .sort((a, b) => b.checks - a.checks);
+        // Блюда по часам: hour -> отсортированный список {name, qty, sum} —
+        // чтобы по клику на час показать, что продавалось в этот час.
+        const hourDishMap = {};
+        byHourDish.forEach((r) => {
+          const h = parseInt(
+            String(r["HourOpen"] ?? "").replace(/[^\d]/g, ""),
+            10,
+          );
+          if (!Number.isFinite(h)) return;
+          const name = r["DishName"] || "—";
+          if (!hourDishMap[h]) hourDishMap[h] = {};
+          if (!hourDishMap[h][name])
+            hourDishMap[h][name] = { name, qty: 0, sum: 0 };
+          hourDishMap[h][name].qty += num(r["DishAmountInt"]);
+          hourDishMap[h][name].sum += rev(r);
+        });
+        const hourProducts = {};
+        Object.keys(hourDishMap).forEach((h) => {
+          hourProducts[h] = Object.values(hourDishMap[h]).sort(
+            (a, b) => b.sum - a.sum,
+          );
+        });
         setState({
           status: days.length ? "ok" : "empty",
           days,
@@ -6982,6 +7005,7 @@ function useIikoSales({ from, to, department }) {
           groupRows,
           hours,
           staff,
+          hourProducts,
         });
       })
       .catch((e) => {
@@ -7089,6 +7113,7 @@ function SalesAnalytics({ s, me, branchScope }) {
   const [abcMode, setAbcMode] = usePersisted("avesto.sales.abcMode", "dish"); // dish | g1 | g2 | g3
   const [dishSort, setDishSort] = usePersisted("avesto.sales.dishSort", "sum"); // sum | qty
   const [abcDrill, setAbcDrill] = useState(null); // раскрытая группа (имя)
+  const [openHour, setOpenHour] = useState(null); // раскрытый час (вкладка «По времени»)
 
   const inScope = (r, a, b) =>
     r.date >= a &&
@@ -7241,6 +7266,9 @@ function SalesAnalytics({ s, me, branchScope }) {
       : demoProducts;
   // Продажи по часам (0–23) из iiko — для вкладки «По времени».
   const liveHours = liveOn && live.hours ? live.hours : null;
+  // Блюда по часам (для раскрытия по клику на час).
+  const liveHourProducts =
+    liveOn && live.hourProducts ? live.hourProducts : null;
   // Активность персонала из iiko — для вкладки «Персонал».
   const liveStaff = liveOn && live.staff ? live.staff : null;
   // Список блюд, отсортированный для вкладки «Блюда»: по выручке или по
@@ -7631,63 +7659,123 @@ function SalesAnalytics({ s, me, branchScope }) {
                     {fmtSum(peak.revenue)}
                   </p>
                   <div className="space-y-1">
-                    {active.map((h) => (
-                      <div
-                        key={h.hour}
-                        className="flex items-center gap-2"
-                        style={{ fontSize: 12 }}
-                      >
-                        <div style={{ width: 46, color: C.sub }}>
-                          {pad(h.hour)}:00
-                        </div>
-                        <div
-                          style={{
-                            flex: 1,
-                            minWidth: 60,
-                            background: "#F1EBE1",
-                            borderRadius: 6,
-                            height: 16,
-                            overflow: "hidden",
-                          }}
-                        >
+                    {active.map((h) => {
+                      const isOpen = openHour === h.hour;
+                      const dishes =
+                        (liveHourProducts && liveHourProducts[h.hour]) || [];
+                      return (
+                        <div key={h.hour}>
                           <div
-                            style={{
-                              width: `${Math.round((h.revenue / maxRev) * 100)}%`,
-                              background:
-                                h.hour === peak.hour ? C.brandA : "#C99A6A",
-                              height: "100%",
-                            }}
-                          />
+                            onClick={() => setOpenHour(isOpen ? null : h.hour)}
+                            className="flex items-center gap-2"
+                            style={{ fontSize: 12, cursor: "pointer" }}
+                            title="Показать, что продавалось в этот час"
+                          >
+                            <div style={{ width: 14, color: C.brandA }}>
+                              {isOpen ? "▾" : "▸"}
+                            </div>
+                            <div style={{ width: 46, color: C.sub }}>
+                              {pad(h.hour)}:00
+                            </div>
+                            <div
+                              style={{
+                                flex: 1,
+                                minWidth: 60,
+                                background: "#F1EBE1",
+                                borderRadius: 6,
+                                height: 16,
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: `${Math.round((h.revenue / maxRev) * 100)}%`,
+                                  background:
+                                    h.hour === peak.hour ? C.brandA : "#C99A6A",
+                                  height: "100%",
+                                }}
+                              />
+                            </div>
+                            <div
+                              style={{
+                                width: 108,
+                                textAlign: "right",
+                                color: C.ink,
+                              }}
+                            >
+                              {fmtSum(h.revenue)}
+                            </div>
+                            <div
+                              style={{
+                                width: 64,
+                                textAlign: "right",
+                                color: C.faint,
+                              }}
+                            >
+                              {h.checks} чек.
+                            </div>
+                            <div
+                              style={{
+                                width: 110,
+                                textAlign: "right",
+                                color: C.sub,
+                              }}
+                            >
+                              ср. {fmtSum(h.avg)}
+                            </div>
+                          </div>
+                          {isOpen && (
+                            <div
+                              style={{
+                                margin: "4px 0 8px 60px",
+                                padding: "8px 10px",
+                                background: "#F7F4EF",
+                                border: `1px solid ${C.line}`,
+                                borderRadius: 10,
+                              }}
+                            >
+                              {dishes.length === 0 ? (
+                                <div style={{ fontSize: 12, color: C.faint }}>
+                                  Нет детализации по блюдам за этот час.
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <div
+                                    style={{
+                                      fontSize: 11.5,
+                                      color: C.faint,
+                                      marginBottom: 4,
+                                    }}
+                                  >
+                                    Блюда за {pad(h.hour)}:00–{pad(h.hour)}:59 (
+                                    {dishes.length}):
+                                  </div>
+                                  {dishes.slice(0, 50).map((d, i) => (
+                                    <div
+                                      key={i}
+                                      className="flex items-center justify-between gap-2"
+                                      style={{ fontSize: 12 }}
+                                    >
+                                      <span style={{ color: C.ink }}>
+                                        {d.name}
+                                      </span>
+                                      <span
+                                        style={{
+                                          color: C.sub,
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        {d.qty} шт · {fmtSum(d.sum)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div
-                          style={{
-                            width: 108,
-                            textAlign: "right",
-                            color: C.ink,
-                          }}
-                        >
-                          {fmtSum(h.revenue)}
-                        </div>
-                        <div
-                          style={{
-                            width: 64,
-                            textAlign: "right",
-                            color: C.faint,
-                          }}
-                        >
-                          {h.checks} чек.
-                        </div>
-                        <div
-                          style={{
-                            width: 110,
-                            textAlign: "right",
-                            color: C.sub,
-                          }}
-                        >
-                          ср. {fmtSum(h.avg)}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );

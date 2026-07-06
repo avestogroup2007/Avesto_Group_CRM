@@ -390,7 +390,12 @@ export async function salesReport({ from, to, departments }) {
       ...opts,
       groupByRowFields: ["OrderWaiter"],
     }).catch(() => []);
-    return { byDay, byPay, byDish, byGroups, byHour, byStaff };
+    // Час + блюдо — чтобы по клику на час показать, что продавалось в этот час.
+    const byHourDish = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["HourOpen", "DishName"],
+    }).catch(() => []);
+    return { byDay, byPay, byDish, byGroups, byHour, byStaff, byHourDish };
   } finally {
     await logout(key);
   }
