@@ -9786,10 +9786,11 @@ export default function App({ authUser, onLogout }) {
         color: C.ink,
         // Тёплый «мешевый» градиент бренда как фон под стеклянными поверхностями.
         background:
-          "radial-gradient(1200px 620px at 8% -12%, rgba(200,137,46,0.16), transparent 60%)," +
-          "radial-gradient(1000px 720px at 102% -6%, rgba(123,45,31,0.12), transparent 55%)," +
-          "radial-gradient(1100px 900px at 50% 118%, rgba(124,58,237,0.06), transparent 60%)," +
-          "linear-gradient(180deg, #FBF8F3 0%, #F5EFE6 100%)",
+          "radial-gradient(1100px 620px at 4% -12%, rgba(200,137,46,0.34), transparent 56%)," +
+          "radial-gradient(1000px 700px at 104% -4%, rgba(123,45,31,0.26), transparent 54%)," +
+          "radial-gradient(900px 620px at 92% 108%, rgba(230,150,60,0.22), transparent 56%)," +
+          "radial-gradient(1000px 900px at 30% 118%, rgba(124,58,237,0.12), transparent 58%)," +
+          "linear-gradient(180deg, #F4ECDF 0%, #EBE0CF 100%)",
         backgroundAttachment: "fixed",
       }}
     >
@@ -9807,9 +9808,15 @@ export default function App({ authUser, onLogout }) {
         /* Жидкое стекло: матовые полупрозрачные поверхности хрома */
         .glass{background:${C.glass};-webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);border:1px solid ${C.glassBorder}}
         .glass-chrome{background:${C.glassStrong};-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%)}
-        /* Мягкая «премиальная» тень для карточек (кроме уже затенённых поповеров) */
+        /* Карточки-контент как матовое стекло: тёплый градиент просвечивает,
+           но текст/данные остаются читаемыми (высокая непрозрачность). Поповеры
+           с явной тенью (shadow-xl/lg/2xl) не трогаем — они остаются плотными. */
         .rounded-2xl.bg-white:not(.shadow-xl):not(.shadow-lg):not(.shadow-2xl){
-          box-shadow:0 1px 2px rgba(74,38,22,.04),0 10px 26px rgba(74,38,22,.06);
+          background:rgba(255,255,255,.70)!important;
+          -webkit-backdrop-filter:blur(16px) saturate(150%);
+          backdrop-filter:blur(16px) saturate(150%);
+          border-color:rgba(255,255,255,.6);
+          box-shadow:0 1px 2px rgba(74,38,22,.05),0 14px 32px rgba(74,38,22,.10),inset 0 1px 0 rgba(255,255,255,.55);
           transition:box-shadow .22s ease,transform .22s ease}
         /* Утилита приподнимания при наведении (для кликабельных карточек) */
         .lift{transition:transform .22s ease,box-shadow .22s ease}
