@@ -69,6 +69,18 @@ export async function me() {
   }
 }
 
+// Смена собственного пароля (в т.ч. обязательная при первом входе).
+export async function changePassword(currentPassword, newPassword) {
+  const res = await fetch(`${BASE}/api/auth/change-password`, {
+    method: "POST",
+    credentials: "include",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export async function logout() {
   try {
     await fetch(`${BASE}/api/auth/logout`, {
