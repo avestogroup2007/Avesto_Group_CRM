@@ -3,7 +3,6 @@ import { KeyRound, Loader2 } from "lucide-react";
 import { changePassword } from "./api.js";
 import Logo from "./Logo.jsx";
 
-const BRAND_A = "#7B2D1F";
 const INK = "#1B1512";
 const SUB = "#5E5049";
 const BORDER = "#E7DFD4";
@@ -50,20 +49,32 @@ export default function ChangePassword({ user, onDone }) {
     border: `1px solid ${BORDER}`,
     fontSize: 15,
     color: INK,
-    background: "#fff",
+    background: "rgba(255,255,255,.85)",
   };
   const label = { color: SUB, fontSize: 13 };
 
   return (
     <div
       className="min-h-dvh flex items-center justify-center p-4"
-      style={{ fontFamily: FONT, background: "#F7F4EF" }}
+      style={{
+        fontFamily: FONT,
+        background:
+          "radial-gradient(900px 520px at 12% -10%, rgba(200,137,46,0.22), transparent 60%)," +
+          "radial-gradient(820px 620px at 100% 0%, rgba(123,45,31,0.18), transparent 55%)," +
+          "radial-gradient(900px 800px at 50% 120%, rgba(124,58,237,0.10), transparent 60%)," +
+          "linear-gradient(180deg, #FBF8F3 0%, #F3ECE2 100%)",
+      }}
     >
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');`}</style>
       <div
-        className="w-full max-w-sm rounded-2xl bg-white p-6 sm:p-7"
+        className="w-full max-w-sm rounded-2xl p-6 sm:p-7"
         style={{
-          border: `1px solid ${BORDER}`,
-          boxShadow: "0 10px 40px rgba(15,23,42,.08)",
+          border: "1px solid rgba(255,255,255,.7)",
+          background: "rgba(255,255,255,.62)",
+          backdropFilter: "blur(22px) saturate(160%)",
+          WebkitBackdropFilter: "blur(22px) saturate(160%)",
+          boxShadow:
+            "0 20px 60px rgba(74,38,22,.16), inset 0 1px 0 rgba(255,255,255,.6)",
         }}
       >
         <div className="flex items-center gap-3 mb-5">
@@ -154,9 +165,11 @@ export default function ChangePassword({ user, onDone }) {
             disabled={busy}
             className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold text-white"
             style={{
-              background: BRAND_A,
+              background:
+                "linear-gradient(135deg, #8A3323 0%, #7B2D1F 55%, #5E2016 100%)",
               fontSize: 15,
               opacity: busy ? 0.7 : 1,
+              boxShadow: "0 10px 26px rgba(123,45,31,.34)",
             }}
           >
             {busy ? (
