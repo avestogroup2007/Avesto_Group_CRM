@@ -415,12 +415,39 @@ const PNL_TYPES = {
   OTHER_EXPENSES: "Прочие расходы",
 };
 
+// Подразделения корпорации (id + название) — чтобы фильтровать балансы по
+// филиалу (balance/counteragents ждёт id подразделения, а не название).
+async function fetchDepartments(key) {
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/corporation/departments?key=${encodeURIComponent(key)}`
+    );
+    const text = await res.text();
+    if (!res.ok) return [];
+    const blocks =
+      text.match(/<corporateItemDto\b[^>]*>[\s\S]*?<\/corporateItemDto>/g) ||
+      [];
+    return blocks.map((b) => ({
+      id: (b.match(/<id>([\s\S]*?)<\/id>/) || [])[1] || "",
+      name: decodeXml(
+        ((b.match(/<name>([\s\S]*?)<\/name>/) || [])[1] || "").trim()
+      ),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // Балансы по счетам на учётную дату (timestamp: yyyy-MM-ddTHH:mm:ss).
-async function fetchAccountBalances(key, timestamp) {
+// departmentId — необязательный фильтр по подразделению (id).
+async function fetchAccountBalances(key, timestamp, departmentId) {
+  const dep = departmentId
+    ? `&department=${encodeURIComponent(departmentId)}`
+    : "";
   const res = await fetch(
     `${BASE}/resto/api/v2/reports/balance/counteragents?key=${encodeURIComponent(
       key
-    )}&timestamp=${encodeURIComponent(timestamp)}`,
+    )}&timestamp=${encodeURIComponent(timestamp)}${dep}`,
     { headers: { Accept: "application/json" } }
   );
   const text = await res.text();
@@ -474,8 +501,10 @@ function buildPnlSection(accounts, type, turnover) {
   return { total, lines: roots };
 }
 
-// Полный ОПиУ за период. departments — id подразделений (необязательно).
-export async function pnlReport({ from, to }) {
+// Полный ОПиУ за период. department — название филиала (необязательно);
+// без него отчёт по всей корпорации (там суммируются внутренние передачи,
+// поэтому для сверки с iiko выбирайте конкретный филиал).
+export async function pnlReport({ from, to, department }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await auth();
   try {
@@ -495,11 +524,21 @@ export async function pnlReport({ from, to }) {
       /* оставим пустым */
     }
 
+    // Резолвим id филиала по названию (для фильтра балансов).
+    let departmentId = null;
+    let departmentResolved = null;
+    if (department) {
+      const depts = await fetchDepartments(key);
+      const found = depts.find((d) => d.name === department);
+      departmentId = found ? found.id : null;
+      departmentResolved = found ? found.name : null;
+    }
+
     // Обороты за период = баланс(конец) − баланс(начало).
     const startTs = `${from}T00:00:00`;
     const endTs = nextDayStart(to).replace(".000", "");
-    const balEnd = await fetchAccountBalances(key, endTs);
-    const balStart = await fetchAccountBalances(key, startTs);
+    const balEnd = await fetchAccountBalances(key, endTs, departmentId);
+    const balStart = await fetchAccountBalances(key, startTs, departmentId);
     const endM = balanceById(balEnd.rows);
     const startM = balanceById(balStart.rows);
     const turnover = {};
@@ -524,6 +563,8 @@ export async function pnlReport({ from, to }) {
     return {
       from,
       to,
+      department: department || null,
+      departmentResolved,
       sections,
       totals: {
         revenue,
