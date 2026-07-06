@@ -6864,6 +6864,7 @@ function useIikoSales({ from, to, department }) {
         const byPay = arr(res?.byPay);
         const byDish = arr(res?.byDish);
         const byGroups = arr(res?.byGroups);
+        const byHour = arr(res?.byHour);
         const num = (v) => {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
@@ -6933,6 +6934,29 @@ function useIikoSales({ from, to, department }) {
         const group1 = aggBy("g1");
         const group2 = aggBy("g2");
         const group3 = aggBy("g3");
+        // По часам открытия заказа (0–23): выручка, чеки, средний чек.
+        const hourMap = {};
+        byHour.forEach((r) => {
+          const h = parseInt(
+            String(r["HourOpen"] ?? r["Hour"] ?? "").replace(/[^\d]/g, ""),
+            10,
+          );
+          if (!Number.isFinite(h)) return;
+          if (!hourMap[h]) hourMap[h] = { revenue: 0, checks: 0, qty: 0 };
+          hourMap[h].revenue += rev(r);
+          hourMap[h].checks += num(r["UniqOrderId"]);
+          hourMap[h].qty += num(r["DishAmountInt"]);
+        });
+        const hours = Array.from({ length: 24 }, (_, h) => {
+          const m = hourMap[h] || { revenue: 0, checks: 0, qty: 0 };
+          return {
+            hour: h,
+            revenue: m.revenue,
+            checks: m.checks,
+            qty: m.qty,
+            avg: m.checks ? m.revenue / m.checks : 0,
+          };
+        });
         setState({
           status: days.length ? "ok" : "empty",
           days,
@@ -6944,6 +6968,7 @@ function useIikoSales({ from, to, department }) {
           group2,
           group3,
           groupRows,
+          hours,
         });
       })
       .catch((e) => {
@@ -7040,6 +7065,7 @@ function SalesAnalytics({ s, me, branchScope }) {
   // Переключатель отчётов (выбор анализа). На демо-данных сейчас, на iiko — позже.
   const REPORTS = [
     ["revenue", "Динамика выручки"],
+    ["time", "По времени"],
     ["pay", "Оплаты"],
     ["dishes", "Блюда"],
     ["abc", "ABC"],
@@ -7047,6 +7073,7 @@ function SalesAnalytics({ s, me, branchScope }) {
   ];
   const [tab, setTab] = usePersisted("avesto.sales.tab", "revenue");
   const [abcMode, setAbcMode] = usePersisted("avesto.sales.abcMode", "dish"); // dish | g1 | g2 | g3
+  const [dishSort, setDishSort] = usePersisted("avesto.sales.dishSort", "sum"); // sum | qty
   const [abcDrill, setAbcDrill] = useState(null); // раскрытая группа (имя)
 
   const inScope = (r, a, b) =>
@@ -7198,6 +7225,15 @@ function SalesAnalytics({ s, me, branchScope }) {
           sum: p.sum,
         }))
       : demoProducts;
+  // Продажи по часам (0–23) из iiko — для вкладки «По времени».
+  const liveHours = liveOn && live.hours ? live.hours : null;
+  // Список блюд, отсортированный для вкладки «Блюда»: по выручке или по
+  // количеству («что чаще покупают»).
+  const dishRows = [...products].sort((a, b) =>
+    dishSort === "qty" ? b.qty - a.qty : b.sum - a.sum,
+  );
+  const dishTop = dishRows.slice(0, 5);
+  const dishBottom = dishRows.slice(-5).reverse();
   // Раскладка ABC (доля, накопит., группа) на любом списке {name,qty,sum}.
   const withAbc = (list) => {
     const total = list.reduce((a, p) => a + p.sum, 0) || 1;
@@ -7546,6 +7582,109 @@ function SalesAnalytics({ s, me, branchScope }) {
         </div>
       )}
 
+      {/* продажи по времени (по часам) */}
+      {tab === "time" && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+              Продажи по времени (по часам)
+            </h3>
+            {liveOn && (
+              <span style={{ fontSize: 12, color: C.faint }}>
+                ● данные из iiko
+              </span>
+            )}
+          </div>
+          {liveHours && liveHours.some((h) => h.revenue > 0) ? (
+            (() => {
+              const active = liveHours.filter(
+                (h) => h.revenue > 0 || h.checks > 0,
+              );
+              const maxRev = Math.max(...active.map((h) => h.revenue), 1);
+              const peak = active.reduce(
+                (a, h) => (h.revenue > a.revenue ? h : a),
+                active[0],
+              );
+              return (
+                <div>
+                  <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 10 }}>
+                    Пиковый час: <b>{pad(peak.hour)}:00</b> —{" "}
+                    {fmtSum(peak.revenue)}
+                  </p>
+                  <div className="space-y-1">
+                    {active.map((h) => (
+                      <div
+                        key={h.hour}
+                        className="flex items-center gap-2"
+                        style={{ fontSize: 12 }}
+                      >
+                        <div style={{ width: 46, color: C.sub }}>
+                          {pad(h.hour)}:00
+                        </div>
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth: 60,
+                            background: "#F1EBE1",
+                            borderRadius: 6,
+                            height: 16,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${Math.round((h.revenue / maxRev) * 100)}%`,
+                              background:
+                                h.hour === peak.hour ? C.brandA : "#C99A6A",
+                              height: "100%",
+                            }}
+                          />
+                        </div>
+                        <div
+                          style={{
+                            width: 108,
+                            textAlign: "right",
+                            color: C.ink,
+                          }}
+                        >
+                          {fmtSum(h.revenue)}
+                        </div>
+                        <div
+                          style={{
+                            width: 64,
+                            textAlign: "right",
+                            color: C.faint,
+                          }}
+                        >
+                          {h.checks} чек.
+                        </div>
+                        <div
+                          style={{
+                            width: 110,
+                            textAlign: "right",
+                            color: C.sub,
+                          }}
+                        >
+                          ср. {fmtSum(h.avg)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
+            <p style={{ fontSize: 13, color: C.faint }}>
+              Данные по времени доступны при подключении к iiko (реальные
+              продажи по часам за выбранный период).
+            </p>
+          )}
+        </div>
+      )}
+
       {/* выручка по типам оплат */}
       {tab === "pay" && payRows.length > 0 && (
         <div
@@ -7845,71 +7984,107 @@ function SalesAnalytics({ s, me, branchScope }) {
 
       {/* топ и аутсайдеры */}
       {tab === "dishes" && products.length > 0 && (
-        <div
-          className="grid gap-4"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          }}
-        >
-          <div
-            className="rounded-2xl bg-white p-4 sm:p-5"
-            style={{ border: `1px solid ${C.border}` }}
-          >
-            <h3
-              className="font-bold mb-2"
-              style={{ color: C.ok, fontSize: 15 }}
-            >
-              ▲ {tr("Лучше всего продаются")}
-            </h3>
-            {top.map((p, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-2 py-1.5"
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span style={{ fontSize: 13, color: C.sub }}>Сортировка:</span>
+            {[
+              ["sum", "по выручке"],
+              ["qty", "по количеству"],
+            ].map(([k, l]) => (
+              <button
+                key={k}
+                onClick={() => setDishSort(k)}
+                className="rounded-lg px-3 py-1.5 font-semibold"
                 style={{
-                  borderBottom:
-                    i < top.length - 1 ? `1px solid ${C.line}` : "none",
+                  fontSize: 12.5,
+                  background: dishSort === k ? C.brandA : "#fff",
+                  color: dishSort === k ? "#fff" : C.sub,
+                  border: `1px solid ${dishSort === k ? C.brandA : C.line}`,
                 }}
               >
-                <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
-                  {i + 1}. {p.name}
-                </span>
-                <span
-                  style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}
-                >
-                  {fmtSum(p.sum)} · {p.qty} {tr("шт")}
-                </span>
-              </div>
+                {l}
+              </button>
             ))}
+            <span style={{ fontSize: 12, color: C.faint }}>
+              {dishSort === "qty"
+                ? "что покупают чаще всего"
+                : "что приносит больше выручки"}
+            </span>
           </div>
           <div
-            className="rounded-2xl bg-white p-4 sm:p-5"
-            style={{ border: `1px solid ${C.border}` }}
+            className="grid gap-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            }}
           >
-            <h3
-              className="font-bold mb-2"
-              style={{ color: C.bad, fontSize: 15 }}
+            <div
+              className="rounded-2xl bg-white p-4 sm:p-5"
+              style={{ border: `1px solid ${C.border}` }}
             >
-              ▼ {tr("Хуже всего продаются")}
-            </h3>
-            {bottom.map((p, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between gap-2 py-1.5"
-                style={{
-                  borderBottom:
-                    i < bottom.length - 1 ? `1px solid ${C.line}` : "none",
-                }}
+              <h3
+                className="font-bold mb-2"
+                style={{ color: C.ok, fontSize: 15 }}
               >
-                <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
-                  {p.name}
-                </span>
-                <span
-                  style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}
+                ▲{" "}
+                {dishSort === "qty"
+                  ? tr("Чаще всего покупают")
+                  : tr("Лучше всего продаются")}
+              </h3>
+              {dishTop.map((p, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2 py-1.5"
+                  style={{
+                    borderBottom:
+                      i < dishTop.length - 1 ? `1px solid ${C.line}` : "none",
+                  }}
                 >
-                  {fmtSum(p.sum)} · {p.qty} {tr("шт")}
-                </span>
-              </div>
-            ))}
+                  <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+                    {i + 1}. {p.name}
+                  </span>
+                  <span
+                    style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}
+                  >
+                    {fmtSum(p.sum)} · {p.qty} {tr("шт")}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div
+              className="rounded-2xl bg-white p-4 sm:p-5"
+              style={{ border: `1px solid ${C.border}` }}
+            >
+              <h3
+                className="font-bold mb-2"
+                style={{ color: C.bad, fontSize: 15 }}
+              >
+                ▼{" "}
+                {dishSort === "qty"
+                  ? tr("Реже всего покупают")
+                  : tr("Хуже всего продаются")}
+              </h3>
+              {dishBottom.map((p, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2 py-1.5"
+                  style={{
+                    borderBottom:
+                      i < dishBottom.length - 1
+                        ? `1px solid ${C.line}`
+                        : "none",
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+                    {p.name}
+                  </span>
+                  <span
+                    style={{ fontSize: 13, color: C.sub, whiteSpace: "nowrap" }}
+                  >
+                    {fmtSum(p.sum)} · {p.qty} {tr("шт")}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
