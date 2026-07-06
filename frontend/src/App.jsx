@@ -6865,6 +6865,7 @@ function useIikoSales({ from, to, department }) {
         const byDish = arr(res?.byDish);
         const byGroups = arr(res?.byGroups);
         const byHour = arr(res?.byHour);
+        const byStaff = arr(res?.byStaff);
         const num = (v) => {
           const n = Number(v);
           return Number.isFinite(n) ? n : 0;
@@ -6957,6 +6958,17 @@ function useIikoSales({ from, to, department }) {
             avg: m.checks ? m.revenue / m.checks : 0,
           };
         });
+        // Активность персонала: кто чаще открывает заказы (по официанту).
+        const staffMap = {};
+        byStaff.forEach((r) => {
+          const name = r["OrderWaiter"] || r["Waiter"] || r["Cashier"] || "—";
+          if (!staffMap[name]) staffMap[name] = { name, checks: 0, revenue: 0 };
+          staffMap[name].checks += num(r["UniqOrderId"]);
+          staffMap[name].revenue += rev(r);
+        });
+        const staff = Object.values(staffMap)
+          .filter((x) => x.name && x.name !== "—")
+          .sort((a, b) => b.checks - a.checks);
         setState({
           status: days.length ? "ok" : "empty",
           days,
@@ -6969,6 +6981,7 @@ function useIikoSales({ from, to, department }) {
           group3,
           groupRows,
           hours,
+          staff,
         });
       })
       .catch((e) => {
@@ -7069,6 +7082,7 @@ function SalesAnalytics({ s, me, branchScope }) {
     ["pay", "Оплаты"],
     ["dishes", "Блюда"],
     ["abc", "ABC"],
+    ["staff", "Персонал"],
     ["insights", "Выводы"],
   ];
   const [tab, setTab] = usePersisted("avesto.sales.tab", "revenue");
@@ -7227,6 +7241,8 @@ function SalesAnalytics({ s, me, branchScope }) {
       : demoProducts;
   // Продажи по часам (0–23) из iiko — для вкладки «По времени».
   const liveHours = liveOn && live.hours ? live.hours : null;
+  // Активность персонала из iiko — для вкладки «Персонал».
+  const liveStaff = liveOn && live.staff ? live.staff : null;
   // Список блюд, отсортированный для вкладки «Блюда»: по выручке или по
   // количеству («что чаще покупают»).
   const dishRows = [...products].sort((a, b) =>
@@ -8086,6 +8102,104 @@ function SalesAnalytics({ s, me, branchScope }) {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* активность персонала */}
+      {tab === "staff" && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+              Активность персонала (кто чаще открывает заказы)
+            </h3>
+            {liveOn && (
+              <span style={{ fontSize: 12, color: C.faint }}>
+                ● данные из iiko
+              </span>
+            )}
+          </div>
+          {liveStaff && liveStaff.length > 0 ? (
+            (() => {
+              const maxChecks = Math.max(...liveStaff.map((x) => x.checks), 1);
+              return (
+                <div>
+                  <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 10 }}>
+                    Самый активный: <b>{liveStaff[0].name}</b> —{" "}
+                    {liveStaff[0].checks} заказ.
+                  </p>
+                  <div className="space-y-1">
+                    {liveStaff.slice(0, 20).map((x, i) => (
+                      <div
+                        key={x.name}
+                        className="flex items-center gap-2"
+                        style={{ fontSize: 12 }}
+                      >
+                        <div style={{ width: 22, color: C.faint }}>
+                          {i + 1}.
+                        </div>
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth: 80,
+                            color: C.ink,
+                            fontWeight: 600,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {x.name}
+                        </div>
+                        <div
+                          style={{
+                            width: 120,
+                            background: "#F1EBE1",
+                            borderRadius: 6,
+                            height: 14,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${Math.round((x.checks / maxChecks) * 100)}%`,
+                              background: i === 0 ? C.brandA : "#C99A6A",
+                              height: "100%",
+                            }}
+                          />
+                        </div>
+                        <div
+                          style={{
+                            width: 74,
+                            textAlign: "right",
+                            color: C.ink,
+                          }}
+                        >
+                          {x.checks} зак.
+                        </div>
+                        <div
+                          style={{
+                            width: 120,
+                            textAlign: "right",
+                            color: C.sub,
+                          }}
+                        >
+                          {fmtSum(x.revenue)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
+            <p style={{ fontSize: 13, color: C.faint }}>
+              Активность персонала доступна при подключении к iiko (число
+              заказов по сотруднику за период).
+            </p>
+          )}
         </div>
       )}
 
