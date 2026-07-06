@@ -33,7 +33,7 @@ model Branch {
 
 model User {
   id           String   @id @default(cuid())
-  name         String   @unique // используется как логин
+  name         String   @unique // внутренний логин/ключ (уникален)
   passwordHash String // bcrypt-хэш, никогда не пароль
   role         String // director|finance|manager|accountant|sysadmin|staff
   position     String   @default("")
@@ -42,6 +42,18 @@ model User {
   branch       Branch?  @relation(fields: [branchId], references: [id])
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+
+  // ── Интеграция с iiko (кадры) ─ iiko как источник правды по сотрудникам.
+  login              String? // логин из iiko (вход по нему), напр. "Jahongir"
+  displayName        String? // ФИО из iiko для отображения
+  positionCode       String  @default("") // код роли iiko (ADM, MN1, WR1…)
+  iikoId             String? @unique // id сотрудника в iiko (ключ синхронизации)
+  iikoDepartment     String  @default("") // подразделения/филиалы из iiko (текст)
+  source             String  @default("manual") // manual | iiko
+  iikoDeleted        Boolean @default(false) // удалён/уволен в iiko
+  mustChangePassword Boolean @default(false) // сменить пароль при первом входе
+  hireDate           String? // дата найма из iiko
+  fireDate           String? // дата увольнения из iiko
 
   createdTasks Task[]     @relation("creator")
   auditLogs    AuditLog[]

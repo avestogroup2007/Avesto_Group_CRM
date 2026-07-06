@@ -2,6 +2,7 @@
 // напрямую — логин/пароль остаются на сервере. Все маршруты требуют входа.
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import {
   iikoConfigured,
@@ -9,6 +10,7 @@ import {
   salesReport,
   listEmployees,
 } from "../services/iikoServer.js";
+import { syncEmployeesToDb, listDbEmployees } from "../services/iikoSync.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -56,6 +58,25 @@ r.get(
   "/employees",
   handleIiko(async (req, res) => {
     res.json(await listEmployees());
+  })
+);
+
+// Синхронизация кадров из iiko в базу CRM (только директор/сисадмин).
+// Заводит/обновляет учётные записи, уволенных в iiko блокирует.
+r.post(
+  "/employees/sync",
+  requireRole("director", "sysadmin"),
+  handleIiko(async (req, res) => {
+    res.json(await syncEmployeesToDb());
+  })
+);
+
+// Список уже синхронизированных из iiko сотрудников (учётные записи CRM).
+r.get(
+  "/employees/db",
+  requireRole("director", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    res.json({ employees: await listDbEmployees() });
   })
 );
 
