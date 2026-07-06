@@ -79,6 +79,45 @@ export async function syncEmployeesToDb() {
   return { total: employees.length, created, updated, blocked };
 }
 
+const ALLOWED_ROLES = [
+  "director",
+  "finance",
+  "manager",
+  "accountant",
+  "sysadmin",
+  "staff",
+];
+
+// Настройка прав синхронизированного сотрудника: роль и/или активность.
+// Разрешено менять только записи из iiko (source=iiko) — демо/ручные не трогаем.
+export async function updateEmployeeAccess(id, { role, active }) {
+  const existing = await db.user.findUnique({ where: { id } });
+  if (!existing || existing.source !== "iiko") {
+    throw new Error("Сотрудник из iiko не найден");
+  }
+  const data = {};
+  if (role !== undefined) {
+    if (!ALLOWED_ROLES.includes(role)) throw new Error("Недопустимая роль");
+    data.role = role;
+  }
+  if (active !== undefined) data.active = Boolean(active);
+  return db.user.update({
+    where: { id },
+    data,
+    select: {
+      id: true,
+      displayName: true,
+      login: true,
+      position: true,
+      iikoDepartment: true,
+      role: true,
+      active: true,
+      iikoDeleted: true,
+      mustChangePassword: true,
+    },
+  });
+}
+
 // Список синхронизированных из iiko сотрудников (для экрана управления).
 export async function listDbEmployees() {
   return db.user.findMany({

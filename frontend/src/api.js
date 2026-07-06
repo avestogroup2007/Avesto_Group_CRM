@@ -114,3 +114,14 @@ export async function apiPost(path, body) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+export async function apiPatch(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
