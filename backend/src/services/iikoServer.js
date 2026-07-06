@@ -476,8 +476,9 @@ function balanceById(rows) {
 }
 
 // Строит поддерево счетов заданного типа (по accountParentId) с оборотами.
-// value узла = оборот его листьев (родителям берём сумму детей, чтобы не
-// задваивать). Возвращает { total, lines }.
+// Знак оборота сохраняем (коррекции бывают отрицательными). Собственные
+// проводки счёта-группы iiko показывает строкой «<название>, прочие», поэтому
+// у родителя с ненулевым собственным оборотом добавляем такой лист.
 function buildPnlSection(accounts, type, turnover) {
   const inType = accounts.filter((a) => a.type === type && !a.deleted);
   const ids = new Set(inType.map((a) => a.id));
@@ -486,12 +487,15 @@ function buildPnlSection(accounts, type, turnover) {
     const p = ids.has(a.accountParentId) ? a.accountParentId : "__root__";
     (childrenOf[p] = childrenOf[p] || []).push(a);
   });
-  const isLeaf = (a) => !(childrenOf[a.id] && childrenOf[a.id].length);
   const node = (a) => {
+    const label = a.name || a.code || "—";
     const kids = (childrenOf[a.id] || []).map(node);
-    const own = isLeaf(a) ? Math.abs(turnover[a.id] || 0) : 0;
-    const value = own + kids.reduce((s, k) => s + k.value, 0);
-    return { name: a.name || a.code || "—", value, children: kids };
+    const own = turnover[a.id] || 0; // без модуля — сохраняем знак
+    if (kids.length && own) {
+      kids.push({ name: `${label}, прочие`, value: own, children: [] });
+    }
+    const value = kids.length ? kids.reduce((s, k) => s + k.value, 0) : own;
+    return { name: label, value, children: kids };
   };
   const roots = (childrenOf.__root__ || [])
     .map(node)
