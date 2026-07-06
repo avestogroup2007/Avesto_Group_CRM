@@ -385,7 +385,12 @@ export async function salesReport({ from, to, departments }) {
       ...opts,
       groupByRowFields: ["HourOpen"],
     }).catch(() => []);
-    return { byDay, byPay, byDish, byGroups, byHour };
+    // По официанту заказа — активность персонала (кто чаще открывает заказы).
+    const byStaff = await runOlap(key, {
+      ...opts,
+      groupByRowFields: ["OrderWaiter"],
+    }).catch(() => []);
+    return { byDay, byPay, byDish, byGroups, byHour, byStaff };
   } finally {
     await logout(key);
   }
