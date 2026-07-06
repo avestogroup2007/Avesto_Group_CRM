@@ -479,7 +479,7 @@ function balanceById(rows) {
 // Знак оборота сохраняем (коррекции бывают отрицательными). Собственные
 // проводки счёта-группы iiko показывает строкой «<название>, прочие», поэтому
 // у родителя с ненулевым собственным оборотом добавляем такой лист.
-function buildPnlSection(accounts, type, turnover) {
+function buildPnlSection(accounts, type, turnover, sign) {
   const inType = accounts.filter((a) => a.type === type && !a.deleted);
   const ids = new Set(inType.map((a) => a.id));
   const childrenOf = {};
@@ -490,7 +490,9 @@ function buildPnlSection(accounts, type, turnover) {
   const node = (a) => {
     const label = a.name || a.code || "—";
     const kids = (childrenOf[a.id] || []).map(node);
-    const own = turnover[a.id] || 0; // без модуля — сохраняем знак
+    // Двойная запись iiko: доходные счета кредитовые (оборот отрицательный),
+    // расходные дебетовые (положительный). sign=-1 у доходов делает их плюсом.
+    const own = (turnover[a.id] || 0) * sign;
     if (kids.length && own) {
       kids.push({ name: `${label}, прочие`, value: own, children: [] });
     }
@@ -552,8 +554,10 @@ export async function pnlReport({ from, to, department }) {
     });
 
     const sections = {};
+    const incomeTypes = new Set(["INCOME", "OTHER_INCOME"]);
     for (const type of Object.keys(PNL_TYPES)) {
-      sections[type] = buildPnlSection(accounts, type, turnover);
+      const sign = incomeTypes.has(type) ? -1 : 1;
+      sections[type] = buildPnlSection(accounts, type, turnover, sign);
     }
     const revenue = sections.INCOME.total;
     const cogs = sections.COST_OF_GOODS_SOLD.total;
