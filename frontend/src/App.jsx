@@ -66,7 +66,9 @@ import { apiGet, apiPost, apiPatch } from "./api.js";
 const FONT =
   "'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-// Дизайн-токены: высокий контраст, доступность для всех поколений (Этап 3)
+// Дизайн-токены: высокий контраст, доступность для всех поколений (Этап 3).
+// Плюс «жидкое стекло»: полупрозрачные матовые поверхности для хрома (боковое
+// меню, шапка, нижняя навигация, модалки) поверх тёплого градиентного фона.
 const C = {
   bg: "#F7F4EF",
   surface: "#FFFFFF",
@@ -81,6 +83,13 @@ const C = {
   ok: "#16A34A",
   warn: "#D97706",
   bad: "#DC2626",
+  // Стеклянные поверхности (используются через классы .glass* в глобальном CSS).
+  glass: "rgba(255,255,255,0.58)",
+  glassStrong: "rgba(255,251,246,0.80)",
+  glassBorder: "rgba(255,255,255,0.65)",
+  glassShadow: "0 8px 32px rgba(74,38,22,0.10), 0 2px 8px rgba(74,38,22,0.06)",
+  // Фирменный градиент для основных кнопок и акцентов.
+  brandGrad: "linear-gradient(135deg, #8A3323 0%, #7B2D1F 55%, #5E2016 100%)",
 };
 
 // 5 фаз жизненного цикла заявки — каждая со своим цветом
@@ -2476,12 +2485,16 @@ function TaskDetail({
   return (
     <div
       className="fixed inset-0 z-40 flex justify-end"
-      style={{ background: "rgba(15,23,42,.45)" }}
+      style={{
+        background: "rgba(30,16,10,.42)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+      }}
       onClick={onClose}
     >
       <div
-        className="h-full w-full bg-white overflow-y-auto"
-        style={{ maxWidth: 560 }}
+        className="h-full w-full bg-white overflow-y-auto fade-up"
+        style={{ maxWidth: 560, boxShadow: "-24px 0 60px rgba(30,16,10,.22)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -9201,13 +9214,14 @@ function ScrollTopButton() {
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       aria-label="Наверх"
       title="Наверх"
-      className="fixed right-4 md:right-6 bottom-24 md:bottom-6 z-40 flex items-center justify-center rounded-full shadow-lg"
+      className="lift fixed right-4 md:right-6 bottom-24 md:bottom-6 z-40 flex items-center justify-center rounded-full"
       style={{
-        width: 46,
-        height: 46,
-        background: C.brandA,
+        width: 48,
+        height: 48,
+        background: C.brandGrad,
         color: "#fff",
-        border: "none",
+        border: "1px solid rgba(255,255,255,.35)",
+        boxShadow: "0 10px 28px rgba(123,45,31,.34)",
         cursor: "pointer",
       }}
     >
@@ -9220,7 +9234,7 @@ function Sidebar({ view, setView, role }) {
   const items = NAV.filter((n) => navAllowed(n, role));
   return (
     <aside
-      className="hidden md:flex flex-col"
+      className="hidden md:flex flex-col glass-chrome"
       style={{
         position: "fixed",
         left: 0,
@@ -9228,8 +9242,8 @@ function Sidebar({ view, setView, role }) {
         width: 250,
         height: "100vh",
         overflowY: "auto",
-        borderRight: `1px solid ${C.border}`,
-        background: "#fff",
+        borderRight: `1px solid ${C.glassBorder}`,
+        boxShadow: "1px 0 24px rgba(74,38,22,.05)",
         zIndex: 40,
       }}
     >
@@ -9265,12 +9279,13 @@ function Sidebar({ view, setView, role }) {
             <button
               key={n.key}
               onClick={() => setView(n.key)}
-              className="flex items-center gap-3 rounded-xl px-3 py-3 text-left transition"
+              className={`nav-item flex items-center gap-3 rounded-xl px-3 py-3 text-left${active ? " nav-item-active" : ""}`}
               style={{
-                background: active ? C.brandA : "transparent",
+                background: active ? C.brandGrad : "transparent",
                 color: active ? "#fff" : C.ink,
                 fontWeight: active ? 700 : 600,
                 fontSize: 14.5,
+                boxShadow: active ? "0 6px 18px rgba(123,45,31,.30)" : "none",
               }}
             >
               <n.icon size={20} color={active ? "#fff" : C.sub} /> {tr(n.label)}
@@ -9337,11 +9352,10 @@ function BottomNav({ view, setView, role, onMore }) {
   );
   return (
     <nav
-      className="md:hidden fixed left-0 right-0 bottom-0 flex items-stretch"
+      className="md:hidden fixed left-0 right-0 bottom-0 flex items-stretch glass-chrome"
       style={{
-        background: "#fff",
-        borderTop: `1px solid ${C.border}`,
-        boxShadow: "0 -4px 16px rgba(15,23,42,.07)",
+        borderTop: `1px solid ${C.glassBorder}`,
+        boxShadow: "0 -6px 22px rgba(74,38,22,.09)",
         paddingBottom: "max(6px, env(safe-area-inset-bottom))",
         zIndex: 30,
       }}
@@ -9373,16 +9387,21 @@ function MoreSheet({ open, onClose, items, view, setView }) {
     <div className="md:hidden fixed inset-0" style={{ zIndex: 60 }}>
       <div
         className="absolute inset-0"
-        style={{ background: "rgba(15,23,42,.45)" }}
+        style={{
+          background: "rgba(30,16,10,.42)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+        }}
         onClick={onClose}
       />
       <div
-        className="absolute left-0 right-0 bottom-0 bg-white p-4"
+        className="absolute left-0 right-0 bottom-0 glass-chrome p-4 fade-up"
         style={{
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
+          borderTop: `1px solid ${C.glassBorder}`,
           paddingBottom: "max(16px, env(safe-area-inset-bottom))",
-          boxShadow: "0 -8px 30px rgba(0,0,0,.18)",
+          boxShadow: "0 -12px 40px rgba(30,16,10,.24)",
         }}
       >
         <div
@@ -9448,10 +9467,11 @@ function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
   const [open, setOpen] = useState(false);
   return (
     <header
-      className="topbar-h bg-white px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0"
+      className="topbar-h glass-chrome px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0"
       style={{
         minHeight: 65,
-        borderBottom: `1px solid ${C.border}`,
+        borderBottom: `1px solid ${C.glassBorder}`,
+        boxShadow: "0 4px 20px rgba(74,38,22,.05)",
         zIndex: 20,
       }}
     >
@@ -9761,17 +9781,43 @@ export default function App({ authUser, onLogout }) {
   return (
     <div
       style={{
-        background: C.bg,
         minHeight: "100vh",
         fontFamily: FONT,
         color: C.ink,
+        // Тёплый «мешевый» градиент бренда как фон под стеклянными поверхностями.
+        background:
+          "radial-gradient(1200px 620px at 8% -12%, rgba(200,137,46,0.16), transparent 60%)," +
+          "radial-gradient(1000px 720px at 102% -6%, rgba(123,45,31,0.12), transparent 55%)," +
+          "radial-gradient(1100px 900px at 50% 118%, rgba(124,58,237,0.06), transparent 60%)," +
+          "linear-gradient(180deg, #FBF8F3 0%, #F5EFE6 100%)",
+        backgroundAttachment: "fixed",
       }}
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
         *{box-sizing:border-box} button{font-family:inherit;cursor:pointer} select{font-family:inherit}
-        ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:9px}
-        @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+        ::-webkit-scrollbar{height:9px;width:9px}
+        ::-webkit-scrollbar-thumb{background:rgba(123,45,31,.28);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+        ::-webkit-scrollbar-thumb:hover{background:rgba(123,45,31,.42);background-clip:padding-box}
+        ::selection{background:rgba(200,137,46,.28)}
         button:focus-visible{outline:2px solid ${C.brandA};outline-offset:2px}
+        /* Плавные микровзаимодействия */
+        button{transition:background-color .18s ease,color .18s ease,box-shadow .2s ease,border-color .18s ease,transform .12s ease,opacity .18s ease}
+        button:active:not(:disabled){transform:translateY(1px)}
+        a{transition:color .18s ease}
+        /* Жидкое стекло: матовые полупрозрачные поверхности хрома */
+        .glass{background:${C.glass};-webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);border:1px solid ${C.glassBorder}}
+        .glass-chrome{background:${C.glassStrong};-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%)}
+        /* Мягкая «премиальная» тень для карточек (кроме уже затенённых поповеров) */
+        .rounded-2xl.bg-white:not(.shadow-xl):not(.shadow-lg):not(.shadow-2xl){
+          box-shadow:0 1px 2px rgba(74,38,22,.04),0 10px 26px rgba(74,38,22,.06);
+          transition:box-shadow .22s ease,transform .22s ease}
+        /* Утилита приподнимания при наведении (для кликабельных карточек) */
+        .lift{transition:transform .22s ease,box-shadow .22s ease}
+        .lift:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(74,38,22,.12)}
+        .nav-item:not(.nav-item-active):hover{background:rgba(123,45,31,.07)!important}
+        @keyframes glassFadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+        .fade-up{animation:glassFadeUp .34s cubic-bezier(.22,.61,.36,1) both}
+        @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
         select{appearance:none;-webkit-appearance:none;-moz-appearance:none;
           background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
           background-repeat:no-repeat !important;background-position:right 12px center !important;background-size:14px !important;
@@ -9801,7 +9847,10 @@ export default function App({ authUser, onLogout }) {
             }}
           />
 
-          <main className="flex-1 p-4 md:p-6 pb-28 md:pb-6">
+          <main
+            key={s.view}
+            className="flex-1 p-4 md:p-6 pb-28 md:pb-6 fade-up"
+          >
             <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-4">
               <h1
                 className="font-extrabold"
