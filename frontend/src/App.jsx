@@ -4844,8 +4844,32 @@ const CAL_MONTHS = [
   "Декабрь",
 ];
 const CAL_DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const CAL_W = 268; // ширина календаря (px)
+const CAL_H = 330; // примерная высота календаря (px) — для вертикального прижатия
 function NiceDate({ label, value, onChange, min, max, disabled, width }) {
   const [open, setOpen] = useState(false);
+  const wrapRef = React.useRef(null);
+  // Позиция календаря (fixed) — считаем от кнопки и прижимаем в границы экрана,
+  // чтобы календарь не вылезал за правый край страницы.
+  const [pos, setPos] = useState(null);
+  const toggleOpen = () => {
+    if (!open) {
+      const r = wrapRef.current && wrapRef.current.getBoundingClientRect();
+      if (r) {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const left = Math.max(8, Math.min(r.left, vw - CAL_W - 8));
+        // Если снизу не помещается — раскрываем календарь над полем.
+        const below = r.bottom + 6;
+        const top =
+          below + CAL_H > vh && r.top - CAL_H - 6 > 8
+            ? r.top - CAL_H - 6
+            : below;
+        setPos({ top: Math.round(top), left: Math.round(left) });
+      }
+    }
+    setOpen((o) => !o);
+  };
   const [vy, setVy] = useState(+(value || ymdNow()).slice(0, 4));
   const [vm, setVm] = useState(+(value || ymdNow()).slice(5, 7) - 1);
   useEffect(() => {
@@ -4878,7 +4902,7 @@ function NiceDate({ label, value, onChange, min, max, disabled, width }) {
     setVy(y);
   };
   return (
-    <div style={{ position: "relative", width: width || "auto" }}>
+    <div ref={wrapRef} style={{ position: "relative", width: width || "auto" }}>
       {label && (
         <label
           style={{
@@ -4895,7 +4919,7 @@ function NiceDate({ label, value, onChange, min, max, disabled, width }) {
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggleOpen}
         className="w-full inline-flex items-center justify-between gap-2 rounded-xl px-3"
         style={{
           height: 40,
@@ -4925,12 +4949,14 @@ function NiceDate({ label, value, onChange, min, max, disabled, width }) {
           <div
             className="rounded-2xl bg-white p-3"
             style={{
-              position: "absolute",
-              top: "calc(100% + 6px)",
-              left: 0,
+              // fixed + координаты от кнопки, прижатые к границам экрана —
+              // календарь всегда помещается и не вылезает за край страницы.
+              position: "fixed",
+              top: pos ? pos.top : 0,
+              left: pos ? pos.left : 0,
               zIndex: 60,
-              width: 268,
-              maxWidth: "calc(100vw - 32px)",
+              width: CAL_W,
+              maxWidth: "calc(100vw - 16px)",
               background: "#fff",
               border: `1px solid ${C.border}`,
               boxShadow: "0 14px 36px rgba(15,23,42,.16)",
