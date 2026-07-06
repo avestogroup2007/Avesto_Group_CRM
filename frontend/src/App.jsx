@@ -9530,6 +9530,7 @@ export default function App({ authUser, onLogout }) {
                 "time",
                 "cash",
                 "sales",
+                "reports",
               ].includes(s.view) && (
                 <div className="ml-auto flex items-center gap-2">
                   {canPickBranch ? (
