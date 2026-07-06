@@ -176,6 +176,24 @@ function parseEmployeesXml(xml) {
   });
 }
 
+// Справочник ролей iiko (код -> читаемое название должности). Из справочника
+// ролей заведения. Если код не найден — показываем сам код.
+const ROLE_NAMES = {
+  BR1: "Бармен",
+  Груз: "Грузчик",
+  CS1: "Кассир",
+  FFC: "Кассир фаст-фуда",
+  MN1: "Менеджер",
+  HR: "Отдел кадров",
+  WR1: "Официант",
+  SG1: "Охранник",
+  CO1: "Повар",
+  ПК: "Помощник кондитера",
+  DW1: "Посудомойка",
+  ADM: "Системный администратор",
+  MN0: "Управляющий",
+};
+
 // Приведение одного сотрудника (из XML или JSON) к единому виду.
 function mapEmployee(e) {
   const fio = [e.lastName, e.firstName, e.middleName]
@@ -195,13 +213,15 @@ function mapEmployee(e) {
       .filter(Boolean);
   const pref = (e.preferredDepartmentCode || "").trim();
   const deptCodes = clean(e.departmentCodes);
+  const roleCode = (e.mainRoleCode || e.mainRole || "").trim();
   return {
     iikoId: e.id || e.iikoId || "",
     code: e.code || "",
     name,
     login: (e.login || "").trim(),
-    // Должность/роль в iiko — уточним отображаемое имя роли на следующем шаге.
-    position: e.mainRoleCode || e.mainRole || "",
+    // Должность: читаемое название по справочнику ролей (иначе — сам код).
+    position: ROLE_NAMES[roleCode] || roleCode,
+    positionCode: roleCode,
     roleCodes: clean(e.roleCodes),
     // Если явных подразделений нет — используем основной филиал (preferred).
     departmentCodes: deptCodes.length ? deptCodes : pref ? [pref] : [],
