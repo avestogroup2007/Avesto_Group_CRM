@@ -9580,7 +9580,22 @@ function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
                   className="truncate"
                   style={{ fontSize: 13.5, color: C.ink, fontWeight: 700 }}
                 >
-                  {authUser.name} · {authUser.role}
+                  {(() => {
+                    // Имя: реальное ФИО (displayName), а не внутренний ключ
+                    // «iiko-…». Должность: читаемая (position) или роль по словарю.
+                    const nm =
+                      authUser.displayName ||
+                      (String(authUser.name || "").startsWith("iiko-")
+                        ? ""
+                        : authUser.name) ||
+                      "Пользователь";
+                    const pos =
+                      authUser.position ||
+                      (ROLE_OPTS.find(([k]) => k === authUser.role) || [])[1] ||
+                      authUser.role ||
+                      "";
+                    return pos ? `${nm} · ${pos}` : nm;
+                  })()}
                 </div>
               </div>
             )}
