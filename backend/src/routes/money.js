@@ -38,7 +38,35 @@ const DEFAULT_PAY_TYPES = [
   "Payme",
   "Прочее",
 ];
+const DEFAULT_DDS = [
+  "Выручка",
+  "Инкассация с филиала",
+  "Зарплата (ФОТ)",
+  "Аренда",
+  "Коммунальные",
+  "Закупка ТМЦ",
+  "Маркетинг",
+  "Хозрасходы",
+  "Транспорт",
+  "Налоги",
+  "Пополнение уставного фонда",
+  "Прочее",
+];
+const DEFAULT_LEGAL = [
+  "«AVESTO CAFE» OK",
+  "«AVESTO SWEETS» OK",
+  "«INTERNATIONAL CATERING GROUP» MChJ",
+];
 const CURRENCIES = ["UZS", "RUB", "USD", "EUR"];
+const DICT_TYPES = [
+  "category",
+  "counterparty",
+  "ddsArticle",
+  "branch",
+  "legalEntity",
+  "account",
+  "paymentType",
+];
 
 // BigInt → Number для JSON (суммы заведомо в пределах безопасного диапазона).
 const n = (v) => (v == null ? 0 : Number(v));
@@ -124,6 +152,7 @@ r.get(
 
     const period = { income: 0, expense: 0, net: 0 };
     const byCategory = {};
+    const byDds = {};
     const byPaymentType = {};
     const byCounterparty = {};
     const byBranch = {};
@@ -141,6 +170,7 @@ r.get(
         obj[k][t.direction === "income" ? "income" : "expense"] += a;
       };
       bump(byCategory, t.category);
+      if (t.ddsArticle) bump(byDds, t.ddsArticle);
       bump(byPaymentType, t.paymentType);
       bump(byBranch, t.branchName || "Без филиала");
       if (t.direction === "expense") bump(byCounterparty, t.counterparty);
@@ -161,6 +191,7 @@ r.get(
       balance,
       period,
       byCategory: toArr(byCategory),
+      byDds: toArr(byDds),
       byPaymentType: toArr(byPaymentType),
       byBranch: toArr(byBranch),
       byCounterparty: toArr(byCounterparty).slice(0, 20),
@@ -175,31 +206,101 @@ r.get(
   })
 );
 
-// ── Справочники (для выпадающих списков ввода) ──────────────────────────────
-r.get(
-  "/dictionaries",
-  asyncHandler(async (req, res) => {
-    const rows = await db.moneyTx.findMany({
-      select: { category: true, counterparty: true, paymentType: true },
+// ── Справочники ────────────────────────────────────────────────────────────
+// Возвращаем по каждому типу массив записей {id, name, parent}. У дефолтных и
+// «использованных» записей id=null (не удаляются), у заведённых вручную — id
+// (можно удалить). Так один ответ обслуживает и выпадающие списки, и экран
+// управления справочниками.
+async function buildDict() {
+  const [rows, txs] = await Promise.all([
+    db.moneyDict.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+    }),
+    db.moneyTx.findMany({
+      select: { category: true, counterparty: true },
       take: 2000,
       orderBy: { createdAt: "desc" },
+    }),
+  ]);
+  const dbByType = {};
+  for (const t of DICT_TYPES) dbByType[t] = [];
+  for (const r of rows) (dbByType[r.type] || (dbByType[r.type] = [])).push(r);
+
+  const merge = (defaults, dbRows, used = []) => {
+    const map = new Map();
+    for (const name of defaults)
+      if (name && !map.has(name)) map.set(name, { id: null, name });
+    for (const name of used)
+      if (name && !map.has(name)) map.set(name, { id: null, name });
+    for (const r of dbRows)
+      map.set(r.name, { id: r.id, name: r.name, parent: r.parent || "" });
+    return [...map.values()];
+  };
+
+  return {
+    category: merge(
+      DEFAULT_CATEGORIES,
+      dbByType.category,
+      txs.map((x) => x.category)
+    ),
+    counterparty: merge(
+      [],
+      dbByType.counterparty,
+      txs.map((x) => x.counterparty)
+    ),
+    ddsArticle: merge(DEFAULT_DDS, dbByType.ddsArticle),
+    branch: merge([], dbByType.branch),
+    legalEntity: merge(DEFAULT_LEGAL, dbByType.legalEntity),
+    account: merge([], dbByType.account),
+    paymentType: merge(DEFAULT_PAY_TYPES, dbByType.paymentType),
+    currencies: CURRENCIES,
+  };
+}
+
+r.get(
+  "/dict",
+  asyncHandler(async (req, res) => {
+    res.json(await buildDict());
+  })
+);
+
+// Добавить запись справочника (тип + название, для счёта — юр. лицо в parent).
+const DictSchema = z.object({
+  type: z.enum([
+    "category",
+    "counterparty",
+    "ddsArticle",
+    "branch",
+    "legalEntity",
+    "account",
+    "paymentType",
+  ]),
+  name: z.string().min(1),
+  parent: z.string().default(""),
+});
+r.post(
+  "/dict",
+  asyncHandler(async (req, res) => {
+    const parsed = DictSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Неверный формат справочника" });
+    }
+    const d = parsed.data;
+    const entry = await db.moneyDict.upsert({
+      where: { type_name: { type: d.type, name: d.name.trim() } },
+      update: { active: true, parent: d.parent || "" },
+      create: { type: d.type, name: d.name.trim(), parent: d.parent || "" },
     });
-    const uniq = (arr) => [...new Set(arr.filter(Boolean))];
-    const categories = uniq([
-      ...DEFAULT_CATEGORIES,
-      ...rows.map((x) => x.category),
-    ]);
-    const paymentTypes = uniq([
-      ...DEFAULT_PAY_TYPES,
-      ...rows.map((x) => x.paymentType),
-    ]);
-    const counterparties = uniq(rows.map((x) => x.counterparty)).slice(0, 200);
-    res.json({
-      categories,
-      paymentTypes,
-      counterparties,
-      currencies: CURRENCIES,
-    });
+    res.status(201).json(entry);
+  })
+);
+
+r.delete(
+  "/dict/:id",
+  asyncHandler(async (req, res) => {
+    await db.moneyDict.delete({ where: { id: req.params.id } }).catch(() => {});
+    res.json({ ok: true });
   })
 );
 
@@ -208,7 +309,10 @@ const CreateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   direction: z.enum(["income", "expense"]),
   category: z.string().min(1),
+  ddsArticle: z.string().default(""),
   paymentType: z.string().default("Наличные"),
+  legalEntity: z.string().default(""),
+  account: z.string().default(""),
   counterparty: z.string().default(""),
   comment: z.string().default(""),
   amount: z.number().positive(),
@@ -232,7 +336,10 @@ r.post(
         date: d.date,
         direction: d.direction,
         category: d.category,
+        ddsArticle: d.ddsArticle || "",
         paymentType: d.paymentType,
+        legalEntity: d.legalEntity || "",
+        account: d.account || "",
         counterparty: d.counterparty,
         comment: d.comment,
         amount: BigInt(Math.round(d.amount)),
@@ -273,6 +380,9 @@ r.patch(
       "currency",
       "branchId",
       "branchName",
+      "ddsArticle",
+      "legalEntity",
+      "account",
     ]) {
       if (d[k] !== undefined)
         data[k] = d[k] === "" && k === "branchId" ? null : d[k];
