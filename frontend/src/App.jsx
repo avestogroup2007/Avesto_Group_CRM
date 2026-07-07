@@ -54,6 +54,7 @@ import {
   Banknote,
   Trash2,
   Pencil,
+  Check,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
@@ -7870,9 +7871,20 @@ function PnlAnalysis({ data }) {
 // Управление одним справочником модуля денег: список записей с удалением
 // (базовые — без id — удалять нельзя) и поле добавления. Для счетов ещё
 // выбирается юр. лицо-владелец.
-function DictManager({ type, title, entries, legalEntities, onAdd, onDelete }) {
+function DictManager({
+  type,
+  title,
+  entries,
+  legalEntities,
+  onAdd,
+  onEdit,
+  onDelete,
+}) {
   const [name, setName] = useState("");
   const [parent, setParent] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editParent, setEditParent] = useState("");
   const isAccount = type === "account";
   const inpSt = {
     border: `1px solid ${C.border}`,
@@ -7890,6 +7902,22 @@ function DictManager({ type, title, entries, legalEntities, onAdd, onDelete }) {
     onAdd(type, nm, isAccount ? parent : "");
     setName("");
   };
+  const startEdit = (e) => {
+    setEditId(e.id);
+    setEditName(e.name);
+    setEditParent(e.parent || "");
+  };
+  const cancelEdit = () => {
+    setEditId(null);
+    setEditName("");
+    setEditParent("");
+  };
+  const saveEdit = () => {
+    const nm = editName.trim();
+    if (!nm) return;
+    onEdit(editId, nm, isAccount ? editParent : "");
+    cancelEdit();
+  };
   return (
     <div
       className="rounded-2xl bg-white p-4 sm:p-5"
@@ -7903,32 +7931,98 @@ function DictManager({ type, title, entries, legalEntities, onAdd, onDelete }) {
         style={{ maxHeight: 220, overflowY: "auto" }}
       >
         {entries.length ? (
-          entries.map((e) => (
-            <div
-              key={e.id || e.name}
-              className="flex items-center justify-between gap-2"
-              style={{ fontSize: 13, padding: "3px 0" }}
-            >
-              <span style={{ color: C.ink }}>
-                {e.name}
-                {e.parent ? (
-                  <span style={{ color: C.faint }}> · {e.parent}</span>
-                ) : null}
-              </span>
-              {e.id ? (
+          entries.map((e) =>
+            editId && e.id === editId ? (
+              <div
+                key={e.id}
+                className="flex items-center gap-1.5"
+                style={{ padding: "3px 0" }}
+              >
+                {isAccount && (
+                  <select
+                    value={editParent}
+                    onChange={(ev) => setEditParent(ev.target.value)}
+                    style={{
+                      ...inpSt,
+                      flex: "0 0 auto",
+                      maxWidth: 130,
+                      padding: "6px 9px",
+                    }}
+                  >
+                    <option value="">юр. лицо…</option>
+                    {legalEntities.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  value={editName}
+                  autoFocus
+                  onChange={(ev) => setEditName(ev.target.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") saveEdit();
+                    if (ev.key === "Escape") cancelEdit();
+                  }}
+                  style={{ ...inpSt, padding: "6px 9px" }}
+                />
                 <button
-                  onClick={() => onDelete(e.id)}
+                  onClick={saveEdit}
                   className="p-1 rounded-lg shrink-0"
-                  style={{ color: C.bad }}
-                  title="Удалить"
+                  style={{ color: C.ok }}
+                  title="Сохранить"
                 >
-                  <Trash2 size={14} />
+                  <Check size={15} />
                 </button>
-              ) : (
-                <span style={{ fontSize: 10.5, color: C.faint }}>базовый</span>
-              )}
-            </div>
-          ))
+                <button
+                  onClick={cancelEdit}
+                  className="p-1 rounded-lg shrink-0"
+                  style={{ color: C.sub }}
+                  title="Отмена"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            ) : (
+              <div
+                key={e.id || e.name}
+                className="flex items-center justify-between gap-2"
+                style={{ fontSize: 13, padding: "3px 0" }}
+              >
+                <span style={{ color: C.ink }}>
+                  {e.name}
+                  {e.parent ? (
+                    <span style={{ color: C.faint }}> · {e.parent}</span>
+                  ) : null}
+                </span>
+                {e.id ? (
+                  <span className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => startEdit(e)}
+                      className="p-1 rounded-lg"
+                      style={{ color: C.sub }}
+                      title="Изменить"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => onDelete(e.id)}
+                      className="p-1 rounded-lg"
+                      style={{ color: C.bad }}
+                      title="Удалить"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 10.5, color: C.faint }}>
+                    базовый
+                  </span>
+                )}
+              </div>
+            ),
+          )
         ) : (
           <p style={{ fontSize: 12.5, color: C.faint }}>
             Пусто — добавьте ниже.
@@ -8183,6 +8277,15 @@ function MoneyView({ s, me, branchScope }) {
       reload();
     } catch (e) {
       alert(e.message || "Не удалось удалить");
+    }
+  };
+  const editDict = async (id, name, parent = "") => {
+    if (!id || !name || !name.trim()) return;
+    try {
+      await apiPatch(`/api/money/dict/${id}`, { name: name.trim(), parent });
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось изменить");
     }
   };
 
@@ -8758,6 +8861,7 @@ function MoneyView({ s, me, branchScope }) {
               entries={dict[type] || []}
               legalEntities={dnames("legalEntity")}
               onAdd={addDict}
+              onEdit={editDict}
               onDelete={delDict}
             />
           ))}

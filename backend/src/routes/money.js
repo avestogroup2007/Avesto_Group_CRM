@@ -296,6 +296,40 @@ r.post(
   })
 );
 
+// Редактировать запись справочника (переименовать, сменить юр. лицо у счёта).
+// Правим только записи, заведённые вручную (с id); базовые — из кода, неизменны.
+const DictPatchSchema = z.object({
+  name: z.string().min(1),
+  parent: z.string().default(""),
+});
+r.patch(
+  "/dict/:id",
+  asyncHandler(async (req, res) => {
+    const parsed = DictPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Неверный формат справочника" });
+    }
+    const cur = await db.moneyDict.findUnique({ where: { id: req.params.id } });
+    if (!cur) return res.status(404).json({ error: "Запись не найдена" });
+    const name = parsed.data.name.trim();
+    const parent = parsed.data.parent || "";
+    // Не даём создать дубль (тот же тип + имя у другой записи).
+    if (name !== cur.name) {
+      const clash = await db.moneyDict.findUnique({
+        where: { type_name: { type: cur.type, name } },
+      });
+      if (clash && clash.id !== cur.id) {
+        return res.status(409).json({ error: "Такая запись уже существует" });
+      }
+    }
+    const entry = await db.moneyDict.update({
+      where: { id: cur.id },
+      data: { name, parent },
+    });
+    res.json(entry);
+  })
+);
+
 r.delete(
   "/dict/:id",
   asyncHandler(async (req, res) => {
