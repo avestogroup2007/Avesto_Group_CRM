@@ -144,6 +144,37 @@ model CashReport {
   @@index([branchId])
 }
 
+// Учёт и контроль денег компании (казначейство). Заменяет ручной Excel:
+// приходы/расходы с типом, контрагентом, комментарием, суммой и валютой,
+// филиалом. Приход с филиала (инкассация) заводится автоматически (refId —
+// защита от дублей). Поля iiko* — для будущей выгрузки проводок в iiko.
+model MoneyTx {
+  id           String   @id @default(cuid())
+  date         String // YYYY-MM-DD (операционная дата)
+  direction    String // income | expense
+  category     String // статья/тип (Расход Маркетинг, Хоз расходы, Уставной фонд, Приход с филиала…)
+  paymentType  String   @default("Наличные") // тип оплаты (Наличные, Перечисление, Карта…)
+  counterparty String   @default("") // контрагент / на что потрачено
+  comment      String   @default("")
+  amount       BigInt // сумма в валюте currency
+  currency     String   @default("UZS") // UZS | RUB | USD | EUR
+  rate         Float    @default(1) // курс валюты к суму (для UZS = 1)
+  amountUzs    BigInt // amount * rate — для баланса и отчётов
+  branchId     String? // id филиала (без FK: филиалы могут быть демо/реальными)
+  branchName   String   @default("") // название филиала (для отчётов/истории)
+  source       String   @default("manual") // manual | branch-transfer | iiko
+  refId        String?  @unique // источник авто-прихода (id передачи) — идемпотентность
+  iikoStatus   String   @default("none") // none | pending | posted | error
+  iikoDocId    String? // id проводки/документа в iiko после выгрузки
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  @@index([date])
+  @@index([direction])
+  @@index([branchId])
+  @@index([category])
+}
+
 // Журнал безопасности — кто что выгружал, кто пытался копировать
 model AuditLog {
   id     String   @id @default(cuid())

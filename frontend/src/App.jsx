@@ -51,10 +51,12 @@ import {
   Menu,
   CalendarDays,
   ArrowUp,
+  Banknote,
+  Trash2,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
-import { apiGet, apiPost, apiPatch } from "./api.js";
+import { apiGet, apiPost, apiPatch, apiDelete } from "./api.js";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -5361,9 +5363,20 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
     setHo({ amount: 0, via: "", note: "" });
     notify(tr("Передача отправлена — ожидает подтверждения офиса"));
   };
-  const confirmHandover = (id) => {
-    dispatch({ type: "CONFIRM_HANDOVER", id, userId: me.id });
+  const confirmHandover = (h) => {
+    dispatch({ type: "CONFIRM_HANDOVER", id: h.id, userId: me.id });
     notify(tr("Приём денег подтверждён"));
+    // Авто-приход в «Учёт денег» (казначейство). Идемпотентно по refId —
+    // повторное подтверждение не создаст дубль. Ошибку (нет прав/сети) глушим,
+    // чтобы не мешать подтверждению передачи.
+    apiPost("/api/money/branch-income", {
+      refId: `handover-${h.id}`,
+      branchId: h.branchId ? String(h.branchId) : null,
+      branchName: branchById(h.branchId)?.name || "",
+      amount: h.amount,
+      date: h.date || ymdNow(),
+      comment: `Инкассация с филиала${h.via ? ` · через ${h.via}` : ""}`,
+    }).catch(() => {});
   };
   const canDelHo = (h) =>
     isController
@@ -5931,7 +5944,7 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
               </span>
               {isController && h.status === "sent" && (
                 <button
-                  onClick={() => confirmHandover(h.id)}
+                  onClick={() => confirmHandover(h)}
                   className="rounded-lg px-2 py-1 font-semibold shrink-0"
                   style={{ background: C.ok, color: "#fff", fontSize: 11 }}
                 >
@@ -7720,6 +7733,779 @@ function PnlAnalysis({ data }) {
   );
 }
 
+// ── Учёт и контроль денег компании (казначейство) ──────────────────────────
+// Заменяет ручной Excel: ввод приходов/расходов (тип, контрагент, комментарий,
+// сумма+валюта, филиал), баланс, отчёт за период и аналитика. Данные — на
+// сервере (общие для офиса). Приход с филиала падает автоматически из
+// принятых инкассаций (раздел «Кассы»).
+function MoneyView({ s, me, branchScope }) {
+  const pad = (x) => String(x).padStart(2, "0");
+  const today = ymdNow();
+  const y = today.slice(0, 4);
+  const m = today.slice(0, 7);
+  const monthRange = (ym) => {
+    const last = new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate();
+    return { from: `${ym}-01`, to: `${ym}-${pad(last)}` };
+  };
+  const prevMonthYm = () => {
+    const d = new Date(+y, +m.slice(5, 7) - 2, 1);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  };
+  const rangeOf = (p) => {
+    if (p === "curMonth") return monthRange(m);
+    if (p === "prevMonth") return monthRange(prevMonthYm());
+    if (p === "curYear") return { from: `${y}-01-01`, to: `${y}-12-31` };
+    return null;
+  };
+  const isMgr = me.role === "manager";
+  const fBranch = isMgr ? me.branchId : branchScope || 0;
+  const branchObj = branchById(fBranch || 0);
+  const branchQ = fBranch ? `&branch=${encodeURIComponent(fBranch)}` : "";
+
+  const [preset, setPreset] = usePersisted("avesto.money.preset", "curMonth");
+  const init = monthRange(m);
+  const [from, setFrom] = usePersisted("avesto.money.from", init.from);
+  const [to, setTo] = usePersisted("avesto.money.to", init.to);
+  const [tab, setTab] = usePersisted("avesto.money.tab", "flow");
+  const pick = (p) => {
+    setPreset(p);
+    const r = rangeOf(p);
+    if (r) {
+      setFrom(r.from);
+      setTo(r.to);
+    }
+  };
+
+  const [data, setData] = useState({ status: "loading" });
+  const [summary, setSummary] = useState(null);
+  const [dict, setDict] = useState({
+    categories: [],
+    paymentTypes: [],
+    counterparties: [],
+    currencies: ["UZS", "RUB", "USD", "EUR"],
+  });
+  const [tick, setTick] = useState(0);
+  const reload = () => setTick((t) => t + 1);
+
+  useEffect(() => {
+    let alive = true;
+    setData({ status: "loading" });
+    Promise.all([
+      apiGet(`/api/money?from=${from}&to=${to}${branchQ}`),
+      apiGet(`/api/money/summary?from=${from}&to=${to}${branchQ}`),
+    ])
+      .then(([list, sum]) => {
+        if (!alive) return;
+        setData({ status: "ok", ...list });
+        setSummary(sum);
+      })
+      .catch((e) => {
+        if (alive) setData({ status: "error", error: e.message || "Ошибка" });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [from, to, fBranch, tick]);
+
+  useEffect(() => {
+    let alive = true;
+    apiGet("/api/money/dictionaries")
+      // Мержим с дефолтами: неполный/пустой ответ не «обнулит» списки.
+      .then((d) => alive && setDict((prev) => ({ ...prev, ...(d || {}) })))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [tick]);
+
+  const balance = summary ? summary.balance : 0;
+  const period = (summary && summary.period) || {
+    income: 0,
+    expense: 0,
+    net: 0,
+  };
+
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 14,
+    background: "#fff",
+    color: C.ink,
+    borderRadius: 12,
+    padding: "9px 12px",
+    width: "100%",
+  };
+  const lblSt = {
+    fontSize: 11.5,
+    color: C.sub,
+    fontWeight: 600,
+    display: "block",
+    marginBottom: 4,
+  };
+
+  // ── Форма добавления движения ──
+  const emptyForm = {
+    direction: "expense",
+    date: today,
+    category: "",
+    paymentType: "Наличные",
+    counterparty: "",
+    comment: "",
+    amount: "",
+    currency: "UZS",
+    rate: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [formBranch, setFormBranch] = useState(fBranch || 0);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    setErr("");
+    const amount = Number(String(form.amount).replace(/\s/g, ""));
+    if (!form.category.trim()) return setErr("Укажите статью/тип");
+    if (!(amount > 0)) return setErr("Укажите сумму");
+    const rate = form.currency === "UZS" ? 1 : Number(form.rate) || 0;
+    if (form.currency !== "UZS" && !(rate > 0))
+      return setErr("Укажите курс к суму");
+    const b = branchById(formBranch || 0);
+    setSaving(true);
+    try {
+      await apiPost("/api/money", {
+        date: form.date,
+        direction: form.direction,
+        category: form.category.trim(),
+        paymentType: form.paymentType || "Наличные",
+        counterparty: form.counterparty.trim(),
+        comment: form.comment.trim(),
+        amount,
+        currency: form.currency,
+        rate,
+        branchId: formBranch ? String(formBranch) : null,
+        branchName: b ? b.name : "",
+      });
+      setForm({ ...emptyForm, direction: form.direction, date: form.date });
+      reload();
+    } catch (e) {
+      setErr(e.message || "Не удалось сохранить");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async (id) => {
+    if (!window.confirm("Удалить это движение?")) return;
+    try {
+      await apiDelete(`/api/money/${id}`);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось удалить");
+    }
+  };
+
+  const curBadge = (c) => (c && c !== "UZS" ? ` ${c}` : "");
+  const items = data.items || [];
+
+  const TABS = [
+    ["flow", "Движение"],
+    ["report", "Отчёт"],
+    ["stats", "Аналитика"],
+  ];
+
+  const KPI = ({ label, value, tone }) => (
+    <div
+      className="rounded-2xl bg-white p-4"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div style={{ fontSize: 12, color: C.faint, marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: tone || C.ink }}>
+        {value}
+      </div>
+    </div>
+  );
+
+  // Таблица «статья/контрагент → приход/расход» для отчёта.
+  const GroupTable = ({ title, rows }) => (
+    <div
+      className="rounded-2xl bg-white p-4 sm:p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 15 }}>
+        {title}
+      </h3>
+      {rows && rows.length ? (
+        <div className="space-y-1">
+          {rows.map((r) => (
+            <div
+              key={r.name}
+              className="flex items-center justify-between gap-2"
+              style={{ fontSize: 13, padding: "3px 0" }}
+            >
+              <span
+                style={{
+                  color: C.ink,
+                  fontWeight: 600,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {r.name}
+              </span>
+              <span style={{ display: "flex", gap: 14, flexShrink: 0 }}>
+                {r.income > 0 && (
+                  <span style={{ color: C.ok, width: 130, textAlign: "right" }}>
+                    +{fmtSum(r.income)}
+                  </span>
+                )}
+                {r.expense > 0 && (
+                  <span
+                    style={{ color: C.bad, width: 130, textAlign: "right" }}
+                  >
+                    −{fmtSum(r.expense)}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: C.faint }}>Нет данных за период.</p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Баланс + KPI периода */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div
+          className="rounded-2xl p-4 sm:p-5 col-span-2"
+          style={{
+            background: C.brandGrad,
+            color: "#fff",
+            boxShadow: "0 10px 28px rgba(123,45,31,.28)",
+          }}
+        >
+          <div style={{ fontSize: 12.5, opacity: 0.85, marginBottom: 4 }}>
+            Баланс {branchObj ? `· ${branchObj.name}` : "· вся компания"}
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>
+            {fmtSum(balance)}
+          </div>
+          <div style={{ fontSize: 11.5, opacity: 0.8, marginTop: 6 }}>
+            приходы минус расходы за всё время
+          </div>
+        </div>
+        <KPI
+          label="Приход за период"
+          value={fmtSum(period.income)}
+          tone={C.ok}
+        />
+        <KPI
+          label="Расход за период"
+          value={fmtSum(period.expense)}
+          tone={C.bad}
+        />
+      </div>
+
+      {/* Период */}
+      <div
+        className="rounded-2xl bg-white p-3 sm:p-4 flex flex-wrap items-end gap-3"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div style={{ width: 190 }}>
+          <NiceSelect
+            label="За период"
+            value={preset}
+            width="100%"
+            onChange={pick}
+            options={[
+              ["curMonth", "Текущий месяц"],
+              ["prevMonth", "Прошлый месяц"],
+              ["curYear", "Текущий год"],
+              ["custom", "Другой…"],
+            ].map(([value, label]) => ({ value, label }))}
+          />
+        </div>
+        <div style={{ width: 150 }}>
+          <NiceDate
+            label="с"
+            value={from}
+            width="100%"
+            onChange={(v) => {
+              setPreset("custom");
+              setFrom(v);
+            }}
+          />
+        </div>
+        <div style={{ width: 150 }}>
+          <NiceDate
+            label="по"
+            value={to}
+            width="100%"
+            onChange={(v) => {
+              setPreset("custom");
+              setTo(v);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Вкладки */}
+      <div className="flex gap-2 flex-wrap">
+        {TABS.map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className="rounded-xl px-4 py-2 font-bold"
+            style={{
+              fontSize: 13.5,
+              background: tab === k ? C.brandA : "#fff",
+              color: tab === k ? "#fff" : C.ink,
+              border: `1px solid ${tab === k ? C.brandA : C.border}`,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {data.status === "error" && (
+        <div
+          className="rounded-2xl bg-white p-4"
+          style={{ border: `1px solid ${C.border}`, fontSize: 13 }}
+        >
+          <span style={{ color: C.bad }}>Ошибка: {data.error}</span>
+        </div>
+      )}
+
+      {/* ── ВКЛАДКА «ДВИЖЕНИЕ»: форма + список ── */}
+      {tab === "flow" && (
+        <>
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex rounded-xl overflow-hidden"
+                style={{ border: `1px solid ${C.border}` }}
+              >
+                {[
+                  ["expense", "Расход", C.bad],
+                  ["income", "Приход", C.ok],
+                ].map(([k, label, col]) => (
+                  <button
+                    key={k}
+                    onClick={() => setF("direction", k)}
+                    className="px-4 py-2 font-bold"
+                    style={{
+                      fontSize: 13.5,
+                      background: form.direction === k ? col : "#fff",
+                      color: form.direction === k ? "#fff" : C.sub,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+                Новое движение денег
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <NiceDate
+                  label="Дата"
+                  value={form.date}
+                  width="100%"
+                  onChange={(v) => setF("date", v)}
+                />
+              </div>
+              <div>
+                <label style={lblSt}>Статья / тип</label>
+                <input
+                  list="money-cats"
+                  value={form.category}
+                  onChange={(e) => setF("category", e.target.value)}
+                  style={inpSt}
+                  placeholder="напр. Хоз. расходы"
+                />
+                <datalist id="money-cats">
+                  {dict.categories.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label style={lblSt}>Контрагент / на что</label>
+                <input
+                  list="money-cp"
+                  value={form.counterparty}
+                  onChange={(e) => setF("counterparty", e.target.value)}
+                  style={inpSt}
+                  placeholder="напр. Amir aka"
+                />
+                <datalist id="money-cp">
+                  {dict.counterparties.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label style={lblSt}>Тип оплаты</label>
+                <input
+                  list="money-pt"
+                  value={form.paymentType}
+                  onChange={(e) => setF("paymentType", e.target.value)}
+                  style={inpSt}
+                />
+                <datalist id="money-pt">
+                  {dict.paymentTypes.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label style={lblSt}>Сумма</label>
+                <input
+                  type="number"
+                  value={form.amount}
+                  onChange={(e) => setF("amount", e.target.value)}
+                  style={inpSt}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <NiceSelect
+                  label="Валюта"
+                  value={form.currency}
+                  width="100%"
+                  onChange={(v) => setF("currency", v)}
+                  options={dict.currencies.map((c) => ({ value: c, label: c }))}
+                />
+              </div>
+              {form.currency !== "UZS" && (
+                <div>
+                  <label style={lblSt}>Курс к суму</label>
+                  <input
+                    type="number"
+                    value={form.rate}
+                    onChange={(e) => setF("rate", e.target.value)}
+                    style={inpSt}
+                    placeholder="напр. 12800"
+                  />
+                </div>
+              )}
+              <div>
+                <NiceSelect
+                  label="Филиал"
+                  value={formBranch}
+                  width="100%"
+                  onChange={(v) => setFormBranch(+v)}
+                  options={[
+                    { value: 0, label: "— не указан —" },
+                    ...(s.branches || []).map((b) => ({
+                      value: b.id,
+                      label: b.name,
+                    })),
+                  ]}
+                />
+              </div>
+              <div className="col-span-2 md:col-span-4">
+                <label style={lblSt}>Комментарий</label>
+                <input
+                  value={form.comment}
+                  onChange={(e) => setF("comment", e.target.value)}
+                  style={inpSt}
+                  placeholder="описание операции"
+                />
+              </div>
+            </div>
+
+            {err && (
+              <div style={{ color: C.bad, fontSize: 12.5, marginTop: 8 }}>
+                {err}
+              </div>
+            )}
+            {form.currency !== "UZS" &&
+              Number(form.amount) > 0 &&
+              Number(form.rate) > 0 && (
+                <div style={{ color: C.sub, fontSize: 12.5, marginTop: 8 }}>
+                  ≈ {fmtSum(Number(form.amount) * Number(form.rate))} по курсу
+                </div>
+              )}
+
+            <button
+              onClick={submit}
+              disabled={saving}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+              style={{
+                background: C.brandGrad,
+                fontSize: 14,
+                opacity: saving ? 0.7 : 1,
+                boxShadow: "0 8px 20px rgba(123,45,31,.28)",
+              }}
+            >
+              <PlusCircle size={17} />
+              {saving ? "Сохранение…" : "Добавить движение"}
+            </button>
+          </div>
+
+          {/* Список движений */}
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+                Движения за период
+              </h3>
+              <span style={{ fontSize: 12.5, color: C.faint }}>
+                {items.length} записей · итог{" "}
+                <b style={{ color: period.net >= 0 ? C.ok : C.bad }}>
+                  {period.net >= 0 ? "+" : ""}
+                  {fmtSum(period.net)}
+                </b>
+              </span>
+            </div>
+            {data.status === "loading" ? (
+              <p style={{ fontSize: 13, color: C.faint }}>Загрузка…</p>
+            ) : items.length === 0 ? (
+              <p style={{ fontSize: 13, color: C.faint }}>
+                Пока нет движений за выбранный период. Добавьте первое выше.
+              </p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  className="w-full cash-table"
+                  style={{
+                    borderCollapse: "collapse",
+                    fontSize: 13,
+                    minWidth: 720,
+                  }}
+                >
+                  <thead>
+                    <tr style={{ color: C.faint, textAlign: "left" }}>
+                      <th className="py-2">Дата</th>
+                      <th>Статья</th>
+                      <th>Контрагент</th>
+                      <th>Филиал</th>
+                      <th style={{ textAlign: "right" }}>Сумма</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((t) => (
+                      <tr
+                        key={t.id}
+                        style={{
+                          borderTop: `1px solid ${C.line}`,
+                        }}
+                      >
+                        <td
+                          className="py-2"
+                          style={{ color: C.sub, whiteSpace: "nowrap" }}
+                        >
+                          {t.date.split("-").reverse().join(".")}
+                        </td>
+                        <td style={{ color: C.ink, fontWeight: 600 }}>
+                          {t.category}
+                          {t.comment ? (
+                            <span
+                              style={{
+                                color: C.faint,
+                                fontWeight: 400,
+                                display: "block",
+                                fontSize: 11.5,
+                              }}
+                            >
+                              {t.comment}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td style={{ color: C.sub }}>
+                          {t.counterparty || "—"}
+                        </td>
+                        <td style={{ color: C.sub, whiteSpace: "nowrap" }}>
+                          {t.branchName || "—"}
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            whiteSpace: "nowrap",
+                            fontWeight: 700,
+                            color: t.direction === "income" ? C.ok : C.bad,
+                          }}
+                        >
+                          {t.direction === "income" ? "+" : "−"}
+                          {fmtSum(t.amountUzs)}
+                          {t.currency !== "UZS" ? (
+                            <span
+                              style={{
+                                color: C.faint,
+                                fontWeight: 400,
+                                display: "block",
+                                fontSize: 11,
+                              }}
+                            >
+                              {t.amount.toLocaleString("ru-RU")}
+                              {curBadge(t.currency)}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            onClick={() => del(t.id)}
+                            className="p-1.5 rounded-lg"
+                            style={{ color: C.bad }}
+                            title="Удалить"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── ВКЛАДКА «ОТЧЁТ» ── */}
+      {tab === "report" && summary && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <KPI label="Приход" value={fmtSum(period.income)} tone={C.ok} />
+            <KPI label="Расход" value={fmtSum(period.expense)} tone={C.bad} />
+            <KPI
+              label="Итого за период"
+              value={`${period.net >= 0 ? "+" : ""}${fmtSum(period.net)}`}
+              tone={period.net >= 0 ? C.ok : C.bad}
+            />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <GroupTable title="По статьям" rows={summary.byCategory} />
+            <GroupTable title="По филиалам" rows={summary.byBranch} />
+            <GroupTable title="По типам оплат" rows={summary.byPaymentType} />
+            <GroupTable
+              title="Топ контрагентов (расход)"
+              rows={summary.byCounterparty}
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── ВКЛАДКА «АНАЛИТИКА» ── */}
+      {tab === "stats" && summary && (
+        <>
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <h3
+              className="font-bold mb-3"
+              style={{ color: C.ink, fontSize: 15 }}
+            >
+              Расходы по статьям
+            </h3>
+            {summary.byCategory.filter((x) => x.expense > 0).length ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart
+                  data={summary.byCategory
+                    .filter((x) => x.expense > 0)
+                    .slice(0, 10)}
+                  layout="vertical"
+                  margin={{ left: 8, right: 16 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.line} />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(v) => (v / 1e6).toFixed(0) + "М"}
+                    tick={{ fontSize: 11, fill: C.faint }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={130}
+                    tick={{ fontSize: 11, fill: C.sub }}
+                  />
+                  <Tooltip formatter={(v) => fmtSum(v)} />
+                  <Bar
+                    dataKey="expense"
+                    fill={C.brandA}
+                    radius={[0, 6, 6, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p style={{ fontSize: 13, color: C.faint }}>
+                Нет расходов за период.
+              </p>
+            )}
+          </div>
+
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <h3
+              className="font-bold mb-3"
+              style={{ color: C.ink, fontSize: 15 }}
+            >
+              Приход и расход по дням
+            </h3>
+            {summary.byDay.length ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={summary.byDay} margin={{ left: 8, right: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.line} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(d) => d.slice(8)}
+                    tick={{ fontSize: 10, fill: C.faint }}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => (v / 1e6).toFixed(0) + "М"}
+                    tick={{ fontSize: 11, fill: C.faint }}
+                  />
+                  <Tooltip formatter={(v) => fmtSum(v)} />
+                  <Bar
+                    dataKey="income"
+                    name="Приход"
+                    fill={C.ok}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="expense"
+                    name="Расход"
+                    fill={C.bad}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p style={{ fontSize: 13, color: C.faint }}>
+                Нет данных за период.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      <p style={{ fontSize: 11, color: C.faint }}>
+        Данные хранятся на сервере (общие для офиса). Приход с филиалов
+        добавляется автоматически из принятых инкассаций (раздел «Кассы»).
+      </p>
+    </div>
+  );
+}
+
 function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
   const isReports = mode === "reports";
   const branches = s.branches || [];
@@ -9211,6 +9997,12 @@ const NAV = [
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
   {
+    key: "money",
+    label: "Учёт денег",
+    icon: Banknote,
+    roles: ["director", "finance", "accountant", "sysadmin"],
+  },
+  {
     key: "sales",
     label: "Аналитика продаж",
     icon: TrendingUp,
@@ -9236,6 +10028,7 @@ const VIEW_TITLE = {
   analytics: "Аналитика — кабина директора",
   time: "Учёт рабочего времени",
   cash: "Кассы филиалов",
+  money: "Учёт и контроль денег",
   sales: "Аналитика продаж",
   reports: "Отчёты",
   org: "Оргструктура и филиалы",
@@ -9364,6 +10157,7 @@ const NAV_SHORT = {
   analytics: "Аналитика",
   time: "Время",
   cash: "Кассы",
+  money: "Деньги",
   sales: "Продажи",
   org: "Структура",
   about: "О системе",
@@ -9947,6 +10741,7 @@ export default function App({ authUser, onLogout }) {
                 "analytics",
                 "time",
                 "cash",
+                "money",
                 "sales",
                 "reports",
               ].includes(s.view) && (
@@ -10075,6 +10870,11 @@ export default function App({ authUser, onLogout }) {
                   branchScope={branchScope}
                 />
               )}
+            {s.view === "money" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "money").roles },
+                me.role,
+              ) && <MoneyView s={s} me={me} branchScope={branchScope} />}
             {s.view === "sales" &&
               navAllowed(
                 { roles: NAV.find((n) => n.key === "sales").roles },
