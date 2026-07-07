@@ -53,6 +53,7 @@ import {
   ArrowUp,
   Banknote,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
@@ -5385,6 +5386,19 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
 
   // ---------- фото чеков к расходам ----------
   const [viewPhoto, setViewPhoto] = useState(null);
+  // Просмотр расшифровки расходов (по клику на сумму «Расходы»).
+  const [expenseInfo, setExpenseInfo] = useState(null);
+  // Ссылка на форму отчёта — чтобы прокручивать к ней при редактировании.
+  const formRef = React.useRef(null);
+  // Редактирование отчёта: подставляем его дату+филиал (форма сама подтянет
+  // данные существующего отчёта) и прокручиваем к форме.
+  const editReport = (r) => {
+    setForm((f) => ({ ...f, date: r.date, branchId: r.branchId }));
+    setTimeout(() => {
+      if (formRef.current)
+        formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
   const addPhotos = async (files) => {
     if (!editable) return;
     const cur = form.expensePhotos || [];
@@ -5972,6 +5986,7 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
       {/* форма — только управляющие */}
       {canEditForm && (
         <div
+          ref={formRef}
           className="rounded-2xl bg-white p-4 sm:p-5"
           style={{ border: `1px solid ${C.border}` }}
         >
@@ -6412,19 +6427,28 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
                       >
                         {r.noPay ? fmtSum(r.noPay) : "—"}
                       </td>
-                      <td
-                        title={r.expensesNote || ""}
-                        style={{
-                          color: C.bad,
-                          whiteSpace: "nowrap",
-                          textDecoration: r.expensesNote
-                            ? "underline dotted"
-                            : "none",
-                          textUnderlineOffset: 3,
-                          cursor: r.expensesNote ? "help" : "default",
-                        }}
-                      >
-                        {fmtSum(r.expenses)}
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => setExpenseInfo(r)}
+                          title={tr("Показать комментарий расхода")}
+                          style={{
+                            color: C.bad,
+                            fontWeight: 600,
+                            textDecoration:
+                              r.expensesNote || (r.expensePhotos || []).length
+                                ? "underline dotted"
+                                : "none",
+                            textUnderlineOffset: 3,
+                            cursor: "pointer",
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            font: "inherit",
+                          }}
+                        >
+                          {fmtSum(r.expenses)}
+                        </button>
                       </td>
                       <td
                         style={{
@@ -6476,6 +6500,16 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
                               }}
                             >
                               {tr("Принять")}
+                            </button>
+                          )}
+                          {canDelete(r) && r.status !== "confirmed" && (
+                            <button
+                              onClick={() => editReport(r)}
+                              className="p-1 rounded-lg"
+                              style={{ color: C.brandA }}
+                              title={tr("Редактировать")}
+                            >
+                              <Pencil size={14} />
                             </button>
                           )}
                           {canDelete(r) && (
@@ -6663,6 +6697,16 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
                         {tr("Принять")}
                       </button>
                     )}
+                    {canDelete(r) && r.status !== "confirmed" && (
+                      <button
+                        onClick={() => editReport(r)}
+                        className="p-1 rounded-lg"
+                        style={{ color: C.brandA }}
+                        title={tr("Редактировать")}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    )}
                     {canDelete(r) && (
                       <button
                         onClick={() => {
@@ -6841,6 +6885,96 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
               boxShadow: "0 20px 60px rgba(0,0,0,.5)",
             }}
           />
+        </div>
+      )}
+
+      {/* Расшифровка расходов — по клику на сумму «Расходы». */}
+      {expenseInfo && (
+        <div
+          onClick={() => setExpenseInfo(null)}
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{
+            background: "rgba(30,16,10,.5)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            zIndex: 90,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-2xl bg-white p-5 w-full fade-up"
+            style={{
+              maxWidth: 460,
+              border: `1px solid ${C.border}`,
+              boxShadow: "0 24px 60px rgba(30,16,10,.28)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+                {tr("Расходы")}
+              </h3>
+              <button
+                onClick={() => setExpenseInfo(null)}
+                className="p-1.5 rounded-xl"
+                style={{ background: C.line }}
+              >
+                <X size={16} color={C.sub} />
+              </button>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.faint, marginBottom: 10 }}>
+              {dm(expenseInfo.date)} ·{" "}
+              {branchById(expenseInfo.branchId)?.name || ""}
+            </div>
+            <div
+              className="rounded-xl px-3 py-2.5 mb-3 flex items-center justify-between"
+              style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}
+            >
+              <span style={{ fontSize: 13, color: C.sub }}>Сумма расходов</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.bad }}>
+                {fmtSum(expenseInfo.expenses)}
+              </span>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 4 }}>
+              Комментарий расхода:
+            </div>
+            <div
+              className="rounded-xl px-3 py-2.5"
+              style={{
+                background: "#F8FAFC",
+                border: `1px solid ${C.line}`,
+                fontSize: 13.5,
+                color: expenseInfo.expensesNote ? C.ink : C.faint,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                minHeight: 44,
+              }}
+            >
+              {expenseInfo.expensesNote || "комментарий не указан"}
+            </div>
+            {(expenseInfo.expensePhotos || []).length > 0 && (
+              <div className="flex gap-2 mt-3 flex-wrap">
+                {expenseInfo.expensePhotos.map((ph) => (
+                  <img
+                    key={ph.id}
+                    src={ph.dataUrl}
+                    alt=""
+                    onClick={() => {
+                      setViewPhoto(ph.dataUrl);
+                      setExpenseInfo(null);
+                    }}
+                    style={{
+                      width: 72,
+                      height: 72,
+                      objectFit: "cover",
+                      borderRadius: 10,
+                      cursor: "zoom-in",
+                      border: `1px solid ${C.border}`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
