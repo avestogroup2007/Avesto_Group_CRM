@@ -55,6 +55,7 @@ import {
   Trash2,
   Pencil,
   Check,
+  GripVertical,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
@@ -2318,11 +2319,90 @@ function TaskCard({ t, now, onOpen, onFav, anomaly }) {
 }
 
 /* ---------------------------- доска (Канбан) ------------------------------- */
-function Board({ tasks, now, onOpen, onFav, flags }) {
+function Board({
+  tasks,
+  now,
+  onOpen,
+  onFav,
+  flags,
+  me,
+  dispatch,
+  notify,
+  shiftOpen,
+}) {
   const counts = PHASES.map((p) => tasks.filter((t) => t.phase === p.n).length);
   const firstNonEmpty = (PHASES.find((p, i) => counts[i] > 0) || PHASES[0]).n;
   const [active, setActive] = useState(firstNonEmpty);
+  const [dragId, setDragId] = useState(null);
+  const [overPhase, setOverPhase] = useState(null);
   const colCards = (n) => tasks.filter((t) => t.phase === n);
+
+  // Кого текущий пользователь может тащить (исполнитель/контролёр, смена
+  // открыта, не регламентная задача, не завершено).
+  const canDrag = (t) =>
+    !!shiftOpen &&
+    !t.routeId &&
+    t.phase < 5 &&
+    !!me &&
+    (t.executorId === me.id || t.controllerId === me.id);
+
+  // План перехода при переносе задачи в фазу target — те же правила, что и
+  // кнопки в карточке. null = такой перенос недоступен.
+  const planMove = (t, target) => {
+    if (!t || t.routeId || t.phase >= 5 || !me) return null;
+    const isExec = t.executorId === me.id;
+    const isCtrl = t.controllerId === me.id;
+    if (isExec && (t.phase === 1 || t.phase === 2) && target === 3)
+      return {
+        action: "start",
+        from: t.phase,
+        to: 3,
+        msg: "Задача взята в работу",
+      };
+    if (isExec && t.phase === 3 && target === 4)
+      return { action: "review", from: 3, to: 4, needFinish: true };
+    if (isCtrl && t.phase === 4 && target === 5)
+      return {
+        action: "done",
+        from: 4,
+        to: 5,
+        msg: "Работа принята, задача завершена",
+      };
+    if (isCtrl && t.phase === 4 && target === 3)
+      return {
+        action: "return",
+        from: 4,
+        to: 3,
+        msg: "Возвращено исполнителю на доработку",
+      };
+    return null;
+  };
+
+  const drop = (target, id) => {
+    const t = tasks.find((x) => x.id === (id || dragId));
+    setDragId(null);
+    setOverPhase(null);
+    if (!t || t.phase === target) return;
+    if (!shiftOpen)
+      return notify && notify("Откройте смену, чтобы менять статус");
+    const plan = planMove(t, target);
+    if (!plan)
+      return notify && notify("Такой переход недоступен для вашей роли");
+    // Переход «на проверку» требует чек-листа и фото — открываем карточку.
+    if (plan.needFinish) {
+      onOpen(t.id);
+      return notify && notify("Завершите чек-лист и фото в карточке задачи");
+    }
+    dispatch({
+      type: "ADVANCE",
+      id: t.id,
+      action: plan.action,
+      from: plan.from,
+      to: plan.to,
+    });
+    notify && notify(plan.msg);
+  };
+
   const Cards = ({ n }) => {
     const col = colCards(n);
     if (col.length === 0)
@@ -2336,16 +2416,37 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
       );
     return (
       <>
-        {col.map((t) => (
-          <TaskCard
-            key={t.id}
-            t={t}
-            now={now}
-            onOpen={onOpen}
-            onFav={onFav}
-            anomaly={!!(flags && flags[t.id])}
-          />
-        ))}
+        {col.map((t) => {
+          const drg = canDrag(t);
+          return (
+            <div
+              key={t.id}
+              draggable={drg}
+              onDragStart={(e) => {
+                if (!drg) return;
+                setDragId(t.id);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", t.id);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setOverPhase(null);
+              }}
+              style={{
+                cursor: drg ? "grab" : "default",
+                opacity: dragId === t.id ? 0.4 : 1,
+              }}
+            >
+              <TaskCard
+                t={t}
+                now={now}
+                onOpen={onOpen}
+                onFav={onFav}
+                anomaly={!!(flags && flags[t.id])}
+              />
+            </div>
+          );
+        })}
       </>
     );
   };
@@ -2400,6 +2501,13 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
 
       {/* Десктоп (xl+): 5 равных колонок во всю ширину — без горизонтального ползунка */}
       <div
+        className="hidden xl:flex items-center gap-1.5 mb-2"
+        style={{ fontSize: 12, color: C.faint }}
+      >
+        <GripVertical size={13} />
+        Перетащите карточку в соседнюю колонку, чтобы сменить статус задачи.
+      </div>
+      <div
         className="hidden xl:grid gap-3"
         style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}
       >
@@ -2434,10 +2542,22 @@ function Board({ tasks, now, onOpen, onFav, flags }) {
               </span>
             </div>
             <div
-              className="flex flex-col gap-2.5 rounded-2xl p-2"
+              className="flex flex-col gap-2.5 rounded-2xl p-2 transition-colors"
+              onDragOver={(e) => {
+                if (!dragId) return;
+                e.preventDefault();
+                if (overPhase !== p.n) setOverPhase(p.n);
+              }}
+              onDragLeave={() =>
+                setOverPhase((cur) => (cur === p.n ? null : cur))
+              }
+              onDrop={(e) => {
+                e.preventDefault();
+                drop(p.n, e.dataTransfer.getData("text/plain"));
+              }}
               style={{
-                background: "#FBFCFE",
-                border: `1px dashed ${C.border}`,
+                background: overPhase === p.n ? p.soft : "#FBFCFE",
+                border: `1px dashed ${overPhase === p.n ? p.color : C.border}`,
                 minHeight: 120,
               }}
             >
@@ -11499,6 +11619,10 @@ export default function App({ authUser, onLogout }) {
                 onOpen={onOpen}
                 onFav={(id) => dispatch({ type: "TOGGLE_FAV", id })}
                 flags={flags}
+                me={me}
+                dispatch={dispatch}
+                notify={notify}
+                shiftOpen={myShift.open}
               />
             )}
             {s.view === "create" && (
