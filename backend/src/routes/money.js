@@ -109,15 +109,20 @@ r.get(
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 1000,
     });
+    // В итоги идут только согласованные — заявки на согласовании (pending) и
+    // отклонённые (rejected) баланс не искажают. В списке показываем всё.
     let income = 0;
     let expense = 0;
+    let pending = 0;
     for (const t of items) {
+      if (t.approval === "pending") pending += 1;
+      if (t.approval !== "approved") continue;
       if (t.direction === "income") income += n(t.amountUzs);
       else expense += n(t.amountUzs);
     }
     res.json({
       items: items.map(ser),
-      totals: { income, expense, net: income - expense },
+      totals: { income, expense, net: income - expense, pending },
     });
   })
 );
@@ -128,8 +133,9 @@ r.get(
   asyncHandler(async (req, res) => {
     const { from, to, branch } = req.query;
 
-    // Баланс за всё время (по филиалу или по всей компании).
-    const balWhere = {};
+    // Баланс за всё время (по филиалу или по всей компании). Только
+    // согласованные операции — заявки и отклонённые в баланс не входят.
+    const balWhere = { approval: "approved" };
     if (branch) balWhere.branchId = String(branch);
     const [inAll, exAll] = await Promise.all([
       db.moneyTx.aggregate({
@@ -143,7 +149,7 @@ r.get(
     ]);
     const balance = n(inAll._sum.amountUzs) - n(exAll._sum.amountUzs);
 
-    // Движения за период — для группировок.
+    // Движения за период — для группировок (тоже только согласованные).
     const where = { ...balWhere };
     if (from || to) where.date = {};
     if (from) where.date.gte = String(from);
@@ -182,6 +188,11 @@ r.get(
     }
     period.net = period.income - period.expense;
 
+    // Число заявок на согласовании (без учёта периода — очередь всегда актуальна).
+    const pendingWhere = { approval: "pending" };
+    if (branch) pendingWhere.branchId = String(branch);
+    const pendingCount = await db.moneyTx.count({ where: pendingWhere });
+
     const toArr = (obj) =>
       Object.entries(obj)
         .map(([name, v]) => ({ name, ...v, net: v.income - v.expense }))
@@ -190,6 +201,7 @@ r.get(
     res.json({
       balance,
       period,
+      pendingCount,
       byCategory: toArr(byCategory),
       byDds: toArr(byDds),
       byPaymentType: toArr(byPaymentType),
@@ -377,7 +389,13 @@ const CreateSchema = z.object({
   rate: z.number().positive().default(1),
   branchId: z.string().nullable().optional(),
   branchName: z.string().default(""),
+  // Директор/финансы могут провести расход сразу, минуя согласование.
+  postNow: z.boolean().default(false),
 });
+
+// Кто вправе согласовывать расходы (и проводить их сразу при создании).
+const APPROVER_ROLES = ["director", "finance"];
+const canApprove = (role) => APPROVER_ROLES.includes(role);
 
 r.post(
   "/",
@@ -388,6 +406,18 @@ r.post(
     }
     const d = parsed.data;
     const rate = d.currency === "UZS" ? 1 : d.rate;
+    // Приходы согласования не требуют. Расход становится заявкой (pending),
+    // кроме случая, когда согласующий сам создаёт и просит провести сразу.
+    let approval = "approved";
+    const approvedFields = {};
+    if (d.direction === "expense") {
+      const postDirect = d.postNow && canApprove(req.user.role);
+      approval = postDirect ? "approved" : "pending";
+      if (postDirect) {
+        approvedFields.approvedById = req.user.uid;
+        approvedFields.approvedAt = new Date();
+      }
+    }
     const created = await db.moneyTx.create({
       data: {
         date: d.date,
@@ -407,9 +437,59 @@ r.post(
         branchName: d.branchName || "",
         source: "manual",
         createdById: req.user.uid,
+        approval,
+        ...approvedFields,
       },
     });
     res.status(201).json(ser(created));
+  })
+);
+
+// ── Согласование / отклонение заявки на расход ──────────────────────────────
+const RejectSchema = z.object({ reason: z.string().default("") });
+r.post(
+  "/:id/approve",
+  requireRole(...APPROVER_ROLES),
+  asyncHandler(async (req, res) => {
+    const tx = await db.moneyTx.findUnique({ where: { id: req.params.id } });
+    if (!tx) return res.status(404).json({ error: "Не найдено" });
+    if (tx.approval !== "pending") {
+      return res.status(409).json({ error: "Заявка уже обработана" });
+    }
+    const updated = await db.moneyTx.update({
+      where: { id: tx.id },
+      data: {
+        approval: "approved",
+        approvedById: req.user.uid,
+        approvedAt: new Date(),
+        rejectReason: "",
+      },
+    });
+    res.json(ser(updated));
+  })
+);
+
+r.post(
+  "/:id/reject",
+  requireRole(...APPROVER_ROLES),
+  asyncHandler(async (req, res) => {
+    const parsed = RejectSchema.safeParse(req.body || {});
+    const reason = parsed.success ? parsed.data.reason : "";
+    const tx = await db.moneyTx.findUnique({ where: { id: req.params.id } });
+    if (!tx) return res.status(404).json({ error: "Не найдено" });
+    if (tx.approval !== "pending") {
+      return res.status(409).json({ error: "Заявка уже обработана" });
+    }
+    const updated = await db.moneyTx.update({
+      where: { id: tx.id },
+      data: {
+        approval: "rejected",
+        approvedById: req.user.uid,
+        approvedAt: new Date(),
+        rejectReason: reason || "",
+      },
+    });
+    res.json(ser(updated));
   })
 );
 

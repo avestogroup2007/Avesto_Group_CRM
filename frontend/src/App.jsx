@@ -8088,6 +8088,7 @@ function MoneyView({ s, me, branchScope }) {
     return null;
   };
   const isMgr = me.role === "manager";
+  const canApprove = me.role === "director" || me.role === "finance";
   const fBranch = isMgr ? me.branchId : branchScope || 0;
   const branchObj = branchById(fBranch || 0);
   const branchQ = fBranch ? `&branch=${encodeURIComponent(fBranch)}` : "";
@@ -8192,6 +8193,7 @@ function MoneyView({ s, me, branchScope }) {
     amount: "",
     currency: "UZS",
     rate: "",
+    postNow: false,
   };
   const [form, setForm] = useState(emptyForm);
   const [formBranch, setFormBranch] = useState(fBranch || 0);
@@ -8237,6 +8239,8 @@ function MoneyView({ s, me, branchScope }) {
         rate,
         branchId,
         branchName,
+        postNow:
+          form.direction === "expense" && canApprove ? !!form.postNow : false,
       });
       setForm({ ...emptyForm, direction: form.direction, date: form.date });
       reload();
@@ -8256,9 +8260,49 @@ function MoneyView({ s, me, branchScope }) {
       alert(e.message || "Не удалось удалить");
     }
   };
+  // Согласовать / отклонить заявку на расход.
+  const approve = async (id) => {
+    try {
+      await apiPost(`/api/money/${id}/approve`);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось согласовать");
+    }
+  };
+  const reject = async (id) => {
+    const reason = window.prompt("Причина отклонения (необязательно):", "");
+    if (reason === null) return;
+    try {
+      await apiPost(`/api/money/${id}/reject`, { reason });
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось отклонить");
+    }
+  };
 
   const curBadge = (c) => (c && c !== "UZS" ? ` ${c}` : "");
   const items = data.items || [];
+  const pendingItems = items.filter((t) => t.approval === "pending");
+  const pendingCount = summary ? summary.pendingCount : pendingItems.length;
+  // Бейдж статуса согласования (для расходов-заявок и отклонённых).
+  const ApprovalBadge = ({ t }) => {
+    if (!t.approval || t.approval === "approved") return null;
+    const pend = t.approval === "pending";
+    return (
+      <span
+        className="inline-flex items-center rounded-md px-1.5 py-0.5"
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          marginLeft: 6,
+          color: pend ? "#B45309" : C.bad,
+          background: pend ? "#FEF3C7" : "#FEE2E2",
+        }}
+      >
+        {pend ? "на согласовании" : "отклонено"}
+      </span>
+    );
+  };
 
   // Добавить/удалить запись справочника.
   const addDict = async (type, name, parent = "") => {
@@ -8291,6 +8335,7 @@ function MoneyView({ s, me, branchScope }) {
 
   const TABS = [
     ["flow", "Движение"],
+    ["approvals", "Заявки"],
     ["report", "Отчёт"],
     ["stats", "Аналитика"],
     ["dict", "Справочники"],
@@ -8444,7 +8489,7 @@ function MoneyView({ s, me, branchScope }) {
           <button
             key={k}
             onClick={() => setTab(k)}
-            className="rounded-xl px-4 py-2 font-bold"
+            className="rounded-xl px-4 py-2 font-bold inline-flex items-center gap-1.5"
             style={{
               fontSize: 13.5,
               background: tab === k ? C.brandA : "#fff",
@@ -8453,6 +8498,22 @@ function MoneyView({ s, me, branchScope }) {
             }}
           >
             {label}
+            {k === "approvals" && pendingCount > 0 && (
+              <span
+                className="inline-flex items-center justify-center rounded-full"
+                style={{
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 5px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  background: tab === k ? "#fff" : "#F59E0B",
+                  color: tab === k ? C.brandA : "#fff",
+                }}
+              >
+                {pendingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -8679,6 +8740,28 @@ function MoneyView({ s, me, branchScope }) {
                 </div>
               )}
 
+            {/* Согласование расходов. */}
+            {form.direction === "expense" &&
+              (canApprove ? (
+                <label
+                  className="flex items-center gap-2 mt-3"
+                  style={{ fontSize: 12.5, color: C.sub, cursor: "pointer" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!form.postNow}
+                    onChange={(e) => setF("postNow", e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: C.brandA }}
+                  />
+                  Провести сразу, без согласования
+                </label>
+              ) : (
+                <div style={{ color: C.faint, fontSize: 12.5, marginTop: 8 }}>
+                  Расход уйдёт на согласование директору/финансам и попадёт в
+                  баланс после одобрения.
+                </div>
+              ))}
+
             <button
               onClick={submit}
               disabled={saving}
@@ -8754,6 +8837,7 @@ function MoneyView({ s, me, branchScope }) {
                         </td>
                         <td style={{ color: C.ink, fontWeight: 600 }}>
                           {t.category}
+                          <ApprovalBadge t={t} />
                           {t.comment ? (
                             <span
                               style={{
@@ -8764,6 +8848,18 @@ function MoneyView({ s, me, branchScope }) {
                               }}
                             >
                               {t.comment}
+                            </span>
+                          ) : null}
+                          {t.approval === "rejected" && t.rejectReason ? (
+                            <span
+                              style={{
+                                color: C.bad,
+                                fontWeight: 400,
+                                display: "block",
+                                fontSize: 11.5,
+                              }}
+                            >
+                              Причина: {t.rejectReason}
                             </span>
                           ) : null}
                         </td>
@@ -8778,7 +8874,16 @@ function MoneyView({ s, me, branchScope }) {
                             textAlign: "right",
                             whiteSpace: "nowrap",
                             fontWeight: 700,
-                            color: t.direction === "income" ? C.ok : C.bad,
+                            color:
+                              t.approval && t.approval !== "approved"
+                                ? C.faint
+                                : t.direction === "income"
+                                  ? C.ok
+                                  : C.bad,
+                            textDecoration:
+                              t.approval === "rejected"
+                                ? "line-through"
+                                : "none",
                           }}
                         >
                           {t.direction === "income" ? "+" : "−"}
@@ -8797,7 +8902,29 @@ function MoneyView({ s, me, branchScope }) {
                             </span>
                           ) : null}
                         </td>
-                        <td style={{ textAlign: "right" }}>
+                        <td
+                          style={{ textAlign: "right", whiteSpace: "nowrap" }}
+                        >
+                          {canApprove && t.approval === "pending" && (
+                            <>
+                              <button
+                                onClick={() => approve(t.id)}
+                                className="p-1.5 rounded-lg"
+                                style={{ color: C.ok }}
+                                title="Согласовать"
+                              >
+                                <Check size={16} />
+                              </button>
+                              <button
+                                onClick={() => reject(t.id)}
+                                className="p-1.5 rounded-lg"
+                                style={{ color: C.bad }}
+                                title="Отклонить"
+                              >
+                                <X size={16} />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => del(t.id)}
                             className="p-1.5 rounded-lg"
@@ -8815,6 +8942,99 @@ function MoneyView({ s, me, branchScope }) {
             )}
           </div>
         </>
+      )}
+
+      {/* ── ВКЛАДКА «ЗАЯВКИ»: расходы на согласовании ── */}
+      {tab === "approvals" && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+              Заявки на согласование
+            </h3>
+            <span style={{ fontSize: 12.5, color: C.faint }}>
+              {pendingItems.length
+                ? `${pendingItems.length} шт.`
+                : "нет заявок"}
+            </span>
+          </div>
+          {!canApprove && (
+            <p style={{ fontSize: 12.5, color: C.faint, marginBottom: 10 }}>
+              Согласовывать расходы могут директор и финансовый отдел. Здесь вы
+              видите статус своих заявок.
+            </p>
+          )}
+          {pendingItems.length === 0 ? (
+            <p style={{ fontSize: 13, color: C.faint }}>
+              Заявок на согласовании нет — все расходы проведены.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {pendingItems.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap"
+                  style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}
+                    >
+                      {t.category}
+                      <span
+                        style={{
+                          color: C.faint,
+                          fontWeight: 400,
+                          marginLeft: 6,
+                          fontSize: 12,
+                        }}
+                      >
+                        {t.date.split("-").reverse().join(".")}
+                        {t.branchName ? ` · ${t.branchName}` : ""}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: C.sub }}>
+                      {t.counterparty || "—"}
+                      {t.comment ? ` · ${t.comment}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      style={{ fontSize: 15, fontWeight: 800, color: C.bad }}
+                    >
+                      −{fmtSum(t.amountUzs)}
+                    </span>
+                    {canApprove && (
+                      <>
+                        <button
+                          onClick={() => approve(t.id)}
+                          className="rounded-lg px-3 py-1.5 font-bold text-white inline-flex items-center gap-1"
+                          style={{ background: C.ok, fontSize: 12.5 }}
+                        >
+                          <Check size={14} /> Согласовать
+                        </button>
+                        <button
+                          onClick={() => reject(t.id)}
+                          className="rounded-lg px-3 py-1.5 font-bold inline-flex items-center gap-1"
+                          style={{
+                            background: "#fff",
+                            color: C.bad,
+                            border: `1px solid ${C.bad}`,
+                            fontSize: 12.5,
+                          }}
+                        >
+                          <X size={14} /> Отклонить
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── ВКЛАДКА «ОТЧЁТ» ── */}

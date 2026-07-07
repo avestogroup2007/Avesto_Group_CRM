@@ -172,10 +172,19 @@ model MoneyTx {
   createdById  String?
   createdAt    DateTime @default(now())
 
+  // ── Согласование расходов (workflow «заявка → апрув») ─────────────────────
+  // approved — учитывается в балансе/отчётах; pending — заявка на согласовании
+  // (в баланс не идёт); rejected — отклонена. Приходы и инкассация — approved.
+  approval     String    @default("approved") // approved | pending | rejected
+  approvedById String? // кто согласовал/отклонил
+  approvedAt   DateTime? // когда
+  rejectReason String    @default("") // причина отклонения
+
   @@index([date])
   @@index([direction])
   @@index([branchId])
   @@index([category])
+  @@index([approval])
 }
 
 // Справочники модуля денег: типы/статьи, контрагенты, статьи ДДС, филиалы,
