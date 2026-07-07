@@ -207,11 +207,36 @@ r.get(
 );
 
 // ── Справочники ────────────────────────────────────────────────────────────
-// Возвращаем по каждому типу массив записей {id, name, parent}. У дефолтных и
-// «использованных» записей id=null (не удаляются), у заведённых вручную — id
-// (можно удалить). Так один ответ обслуживает и выпадающие списки, и экран
-// управления справочниками.
+// Возвращаем по каждому типу массив записей {id, name, parent}. Базовые
+// значения при первом запуске заносятся в БД (ensureSeeded) — тогда у них
+// есть id, и их можно переименовать/удалить, как и заведённые вручную.
+// Записи без id (id=null) — это значения из реальных проводок (для подсказок),
+// их не редактируем: они существуют в данных, а не в справочнике.
+
+// Разовое наполнение справочников базовыми значениями. Идемпотентно: маркер в
+// БД гарантирует, что после ручного удаления базовой записи она не вернётся
+// при следующем запуске сервера.
+let seedChecked = false;
+async function ensureSeeded() {
+  if (seedChecked) return;
+  const marker = await db.moneyDict.findFirst({ where: { type: "__seed" } });
+  if (!marker) {
+    const seeds = [
+      ...DEFAULT_CATEGORIES.map((name) => ({ type: "category", name })),
+      ...DEFAULT_PAY_TYPES.map((name) => ({ type: "paymentType", name })),
+      ...DEFAULT_DDS.map((name) => ({ type: "ddsArticle", name })),
+      ...DEFAULT_LEGAL.map((name) => ({ type: "legalEntity", name })),
+    ];
+    await db.moneyDict.createMany({ data: seeds, skipDuplicates: true });
+    await db.moneyDict
+      .create({ data: { type: "__seed", name: "v1" } })
+      .catch(() => {});
+  }
+  seedChecked = true;
+}
+
 async function buildDict() {
+  await ensureSeeded();
   const [rows, txs] = await Promise.all([
     db.moneyDict.findMany({
       where: { active: true },
@@ -225,12 +250,12 @@ async function buildDict() {
   ]);
   const dbByType = {};
   for (const t of DICT_TYPES) dbByType[t] = [];
-  for (const r of rows) (dbByType[r.type] || (dbByType[r.type] = [])).push(r);
+  for (const r of rows) if (dbByType[r.type]) dbByType[r.type].push(r); // «__seed» игнорируем
 
-  const merge = (defaults, dbRows, used = []) => {
+  // Значения из проводок (id=null) идут первыми, записи справочника (с id) их
+  // перекрывают — так у базовой записи, встречающейся в данных, остаётся id.
+  const merge = (dbRows, used = []) => {
     const map = new Map();
-    for (const name of defaults)
-      if (name && !map.has(name)) map.set(name, { id: null, name });
     for (const name of used)
       if (name && !map.has(name)) map.set(name, { id: null, name });
     for (const r of dbRows)
@@ -240,20 +265,18 @@ async function buildDict() {
 
   return {
     category: merge(
-      DEFAULT_CATEGORIES,
       dbByType.category,
       txs.map((x) => x.category)
     ),
     counterparty: merge(
-      [],
       dbByType.counterparty,
       txs.map((x) => x.counterparty)
     ),
-    ddsArticle: merge(DEFAULT_DDS, dbByType.ddsArticle),
-    branch: merge([], dbByType.branch),
-    legalEntity: merge(DEFAULT_LEGAL, dbByType.legalEntity),
-    account: merge([], dbByType.account),
-    paymentType: merge(DEFAULT_PAY_TYPES, dbByType.paymentType),
+    ddsArticle: merge(dbByType.ddsArticle),
+    branch: merge(dbByType.branch),
+    legalEntity: merge(dbByType.legalEntity),
+    account: merge(dbByType.account),
+    paymentType: merge(dbByType.paymentType),
     currencies: CURRENCIES,
   };
 }
