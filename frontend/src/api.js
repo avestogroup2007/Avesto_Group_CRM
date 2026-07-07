@@ -125,3 +125,13 @@ export async function apiPatch(path, body) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+export async function apiDelete(path) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
