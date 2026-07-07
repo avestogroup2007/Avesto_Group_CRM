@@ -7733,6 +7733,108 @@ function PnlAnalysis({ data }) {
   );
 }
 
+// Управление одним справочником модуля денег: список записей с удалением
+// (базовые — без id — удалять нельзя) и поле добавления. Для счетов ещё
+// выбирается юр. лицо-владелец.
+function DictManager({ type, title, entries, legalEntities, onAdd, onDelete }) {
+  const [name, setName] = useState("");
+  const [parent, setParent] = useState("");
+  const isAccount = type === "account";
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 13.5,
+    background: "#fff",
+    color: C.ink,
+    borderRadius: 10,
+    padding: "8px 11px",
+    flex: 1,
+    minWidth: 0,
+  };
+  const add = () => {
+    const nm = name.trim();
+    if (!nm) return;
+    onAdd(type, nm, isAccount ? parent : "");
+    setName("");
+  };
+  return (
+    <div
+      className="rounded-2xl bg-white p-4 sm:p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 15 }}>
+        {title}
+      </h3>
+      <div
+        className="space-y-1 mb-3"
+        style={{ maxHeight: 220, overflowY: "auto" }}
+      >
+        {entries.length ? (
+          entries.map((e) => (
+            <div
+              key={e.id || e.name}
+              className="flex items-center justify-between gap-2"
+              style={{ fontSize: 13, padding: "3px 0" }}
+            >
+              <span style={{ color: C.ink }}>
+                {e.name}
+                {e.parent ? (
+                  <span style={{ color: C.faint }}> · {e.parent}</span>
+                ) : null}
+              </span>
+              {e.id ? (
+                <button
+                  onClick={() => onDelete(e.id)}
+                  className="p-1 rounded-lg shrink-0"
+                  style={{ color: C.bad }}
+                  title="Удалить"
+                >
+                  <Trash2 size={14} />
+                </button>
+              ) : (
+                <span style={{ fontSize: 10.5, color: C.faint }}>базовый</span>
+              )}
+            </div>
+          ))
+        ) : (
+          <p style={{ fontSize: 12.5, color: C.faint }}>
+            Пусто — добавьте ниже.
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {isAccount && (
+          <select
+            value={parent}
+            onChange={(e) => setParent(e.target.value)}
+            style={{ ...inpSt, flex: "0 0 auto", maxWidth: 160 }}
+          >
+            <option value="">юр. лицо…</option>
+            {legalEntities.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          style={inpSt}
+          placeholder="Добавить запись…"
+        />
+        <button
+          onClick={add}
+          className="rounded-lg px-3 py-2 font-bold text-white shrink-0"
+          style={{ background: C.brandA, fontSize: 13 }}
+        >
+          + Добавить
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Учёт и контроль денег компании (казначейство) ──────────────────────────
 // Заменяет ручной Excel: ввод приходов/расходов (тип, контрагент, комментарий,
 // сумма+валюта, филиал), баланс, отчёт за период и аналитика. Данные — на
@@ -7778,12 +7880,18 @@ function MoneyView({ s, me, branchScope }) {
 
   const [data, setData] = useState({ status: "loading" });
   const [summary, setSummary] = useState(null);
+  // Справочники: по каждому типу массив {id, name, parent}. id=null — не удалить.
   const [dict, setDict] = useState({
-    categories: [],
-    paymentTypes: [],
-    counterparties: [],
+    category: [],
+    counterparty: [],
+    ddsArticle: [],
+    branch: [],
+    legalEntity: [],
+    account: [],
+    paymentType: [],
     currencies: ["UZS", "RUB", "USD", "EUR"],
   });
+  const dnames = (type) => (dict[type] || []).map((e) => e.name);
   const [tick, setTick] = useState(0);
   const reload = () => setTick((t) => t + 1);
 
@@ -7809,7 +7917,7 @@ function MoneyView({ s, me, branchScope }) {
 
   useEffect(() => {
     let alive = true;
-    apiGet("/api/money/dictionaries")
+    apiGet("/api/money/dict")
       // Мержим с дефолтами: неполный/пустой ответ не «обнулит» списки.
       .then((d) => alive && setDict((prev) => ({ ...prev, ...(d || {}) })))
       .catch(() => {});
@@ -7847,7 +7955,10 @@ function MoneyView({ s, me, branchScope }) {
     direction: "expense",
     date: today,
     category: "",
+    ddsArticle: "",
     paymentType: "Наличные",
+    legalEntity: "",
+    account: "",
     counterparty: "",
     comment: "",
     amount: "",
@@ -7868,21 +7979,36 @@ function MoneyView({ s, me, branchScope }) {
     const rate = form.currency === "UZS" ? 1 : Number(form.rate) || 0;
     if (form.currency !== "UZS" && !(rate > 0))
       return setErr("Укажите курс к суму");
-    const b = branchById(formBranch || 0);
+    if (form.paymentType === "Перечисление" && !form.legalEntity)
+      return setErr("Для перечисления укажите юр. лицо");
+    // Филиал: либо из оргструктуры (числовой id), либо доп. из справочника (d:Имя).
+    let branchId = null;
+    let branchName = "";
+    if (typeof formBranch === "string" && formBranch.startsWith("d:")) {
+      branchName = formBranch.slice(2);
+    } else if (formBranch) {
+      const b = branchById(formBranch);
+      branchId = String(formBranch);
+      branchName = b ? b.name : "";
+    }
     setSaving(true);
     try {
       await apiPost("/api/money", {
         date: form.date,
         direction: form.direction,
         category: form.category.trim(),
+        ddsArticle: form.ddsArticle,
         paymentType: form.paymentType || "Наличные",
+        legalEntity:
+          form.paymentType === "Перечисление" ? form.legalEntity : "",
+        account: form.paymentType === "Перечисление" ? form.account : "",
         counterparty: form.counterparty.trim(),
         comment: form.comment.trim(),
         amount,
         currency: form.currency,
         rate,
-        branchId: formBranch ? String(formBranch) : null,
-        branchName: b ? b.name : "",
+        branchId,
+        branchName,
       });
       setForm({ ...emptyForm, direction: form.direction, date: form.date });
       reload();
@@ -7906,10 +8032,31 @@ function MoneyView({ s, me, branchScope }) {
   const curBadge = (c) => (c && c !== "UZS" ? ` ${c}` : "");
   const items = data.items || [];
 
+  // Добавить/удалить запись справочника.
+  const addDict = async (type, name, parent = "") => {
+    if (!name || !name.trim()) return;
+    try {
+      await apiPost("/api/money/dict", { type, name: name.trim(), parent });
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось добавить");
+    }
+  };
+  const delDict = async (id) => {
+    if (!id) return;
+    try {
+      await apiDelete(`/api/money/dict/${id}`);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось удалить");
+    }
+  };
+
   const TABS = [
     ["flow", "Движение"],
     ["report", "Отчёт"],
     ["stats", "Аналитика"],
+    ["dict", "Справочники"],
   ];
 
   const KPI = ({ label, value, tone }) => (
@@ -8136,10 +8283,25 @@ function MoneyView({ s, me, branchScope }) {
                   placeholder="напр. Хоз. расходы"
                 />
                 <datalist id="money-cats">
-                  {dict.categories.map((c) => (
+                  {dnames("category").map((c) => (
                     <option key={c} value={c} />
                   ))}
                 </datalist>
+              </div>
+              <div>
+                <NiceSelect
+                  label="Статья ДДС"
+                  value={form.ddsArticle}
+                  width="100%"
+                  onChange={(v) => setF("ddsArticle", v)}
+                  options={[
+                    { value: "", label: "— не указана —" },
+                    ...dnames("ddsArticle").map((c) => ({
+                      value: c,
+                      label: c,
+                    })),
+                  ]}
+                />
               </div>
               <div>
                 <label style={lblSt}>Контрагент / на что</label>
@@ -8151,25 +8313,61 @@ function MoneyView({ s, me, branchScope }) {
                   placeholder="напр. Amir aka"
                 />
                 <datalist id="money-cp">
-                  {dict.counterparties.map((c) => (
+                  {dnames("counterparty").map((c) => (
                     <option key={c} value={c} />
                   ))}
                 </datalist>
               </div>
               <div>
-                <label style={lblSt}>Тип оплаты</label>
-                <input
-                  list="money-pt"
+                <NiceSelect
+                  label="Тип оплаты"
                   value={form.paymentType}
-                  onChange={(e) => setF("paymentType", e.target.value)}
-                  style={inpSt}
+                  width="100%"
+                  onChange={(v) => setF("paymentType", v)}
+                  options={dnames("paymentType").map((c) => ({
+                    value: c,
+                    label: c,
+                  }))}
                 />
-                <datalist id="money-pt">
-                  {dict.paymentTypes.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
               </div>
+              {form.paymentType === "Перечисление" && (
+                <>
+                  <div>
+                    <NiceSelect
+                      label="Юр. лицо"
+                      value={form.legalEntity}
+                      width="100%"
+                      onChange={(v) => {
+                        setF("legalEntity", v);
+                        setF("account", "");
+                      }}
+                      options={[
+                        { value: "", label: "— выберите —" },
+                        ...dnames("legalEntity").map((c) => ({
+                          value: c,
+                          label: c,
+                        })),
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <NiceSelect
+                      label="Счёт"
+                      value={form.account}
+                      width="100%"
+                      onChange={(v) => setF("account", v)}
+                      options={[
+                        { value: "", label: "— выберите —" },
+                        ...(dict.account || [])
+                          .filter(
+                            (a) => !a.parent || a.parent === form.legalEntity,
+                          )
+                          .map((a) => ({ value: a.name, label: a.name })),
+                      ]}
+                    />
+                  </div>
+                </>
+              )}
               <div>
                 <label style={lblSt}>Сумма</label>
                 <input
@@ -8206,12 +8404,16 @@ function MoneyView({ s, me, branchScope }) {
                   label="Филиал"
                   value={formBranch}
                   width="100%"
-                  onChange={(v) => setFormBranch(+v)}
+                  onChange={(v) => setFormBranch(v)}
                   options={[
                     { value: 0, label: "— не указан —" },
                     ...(s.branches || []).map((b) => ({
                       value: b.id,
                       label: b.name,
+                    })),
+                    ...dnames("branch").map((nm) => ({
+                      value: `d:${nm}`,
+                      label: nm,
                     })),
                   ]}
                 />
@@ -8391,7 +8593,8 @@ function MoneyView({ s, me, branchScope }) {
             />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <GroupTable title="По статьям" rows={summary.byCategory} />
+            <GroupTable title="По статьям ДДС" rows={summary.byDds} />
+            <GroupTable title="По статьям / типам" rows={summary.byCategory} />
             <GroupTable title="По филиалам" rows={summary.byBranch} />
             <GroupTable title="По типам оплат" rows={summary.byPaymentType} />
             <GroupTable
@@ -8400,6 +8603,31 @@ function MoneyView({ s, me, branchScope }) {
             />
           </div>
         </>
+      )}
+
+      {/* ── ВКЛАДКА «СПРАВОЧНИКИ» ── */}
+      {tab === "dict" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[
+            ["category", "Статьи / типы расходов и приходов"],
+            ["ddsArticle", "Статьи ДДС"],
+            ["counterparty", "Контрагенты"],
+            ["legalEntity", "Юр. лица"],
+            ["account", "Счета (для перечислений)"],
+            ["branch", "Филиалы / подразделения"],
+            ["paymentType", "Типы оплат"],
+          ].map(([type, title]) => (
+            <DictManager
+              key={type}
+              type={type}
+              title={title}
+              entries={dict[type] || []}
+              legalEntities={dnames("legalEntity")}
+              onAdd={addDict}
+              onDelete={delDict}
+            />
+          ))}
+        </div>
       )}
 
       {/* ── ВКЛАДКА «АНАЛИТИКА» ── */}

@@ -153,7 +153,10 @@ model MoneyTx {
   date         String // YYYY-MM-DD (операционная дата)
   direction    String // income | expense
   category     String // статья/тип (Расход Маркетинг, Хоз расходы, Уставной фонд, Приход с филиала…)
+  ddsArticle   String   @default("") // статья ДДС (движение денежных средств)
   paymentType  String   @default("Наличные") // тип оплаты (Наличные, Перечисление, Карта…)
+  legalEntity  String   @default("") // юр. лицо (для перечислений)
+  account      String   @default("") // счёт (для перечислений)
   counterparty String   @default("") // контрагент / на что потрачено
   comment      String   @default("")
   amount       BigInt // сумма в валюте currency
@@ -173,6 +176,21 @@ model MoneyTx {
   @@index([direction])
   @@index([branchId])
   @@index([category])
+}
+
+// Справочники модуля денег: типы/статьи, контрагенты, статьи ДДС, филиалы,
+// юр. лица, счета, типы оплат. Пользователь пополняет их из интерфейса.
+// parent — для счетов (какому юр. лицу принадлежит счёт).
+model MoneyDict {
+  id        String   @id @default(cuid())
+  type      String // category|counterparty|ddsArticle|branch|legalEntity|account|paymentType
+  name      String
+  parent    String   @default("") // для account: юр. лицо-владелец
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([type, name])
+  @@index([type])
 }
 
 // Журнал безопасности — кто что выгружал, кто пытался копировать
