@@ -9485,7 +9485,10 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
   const selBranchObj = branchById(fBranch || 0);
   const selDept = fBranch && selBranchObj ? selBranchObj.iikoDept : null;
   const live = useIikoSales({ from, to, department: selDept });
-  const liveOn = live.status === "ok";
+  // iiko подключён и ответил (реальные данные; для «пустого» ответа — нули).
+  // Демо-данные больше не подставляем — показываем только реальные цифры iiko,
+  // а где продаж нет (например, цех) — честный ноль.
+  const liveOn = live.status === "ok" || live.status === "empty";
   const pick = (p) => {
     setPreset(p);
     const r = rangeOf(p);
@@ -9532,6 +9535,13 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
   const nDays = Math.max(1, Math.round((toD(to) - toD(from)) / 86400000) + 1);
   const prevTo = addDays(from, -1),
     prevFrom = addDays(from, -nDays);
+  // Прошлый период из iiko — для реального сравнения (без демо).
+  const livePrev = useIikoSales({
+    from: prevFrom,
+    to: prevTo,
+    department: selDept,
+  });
+  const prevIikoOn = livePrev.status === "ok" || livePrev.status === "empty";
   const prevReports = (s.cashReports || []).filter((r) =>
     inScope(r, prevFrom, prevTo),
   );
@@ -9616,11 +9626,10 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
   ]
     .filter((r) => r[1] > 0)
     .sort((a, b) => b[1] - a[1]);
-  // Живые оплаты из iiko (если есть) — иначе демо.
-  const payRows =
-    liveOn && live.pay && live.pay.length
-      ? live.pay.map((p, i) => [p.name, p.value, payColor(p.name, i)])
-      : demoPayRows;
+  // Оплаты из iiko (реальные; пусто → пусто, без демо).
+  const payRows = liveOn
+    ? (live.pay || []).map((p, i) => [p.name, p.value, payColor(p.name, i)])
+    : demoPayRows;
   const payTotal = payRows.reduce((a, r) => a + r[1], 0) || 1;
 
   // динамика по дням
@@ -9636,21 +9645,20 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
       revenue: dayMap[d],
     }));
 
-  // Если iiko отдал живые продажи — показываем их вместо демо-данных.
-  const displayRevenue = liveOn ? live.total : revenue;
-  const displayChecks = liveOn ? live.checks || 0 : checks;
-  const displayAvg = liveOn
-    ? displayChecks
+  // Показываем реальные продажи iiko (нули, если продаж нет). Демо не подставляем.
+  const displayRevenue = liveOn ? live.total || 0 : 0;
+  const displayChecks = liveOn ? live.checks || 0 : 0;
+  const displayAvg =
+    displayChecks && displayRevenue
       ? Math.round(displayRevenue / displayChecks)
-      : 0
-    : avgCheck;
+      : 0;
   const displaySeries = liveOn
-    ? live.days.map((d) => ({
+    ? (live.days || []).map((d) => ({
         label: d.date.slice(8) + "." + d.date.slice(5, 7),
         day: d.date,
         revenue: d.revenue,
       }))
-    : series;
+    : [];
 
   // товары + ABC
   const pm = {};
@@ -9663,16 +9671,15 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     }),
   );
   const demoProducts = Object.values(pm).sort((a, b) => b.sum - a.sum);
-  // Живые блюда из iiko (если есть) — иначе демо.
-  const products =
-    liveOn && live.products && live.products.length
-      ? live.products.map((p) => ({
-          name: p.name,
-          cat: "",
-          qty: p.qty,
-          sum: p.sum,
-        }))
-      : demoProducts;
+  // Блюда из iiko (реальные; пусто → пусто, без демо).
+  const products = liveOn
+    ? (live.products || []).map((p) => ({
+        name: p.name,
+        cat: "",
+        qty: p.qty,
+        sum: p.sum,
+      }))
+    : demoProducts;
   // Продажи по часам (0–23) из iiko — для вкладки «По времени».
   const liveHours = liveOn && live.hours ? live.hours : null;
   // Блюда по часам (для раскрытия по клику на час).
@@ -9760,12 +9767,6 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
 
   // рекомендации
   const insights = [];
-  if (!liveOn && growth != null)
-    insights.push(
-      growth >= 0
-        ? `Выручка выросла на ${growth.toFixed(1)}% к прошлому периоду — держим темп.`
-        : `Выручка снизилась на ${Math.abs(growth).toFixed(1)}% — стоит усилить продвижение.`,
-    );
   if (liveOn)
     insights.push(
       `Выручка за период: ${fmtSum(displayRevenue)}${displayChecks ? ` · ${displayChecks.toLocaleString("ru-RU")} чеков` : ""} (данные из iiko).`,
@@ -9782,10 +9783,7 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
         .map((p) => p.name)
         .join(", ")} — рассмотрите акции или замену в меню.`,
     );
-  if (displayAvg)
-    insights.push(
-      `Средний чек ${fmtSum(displayAvg)}${!liveOn && avgGrowth != null ? ` (${avgGrowth >= 0 ? "+" : ""}${avgGrowth.toFixed(1)}% к прошлому периоду)` : ""}.`,
-    );
+  if (displayAvg) insights.push(`Средний чек ${fmtSum(displayAvg)}.`);
   if (payRows[0])
     insights.push(
       `Основной способ оплаты: ${payRows[0][0]} — ${((payRows[0][1] / payTotal) * 100).toFixed(0)}% оплат.`,
@@ -9900,12 +9898,18 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
         )}
         {live.status === "empty" && (
           <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
-            iiko: продаж за период нет — показаны демо-данные.
+            iiko подключён, но за выбранный период/филиал продаж нет. Для цехов
+            и складов это норма — там нет чеков.
+          </div>
+        )}
+        {live.status === "off" && (
+          <div className="mt-2" style={{ fontSize: 12, color: C.faint }}>
+            iiko не подключён — реальных продаж пока нет.
           </div>
         )}
         {live.status === "error" && (
           <div className="mt-2" style={{ fontSize: 12, color: C.warn }}>
-            iiko недоступен ({live.error}) — показаны демо-данные.
+            iiko недоступен ({live.error}).
           </div>
         )}
       </div>
@@ -9918,30 +9922,26 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
         <KPI
           label={tr("Выручка за период")}
           value={fmtSum(displayRevenue)}
-          sub={liveOn ? "● данные из iiko" : gr.s}
-          tone={liveOn ? "up" : gr.t}
+          sub={liveOn ? "● данные из iiko" : null}
+          tone="up"
         />
         <KPI
           label={tr("Средний чек")}
           value={fmtSum(displayAvg)}
-          sub={liveOn ? "● данные из iiko" : agr.s}
-          tone={liveOn ? "up" : agr.t}
+          sub={liveOn ? "● данные из iiko" : null}
+          tone="up"
         />
         <KPI
           label={tr("Количество чеков")}
           value={displayChecks.toLocaleString("ru-RU")}
-          sub={
-            liveOn
-              ? "● данные из iiko"
-              : prevChecks
-                ? `${checks - prevChecks >= 0 ? "▲ +" : "▼ "}${checks - prevChecks} ${tr("к прошлому периоду")}`
-                : null
-          }
-          tone={liveOn ? "up" : checks - prevChecks >= 0 ? "up" : "down"}
+          sub={liveOn ? "● данные из iiko" : null}
+          tone="up"
         />
         <KPI
           label={tr("Прошлый период")}
-          value={fmtSum(prevRevenue)}
+          value={fmtSum(
+            liveOn ? (prevIikoOn ? livePrev.total || 0 : 0) : prevRevenue,
+          )}
           sub={`${dm(prevFrom)} — ${dm(prevTo)}`}
         />
       </div>
