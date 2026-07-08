@@ -615,7 +615,10 @@ function buildPnlSection(accounts, type, turnover, sign) {
     Object.keys(childrenOf).forEach((p) => childrenOf[p].sort(byAccount));
   const node = (a) => {
     const label = a.name || a.code || "—";
-    const kids = (childrenOf[a.id] || []).map(node);
+    // Скрываем нулевые под-статьи — как в отчёте iiko (там строк с 0 нет).
+    const kids = (childrenOf[a.id] || [])
+      .map(node)
+      .filter((k) => k.value !== 0);
     // Двойная запись iiko: доходные счета кредитовые (оборот отрицательный),
     // расходные дебетовые (положительный). sign=-1 у доходов делает их плюсом.
     const own = (turnover[a.id] || 0) * sign;
