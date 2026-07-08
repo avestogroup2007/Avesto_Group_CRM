@@ -1553,6 +1553,93 @@ function hist(taskId, userId, action, from, to, note) {
 function routePhase(step, len) {
   return step >= len ? 5 : step === 0 ? 1 : step === len - 1 ? 4 : 3;
 }
+
+/* ------------------- автоматизация процессов (Digital Pipeline) ------------ */
+// По образцу amoCRM: при событии по задаче применяются правила.
+// Триггеры: phase (переход вперёд в фазу N), return (возврат на доработку),
+// overdue (просрочка по SLA). Действия: notify (тост + журнал),
+// priority (поднять приоритет), followup (создать задачу-напоминание).
+const AUTOMATION_TRIGGERS = [
+  { type: "phase", phase: 3, label: "Задача взята в работу" },
+  { type: "phase", phase: 4, label: "Отправлена на проверку" },
+  { type: "phase", phase: 5, label: "Задача завершена" },
+  { type: "return", label: "Возврат на доработку" },
+  { type: "overdue", label: "Просрочка по сроку (SLA)" },
+];
+const NOTIFY_TARGETS = [
+  { key: "executor", label: "исполнителю" },
+  { key: "controller", label: "контролёру" },
+  { key: "chief", label: "руководству" },
+];
+const DEFAULT_RULES = [
+  {
+    id: "r-overdue",
+    name: "Просрочка → эскалация",
+    active: true,
+    trigger: { type: "overdue" },
+    actions: [
+      { type: "notify", target: "chief" },
+      { type: "priority", pr: "Критический" },
+    ],
+  },
+  {
+    id: "r-return",
+    name: "Возврат → уведомить исполнителя",
+    active: true,
+    trigger: { type: "return" },
+    actions: [{ type: "notify", target: "executor" }],
+  },
+  {
+    id: "r-done",
+    name: "Завершение → уведомить контролёра",
+    active: true,
+    trigger: { type: "phase", phase: 5 },
+    actions: [{ type: "notify", target: "controller" }],
+  },
+];
+const triggerLabel = (trg) => {
+  const f = AUTOMATION_TRIGGERS.find(
+    (x) => x.type === trg.type && (x.phase == null || x.phase === trg.phase),
+  );
+  return f ? f.label : trg.type;
+};
+// Совпадает ли триггер правила с событием (из истории или overdue-скана).
+function triggerMatches(trg, evt) {
+  if (trg.type !== evt.type) return false;
+  if (trg.type === "phase") return trg.phase === evt.phase;
+  return true; // return | overdue
+}
+// Задача-напоминание, создаваемая действием followup.
+function makeFollowupTask(rule, src, cfg, now) {
+  const days = Number(cfg.days) > 0 ? Number(cfg.days) : 3;
+  return {
+    id: "t" + uid().slice(0, 6),
+    title: (cfg.title || "Напоминание: проверить результат").slice(0, 70),
+    description:
+      "Создано автоматически по правилу «" +
+      rule.name +
+      "» к задаче «" +
+      src.title +
+      "».",
+    branchId: src.branchId,
+    executorId: src.executorId,
+    controllerId: src.controllerId,
+    createdBy: src.controllerId || src.executorId,
+    phase: 1,
+    cat: src.cat,
+    pr: "Обычный",
+    amount: null,
+    overBudget: false,
+    departmentId: src.departmentId,
+    attachments: 0,
+    favorite: false,
+    createdAt: now,
+    slaDeadline: now + days * D,
+    comments: [],
+    autoFrom: src.id,
+  };
+}
+
 function init() {
   return {
     ...makeSeed(),
@@ -1623,6 +1710,22 @@ function reducer(s, a) {
           ...s.history,
           hist(a.id, s.currentUserId, a.action, a.from, a.to),
         ],
+      };
+    // Автоматизация: добавить задачу-напоминание без смены вида/выбора.
+    case "ADD_TASK_SILENT":
+      return {
+        ...s,
+        tasks: [a.task, ...s.tasks],
+        history: [
+          ...s.history,
+          hist(a.task.id, a.task.createdBy, "created", null, 1),
+        ],
+      };
+    // Автоматизация: поднять приоритет задачи.
+    case "SET_PRIORITY":
+      return {
+        ...s,
+        tasks: s.tasks.map((x) => (x.id === a.id ? { ...x, pr: a.pr } : x)),
       };
     case "TOGGLE_FAV":
       return {
@@ -10820,6 +10923,12 @@ const NAV = [
     icon: FileText,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
+  {
+    key: "automation",
+    label: "Автоматизация",
+    icon: Bot,
+    roles: ["director", "sysadmin"],
+  },
   { key: "org", label: "Оргструктура", icon: Building2, roles: "all" },
   { key: "about", label: "О системе", icon: Info, roles: "all" },
   { key: "admin", label: "Админ-панель", icon: Settings, roles: ["sysadmin"] },
@@ -10840,7 +10949,371 @@ const VIEW_TITLE = {
   org: "Оргструктура и филиалы",
   about: "О системе",
   admin: "Админ-панель",
+  automation: "Автоматизация процессов",
 };
+
+/* ---------------------- автоматизация процессов (экран) -------------------- */
+const autoActionLabel = (ac) => {
+  if (ac.type === "notify") {
+    const i = NOTIFY_TARGETS.find((x) => x.key === ac.target);
+    return "уведомить " + (i ? i.label : "");
+  }
+  if (ac.type === "priority") return "приоритет → " + ac.pr;
+  if (ac.type === "followup")
+    return "напоминание через " + (ac.days || 3) + " дн.";
+  return ac.type;
+};
+
+function AutomationView({ rules, setRules, log, setLog, now }) {
+  const [name, setName] = useState("");
+  const [trigIdx, setTrigIdx] = useState(0);
+  const [notifyOn, setNotifyOn] = useState(true);
+  const [notifyTarget, setNotifyTarget] = useState("controller");
+  const [prOn, setPrOn] = useState(false);
+  const [prLevel, setPrLevel] = useState("Критический");
+  const [followOn, setFollowOn] = useState(false);
+  const [followDays, setFollowDays] = useState("7");
+  const [followTitle, setFollowTitle] = useState("");
+
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 13.5,
+    background: "#fff",
+    color: C.ink,
+    borderRadius: 10,
+    padding: "8px 11px",
+  };
+  const addRule = () => {
+    const trg = AUTOMATION_TRIGGERS[trigIdx];
+    const actions = [];
+    if (notifyOn) actions.push({ type: "notify", target: notifyTarget });
+    if (prOn) actions.push({ type: "priority", pr: prLevel });
+    if (followOn)
+      actions.push({
+        type: "followup",
+        days: Number(followDays) || 3,
+        title: followTitle.trim(),
+      });
+    if (!name.trim() || !actions.length) return;
+    const rule = {
+      id: "r" + uid().slice(0, 6),
+      name: name.trim(),
+      active: true,
+      trigger: {
+        type: trg.type,
+        ...(trg.phase != null ? { phase: trg.phase } : {}),
+      },
+      actions,
+    };
+    setRules((rs) => [rule, ...rs]);
+    setName("");
+    setPrOn(false);
+    setFollowOn(false);
+    setFollowTitle("");
+  };
+  const toggle = (id) =>
+    setRules((rs) =>
+      rs.map((r) => (r.id === id ? { ...r, active: !r.active } : r)),
+    );
+  const remove = (id) => setRules((rs) => rs.filter((r) => r.id !== id));
+  const ago = (at) => {
+    const min = Math.round((now - at) / 60000);
+    if (min < 1) return "только что";
+    if (min < 60) return min + " мин назад";
+    const h = Math.round(min / 60);
+    if (h < 24) return h + " ч назад";
+    return Math.round(h / 24) + " дн назад";
+  };
+
+  return (
+    <div className="space-y-4 max-w-4xl">
+      <div
+        className="rounded-2xl p-4 sm:p-5"
+        style={{
+          background: C.brandGrad,
+          color: "#fff",
+          boxShadow: "0 12px 30px rgba(123,45,31,.28)",
+        }}
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <Bot size={20} />
+          <h2 className="font-extrabold" style={{ fontSize: 17 }}>
+            Автоматизация процессов
+          </h2>
+        </div>
+        <p style={{ fontSize: 13, opacity: 0.92 }}>
+          Правила срабатывают сами при событиях по задачам: переход фазы,
+          возврат на доработку, просрочка по сроку. Действие — уведомление,
+          повышение приоритета или создание задачи-напоминания.
+        </p>
+      </div>
+
+      {/* Правила */}
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 15 }}>
+          Правила ({rules.filter((r) => r.active).length} активны)
+        </h3>
+        <div className="space-y-2">
+          {rules.length === 0 && (
+            <p style={{ fontSize: 13, color: C.faint }}>
+              Пока нет правил — добавьте ниже.
+            </p>
+          )}
+          {rules.map((r) => (
+            <div
+              key={r.id}
+              className="rounded-xl p-3 flex items-start justify-between gap-3"
+              style={{
+                border: `1px solid ${C.line}`,
+                background: r.active ? "#fff" : "#FAFAF9",
+                opacity: r.active ? 1 : 0.7,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>
+                  {r.name}
+                </div>
+                <div style={{ fontSize: 12.5, color: C.sub, marginTop: 2 }}>
+                  Когда: <b>{triggerLabel(r.trigger)}</b>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {r.actions.map((ac, i) => (
+                    <span
+                      key={i}
+                      className="rounded-md px-2 py-0.5"
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        background: C.brandSoft || "#FBEEE9",
+                        color: C.brandA,
+                      }}
+                    >
+                      {autoActionLabel(ac)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => toggle(r.id)}
+                  className="rounded-full"
+                  title={r.active ? "Выключить" : "Включить"}
+                  style={{
+                    width: 40,
+                    height: 22,
+                    background: r.active ? C.ok : C.border,
+                    position: "relative",
+                    transition: "background .15s",
+                  }}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: r.active ? 20 : 2,
+                      width: 18,
+                      height: 18,
+                      borderRadius: 99,
+                      background: "#fff",
+                      transition: "left .15s",
+                      boxShadow: "0 1px 3px rgba(0,0,0,.25)",
+                    }}
+                  />
+                </button>
+                <button
+                  onClick={() => remove(r.id)}
+                  className="p-1.5 rounded-lg"
+                  style={{ color: C.bad }}
+                  title="Удалить"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Добавить правило */}
+        <div
+          className="rounded-xl p-3 mt-4"
+          style={{ background: "#FBFCFE", border: `1px dashed ${C.border}` }}
+        >
+          <div
+            className="font-bold mb-2"
+            style={{ color: C.ink, fontSize: 13.5 }}
+          >
+            Новое правило
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Название правила"
+              style={inpSt}
+            />
+            <select
+              value={trigIdx}
+              onChange={(e) => setTrigIdx(Number(e.target.value))}
+              style={inpSt}
+            >
+              {AUTOMATION_TRIGGERS.map((t, i) => (
+                <option key={i} value={i}>
+                  Когда: {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label
+              className="flex items-center gap-2 flex-wrap"
+              style={{ fontSize: 13, color: C.sub }}
+            >
+              <input
+                type="checkbox"
+                checked={notifyOn}
+                onChange={(e) => setNotifyOn(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: C.brandA }}
+              />
+              Уведомить
+              <select
+                value={notifyTarget}
+                onChange={(e) => setNotifyTarget(e.target.value)}
+                disabled={!notifyOn}
+                style={{ ...inpSt, padding: "5px 9px" }}
+              >
+                {NOTIFY_TARGETS.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label
+              className="flex items-center gap-2 flex-wrap"
+              style={{ fontSize: 13, color: C.sub }}
+            >
+              <input
+                type="checkbox"
+                checked={prOn}
+                onChange={(e) => setPrOn(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: C.brandA }}
+              />
+              Поднять приоритет до
+              <select
+                value={prLevel}
+                onChange={(e) => setPrLevel(e.target.value)}
+                disabled={!prOn}
+                style={{ ...inpSt, padding: "5px 9px" }}
+              >
+                <option value="Высокий">Высокий</option>
+                <option value="Критический">Критический</option>
+              </select>
+            </label>
+            <label
+              className="flex items-center gap-2 flex-wrap"
+              style={{ fontSize: 13, color: C.sub }}
+            >
+              <input
+                type="checkbox"
+                checked={followOn}
+                onChange={(e) => setFollowOn(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: C.brandA }}
+              />
+              Создать напоминание через
+              <input
+                value={followDays}
+                onChange={(e) => setFollowDays(e.target.value)}
+                disabled={!followOn}
+                style={{ ...inpSt, padding: "5px 9px", width: 56 }}
+              />
+              дн.
+              <input
+                value={followTitle}
+                onChange={(e) => setFollowTitle(e.target.value)}
+                disabled={!followOn}
+                placeholder="заголовок (необязательно)"
+                style={{ ...inpSt, padding: "5px 9px", flex: 1, minWidth: 120 }}
+              />
+            </label>
+          </div>
+          <button
+            onClick={addRule}
+            className="mt-3 rounded-lg px-4 py-2 font-bold text-white"
+            style={{ background: C.brandA, fontSize: 13 }}
+          >
+            + Добавить правило
+          </button>
+        </div>
+      </div>
+
+      {/* Журнал срабатываний */}
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+            Журнал срабатываний
+          </h3>
+          {log.length > 0 && (
+            <button
+              onClick={() => setLog([])}
+              style={{ fontSize: 12.5, color: C.faint }}
+            >
+              очистить
+            </button>
+          )}
+        </div>
+        {log.length === 0 ? (
+          <p style={{ fontSize: 13, color: C.faint }}>
+            Пока пусто. Как только сработает правило — здесь появится запись.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {log.map((e) => (
+              <div
+                key={e.id}
+                className="rounded-xl p-2.5"
+                style={{ background: "#F8FAFC", border: `1px solid ${C.line}` }}
+              >
+                <div
+                  className="flex items-center justify-between gap-2"
+                  style={{ fontSize: 12.5 }}
+                >
+                  <span style={{ fontWeight: 700, color: C.ink }}>
+                    {e.rule}
+                  </span>
+                  <span style={{ color: C.faint }}>{ago(e.at)}</span>
+                </div>
+                <div style={{ fontSize: 12, color: C.sub, marginTop: 1 }}>
+                  {e.trigger} · «{e.task}»
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {e.actions.map((a, i) => (
+                    <span
+                      key={i}
+                      className="rounded-md px-1.5 py-0.5"
+                      style={{
+                        fontSize: 10.5,
+                        background: "#EEF2F7",
+                        color: C.sub,
+                      }}
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Кнопка «Наверх»: появляется только когда страница прокручена вниз (по
 // необходимости), плавно возвращает к началу. На мобильных поднята над нижней
@@ -10968,6 +11441,7 @@ const NAV_SHORT = {
   org: "Структура",
   about: "О системе",
   admin: "Админка",
+  automation: "Авто",
 };
 
 function BottomNav({ view, setView, role, onMore }) {
@@ -11318,6 +11792,119 @@ export default function App({ authUser, onLogout }) {
   const [hint, setHint] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
   const notify = (m) => setToast(m);
+
+  // ── Автоматизация процессов (Digital Pipeline) ──────────────────────────
+  const [autoRules, setAutoRules] = usePersisted(
+    "avesto.automation.rules",
+    DEFAULT_RULES,
+  );
+  const [autoLog, setAutoLog] = usePersisted("avesto.automation.log", []);
+  const seenHistRef = React.useRef(null);
+  const escalatedRef = React.useRef(new Set());
+  const escInitRef = React.useRef(false);
+
+  // Выполнить действия правила по задаче и записать в журнал.
+  const runAutomation = (rule, task) => {
+    const at = Date.now();
+    const users = s.users || [];
+    const nameOf = (id) => (users.find((u) => u.id === id) || {}).name || "—";
+    const chief =
+      users.find((u) => u.role === "director") ||
+      users.find((u) => u.role === "manager");
+    const done = [];
+    rule.actions.forEach((ac) => {
+      if (ac.type === "notify") {
+        const info = NOTIFY_TARGETS.find((x) => x.key === ac.target);
+        const who =
+          ac.target === "executor"
+            ? nameOf(task.executorId)
+            : ac.target === "controller"
+              ? nameOf(task.controllerId)
+              : chief
+                ? chief.name
+                : "руководству";
+        notify(
+          `Автоправило «${rule.name}»: ${info ? info.label : ""} — «${task.title}»`,
+        );
+        done.push(`Уведомление ${info ? info.label : ""} (${who})`);
+      } else if (ac.type === "priority") {
+        if (task.pr !== ac.pr)
+          dispatch({ type: "SET_PRIORITY", id: task.id, pr: ac.pr });
+        done.push(`Приоритет → ${ac.pr}`);
+      } else if (ac.type === "followup") {
+        const ft = makeFollowupTask(rule, task, ac, at);
+        dispatch({ type: "ADD_TASK_SILENT", task: ft });
+        done.push(`Задача-напоминание «${ft.title}»`);
+      }
+    });
+    if (done.length)
+      setAutoLog((log) =>
+        [
+          {
+            id: uid(),
+            at,
+            rule: rule.name,
+            trigger: triggerLabel(rule.trigger),
+            task: task.title,
+            actions: done,
+          },
+          ...log,
+        ].slice(0, 50),
+      );
+  };
+
+  // Триггеры по событиям задач (переход фазы / возврат) — из журнала истории.
+  useEffect(() => {
+    if (!s.hydrated) return;
+    if (!seenHistRef.current) {
+      seenHistRef.current = new Set(s.history.map((h) => h.id));
+      return;
+    }
+    const fresh = s.history.filter((h) => !seenHistRef.current.has(h.id));
+    if (!fresh.length) return;
+    fresh.forEach((h) => seenHistRef.current.add(h.id));
+    const evts = fresh
+      .map((h) => {
+        if (h.action === "return") return { type: "return", task: h.taskId };
+        if (["start", "review", "done", "step"].includes(h.action) && h.to)
+          return { type: "phase", phase: h.to, task: h.taskId };
+        return null;
+      })
+      .filter(Boolean);
+    if (!evts.length) return;
+    const active = autoRules.filter((r) => r.active);
+    evts.forEach((evt) => {
+      const task = s.tasks.find((t) => t.id === evt.task);
+      if (!task) return;
+      active.forEach((r) => {
+        if (triggerMatches(r.trigger, evt)) runAutomation(r, task);
+      });
+    });
+  }, [s.history, s.hydrated]); // eslint-disable-line
+
+  // Триггер просрочки (SLA) — скан по таймеру. Уже просроченные на момент
+  // загрузки помечаем обработанными, чтобы не сыпать эскалации при входе.
+  useEffect(() => {
+    if (!s.hydrated) return;
+    if (!escInitRef.current) {
+      s.tasks.forEach((t) => {
+        if (t.phase < 5 && !t.routeId && now > t.slaDeadline)
+          escalatedRef.current.add(t.id);
+      });
+      escInitRef.current = true;
+      return;
+    }
+    const overdueRules = autoRules.filter(
+      (r) => r.active && r.trigger.type === "overdue",
+    );
+    if (!overdueRules.length) return;
+    s.tasks.forEach((t) => {
+      if (t.phase >= 5 || t.routeId || now <= t.slaDeadline) return;
+      if (escalatedRef.current.has(t.id)) return;
+      escalatedRef.current.add(t.id);
+      overdueRules.forEach((r) => runAutomation(r, t));
+    });
+  }, [now, s.hydrated]); // eslint-disable-line
 
   useEffect(() => {
     let live = true;
@@ -11711,6 +12298,16 @@ export default function App({ authUser, onLogout }) {
               )}
             {s.view === "org" && <OrgStructure />}
             {s.view === "about" && <AboutView />}
+            {s.view === "automation" &&
+              (me.role === "director" || me.role === "sysadmin") && (
+                <AutomationView
+                  rules={autoRules}
+                  setRules={setAutoRules}
+                  log={autoLog}
+                  setLog={setAutoLog}
+                  now={now}
+                />
+              )}
             {s.view === "admin" && me.role === "sysadmin" && (
               <AdminPanel s={s} dispatch={dispatch} notify={notify} />
             )}
