@@ -11,6 +11,10 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { sendTelegram, esc } from "../services/telegram.js";
+
+// Сумма для Telegram-сообщений (с разделителями разрядов).
+const fmtMoney = (v) => Number(v).toLocaleString("ru-RU");
 
 const r = Router();
 r.use(requireAuth);
@@ -441,6 +445,19 @@ r.post(
         ...approvedFields,
       },
     });
+    // Заявка на расход — оповещаем офис в Telegram (best-effort).
+    if (created.approval === "pending") {
+      sendTelegram(
+        `📝 <b>Новая заявка на расход</b>\n` +
+          `${esc(created.category)} — <b>${fmtMoney(created.amountUzs)} сум</b>\n` +
+          (created.counterparty
+            ? `Контрагент: ${esc(created.counterparty)}\n`
+            : "") +
+          (created.comment ? `${esc(created.comment)}\n` : "") +
+          `Филиал: ${esc(created.branchName || "—")}\n` +
+          `Ожидает согласования.`
+      );
+    }
     res.status(201).json(ser(created));
   })
 );
@@ -465,6 +482,10 @@ r.post(
         rejectReason: "",
       },
     });
+    sendTelegram(
+      `✅ <b>Расход согласован</b>\n` +
+        `${esc(updated.category)} — <b>${fmtMoney(updated.amountUzs)} сум</b>`
+    );
     res.json(ser(updated));
   })
 );
@@ -489,6 +510,11 @@ r.post(
         rejectReason: reason || "",
       },
     });
+    sendTelegram(
+      `❌ <b>Заявка отклонена</b>\n` +
+        `${esc(updated.category)} — <b>${fmtMoney(updated.amountUzs)} сум</b>` +
+        (reason ? `\nПричина: ${esc(reason)}` : "")
+    );
     res.json(ser(updated));
   })
 );

@@ -35,6 +35,12 @@ const EnvSchema = z.object({
   IIKO_SERVER_URL: z.string().url().optional(), // https://host:port
   IIKO_SERVER_LOGIN: z.string().min(1).optional(), // логин пользователя iikoOffice
   IIKO_SERVER_PASSWORD: z.string().min(1).optional(), // пароль (SHA1 считает сервер)
+  // Telegram-уведомления. Токен бота и id чата задаются ТОЛЬКО в окружении
+  // хостинга (Render). Если не заданы — уведомления просто не отправляются,
+  // остальная система работает как обычно. Токен получают у @BotFather,
+  // chat_id — id личного чата или группы, куда бот добавлен.
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_CHAT_ID: z.string().min(1).optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

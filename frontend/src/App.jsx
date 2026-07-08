@@ -10974,6 +10974,27 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
   const [followOn, setFollowOn] = useState(false);
   const [followDays, setFollowDays] = useState("7");
   const [followTitle, setFollowTitle] = useState("");
+  const [tg, setTg] = useState(null); // null=неизвестно, {configured}
+  const [tgMsg, setTgMsg] = useState("");
+  const [tgBusy, setTgBusy] = useState(false);
+
+  useEffect(() => {
+    apiGet("/api/telegram/status")
+      .then((r) => setTg(r))
+      .catch(() => setTg({ configured: false }));
+  }, []);
+  const sendTest = async () => {
+    setTgBusy(true);
+    setTgMsg("");
+    try {
+      await apiPost("/api/telegram/test", {});
+      setTgMsg("Отправлено — проверьте Telegram.");
+    } catch (e) {
+      setTgMsg(e.message || "Не удалось отправить");
+    } finally {
+      setTgBusy(false);
+    }
+  };
 
   const inpSt = {
     border: `1px solid ${C.border}`,
@@ -11046,6 +11067,61 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
           возврат на доработку, просрочка по сроку. Действие — уведомление,
           повышение приоритета или создание задачи-напоминания.
         </p>
+      </div>
+
+      {/* Telegram-уведомления */}
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <Send size={16} color={C.brandA} />
+              <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+                Уведомления в Telegram
+              </h3>
+              <span
+                className="rounded-full px-2 py-0.5"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: tg?.configured ? "#DCFCE7" : C.line,
+                  color: tg?.configured ? "#15803D" : C.faint,
+                }}
+              >
+                {tg == null
+                  ? "…"
+                  : tg.configured
+                    ? "подключено"
+                    : "не настроено"}
+              </span>
+            </div>
+            <p style={{ fontSize: 12.5, color: C.sub, marginTop: 4 }}>
+              Заявки на согласование расходов, их одобрение/отклонение и
+              уведомления автоправил дублируются в Telegram. Токен бота и id
+              чата задаются в переменных окружения сервера (Render):
+              <b> TELEGRAM_BOT_TOKEN</b>, <b>TELEGRAM_CHAT_ID</b>.
+            </p>
+          </div>
+          <button
+            onClick={sendTest}
+            disabled={tgBusy || !tg?.configured}
+            className="rounded-lg px-3 py-2 font-bold text-white shrink-0"
+            style={{
+              background: tg?.configured ? C.brandA : C.border,
+              fontSize: 13,
+              opacity: tgBusy ? 0.7 : 1,
+            }}
+          >
+            {tgBusy ? "Отправка…" : "Тест-сообщение"}
+          </button>
+        </div>
+        {tgMsg && (
+          <div style={{ fontSize: 12.5, color: C.sub, marginTop: 8 }}>
+            {tgMsg}
+          </div>
+        )}
       </div>
 
       {/* Правила */}
@@ -11823,8 +11899,11 @@ export default function App({ authUser, onLogout }) {
               : chief
                 ? chief.name
                 : "руководству";
-        notify(
-          `Автоправило «${rule.name}»: ${info ? info.label : ""} — «${task.title}»`,
+        const msg = `Автоправило «${rule.name}»: ${info ? info.label : ""} — «${task.title}»`;
+        notify(msg);
+        // Дублируем в Telegram, если интеграция настроена (best-effort).
+        apiPost("/api/telegram/notify", { text: msg.slice(0, 1000) }).catch(
+          () => {},
         );
         done.push(`Уведомление ${info ? info.label : ""} (${who})`);
       } else if (ac.type === "priority") {
