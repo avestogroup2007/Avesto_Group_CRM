@@ -715,12 +715,29 @@ export async function pnlReport({ from, to, department }) {
         netProfit,
       },
       // Диагностика на время настройки: сколько счетов, есть ли балансы.
+      // accountsDump — счета план-счетов (для статей ОПиУ) в ТОМ ПОРЯДКЕ, в
+      // котором их вернул iiko, со всеми полями порядка (code/num/order). По
+      // нему настраиваем сортировку статей 1-в-1 как в отчёте iiko.
       diagnostics: {
         accounts: accounts.length,
         balEndRows: balEnd.rows.length,
         balStartRows: balStart.rows.length,
         balSample: balEnd.sample || balStart.sample || "",
         accSample: accounts.length ? "" : accText.slice(0, 800),
+        accountKeys: accounts[0] ? Object.keys(accounts[0]) : [],
+        accountsDump: (() => {
+          const nameById = {};
+          accounts.forEach((a) => (nameById[a.id] = a.name));
+          return accounts
+            .filter((a) => !a.deleted && PNL_TYPES[a.type])
+            .map((a) => ({
+              name: a.name,
+              code: a.code ?? null,
+              num: a.num ?? a.order ?? a.priority ?? null,
+              type: a.type,
+              parent: a.accountParentId ? nameById[a.accountParentId] : null,
+            }));
+        })(),
       },
     };
   } finally {
