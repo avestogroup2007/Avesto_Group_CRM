@@ -7831,6 +7831,71 @@ function PnlView({ data }) {
           />
         </div>
       )}
+
+      {/* Диагностика статей: порядок и коды счетов, как их вернул iiko.
+          Нужна, чтобы настроить порядок статей 1-в-1 как в отчёте iiko. */}
+      {data.diagnostics &&
+        data.diagnostics.accountsDump &&
+        data.diagnostics.accountsDump.length > 0 && (
+          <details style={{ marginTop: 14 }}>
+            <summary
+              style={{ fontSize: 12.5, color: C.sub, cursor: "pointer" }}
+            >
+              Статьи и коды счетов iiko (прислать для точной настройки порядка)
+            </summary>
+            <div
+              style={{
+                marginTop: 8,
+                padding: 10,
+                background: "#F7F4EF",
+                borderRadius: 10,
+                border: `1px solid ${C.line}`,
+                fontSize: 11.5,
+                overflowX: "auto",
+              }}
+            >
+              <div style={{ color: C.faint, marginBottom: 6 }}>
+                Поля счёта: {(data.diagnostics.accountKeys || []).join(", ")}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ color: C.faint, textAlign: "left" }}>
+                    <th style={{ padding: "2px 6px" }}>#</th>
+                    <th style={{ padding: "2px 6px" }}>Название</th>
+                    <th style={{ padding: "2px 6px" }}>Код</th>
+                    <th style={{ padding: "2px 6px" }}>num</th>
+                    <th style={{ padding: "2px 6px" }}>Тип</th>
+                    <th style={{ padding: "2px 6px" }}>Родитель</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.diagnostics.accountsDump.map((a, i) => (
+                    <tr key={i} style={{ borderTop: `1px solid ${C.line}` }}>
+                      <td style={{ padding: "2px 6px", color: C.faint }}>
+                        {i + 1}
+                      </td>
+                      <td style={{ padding: "2px 6px", color: C.ink }}>
+                        {a.name}
+                      </td>
+                      <td style={{ padding: "2px 6px" }}>
+                        {a.code == null ? "—" : String(a.code)}
+                      </td>
+                      <td style={{ padding: "2px 6px" }}>
+                        {a.num == null ? "—" : String(a.num)}
+                      </td>
+                      <td style={{ padding: "2px 6px", color: C.faint }}>
+                        {a.type}
+                      </td>
+                      <td style={{ padding: "2px 6px", color: C.faint }}>
+                        {a.parent || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
     </div>
   );
 }
