@@ -591,6 +591,28 @@ function buildPnlSection(accounts, type, turnover, sign) {
     const p = ids.has(a.accountParentId) ? a.accountParentId : "__root__";
     (childrenOf[p] = childrenOf[p] || []).push(a);
   });
+  // Порядок статей — как в отчёте iiko: по коду счёта в плане счетов
+  // (натуральная сортировка чисел в коде), при отсутствии кода — по названию.
+  // Раньше сортировали по величине суммы — из-за этого расходился порядок с iiko.
+  const orderKey = (a) => {
+    const c = a.code ?? a.num ?? a.order ?? "";
+    return String(c);
+  };
+  const byAccount = (a, b) => {
+    const ca = orderKey(a);
+    const cb = orderKey(b);
+    if (ca !== cb)
+      return ca.localeCompare(cb, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    return String(a.name || "").localeCompare(String(b.name || ""), "ru");
+  };
+  // Если у счетов есть коды — упорядочиваем по ним (как iiko). Если кодов нет,
+  // сохраняем порядок, в котором iiko вернул счёта (тоже порядок плана счетов).
+  const hasCodes = inType.some((a) => a.code != null && String(a.code) !== "");
+  if (hasCodes)
+    Object.keys(childrenOf).forEach((p) => childrenOf[p].sort(byAccount));
   const node = (a) => {
     const label = a.name || a.code || "—";
     const kids = (childrenOf[a.id] || []).map(node);
@@ -603,10 +625,11 @@ function buildPnlSection(accounts, type, turnover, sign) {
     const value = kids.length ? kids.reduce((s, k) => s + k.value, 0) : own;
     return { name: label, value, children: kids };
   };
+  // Корневые счёта — в порядке плана счетов iiko (childrenOf.__root__ уже
+  // отсортирован), только с ненулевым оборотом.
   const roots = (childrenOf.__root__ || [])
     .map(node)
-    .filter((n) => n.value !== 0)
-    .sort((x, y) => y.value - x.value);
+    .filter((n) => n.value !== 0);
   const total = roots.reduce((s, n) => s + n.value, 0);
   return { total, lines: roots };
 }
