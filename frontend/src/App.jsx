@@ -2506,7 +2506,10 @@ function Board({
     notify && notify(plan.msg);
   };
 
-  const Cards = ({ n }) => {
+  // Плоская render-функция (не компонент) — чтобы при перерисовке доски во
+  // время перетаскивания карточки не перемонтировались (иначе «призрак» drag
+  // застревает). Реконсиляция идёт по key={t.id}.
+  const renderCards = (n) => {
     const col = colCards(n);
     if (col.length === 0)
       return (
@@ -2597,9 +2600,7 @@ function Board({
             );
           })}
         </div>
-        <div className="flex flex-col gap-2.5 mt-1">
-          <Cards n={active} />
-        </div>
+        <div className="flex flex-col gap-2.5 mt-1">{renderCards(active)}</div>
       </div>
 
       {/* Десктоп (xl+): 5 равных колонок во всю ширину — без горизонтального ползунка */}
@@ -2664,7 +2665,7 @@ function Board({
                 minHeight: 120,
               }}
             >
-              <Cards n={p.n} />
+              {renderCards(p.n)}
             </div>
           </div>
         ))}
@@ -9596,7 +9597,6 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     r.date >= a &&
     r.date <= b &&
     (isMgr ? r.branchId === myBranch : fBranch ? r.branchId === fBranch : true);
-  const reports = (s.cashReports || []).filter((r) => inScope(r, from, to));
   const nDays = Math.max(1, Math.round((toD(to) - toD(from)) / 86400000) + 1);
   const prevTo = addDays(from, -1),
     prevFrom = addDays(from, -nDays);
@@ -9607,50 +9607,7 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     department: selDept,
   });
   const prevIikoOn = livePrev.status === "ok" || livePrev.status === "empty";
-  const prevReports = (s.cashReports || []).filter((r) =>
-    inScope(r, prevFrom, prevTo),
-  );
 
-  const rev = (list) => list.reduce((a, r) => a + cashCalc(r).total, 0);
-  const revenue = rev(reports),
-    prevRevenue = rev(prevReports);
-  const growth = prevRevenue
-    ? ((revenue - prevRevenue) / prevRevenue) * 100
-    : null;
-  const checksOf = (list) =>
-    list.reduce(
-      (a, r) => a + dayChecks(r.date, r.branchId, cashCalc(r).total),
-      0,
-    );
-  const checks = checksOf(reports),
-    prevChecks = checksOf(prevReports);
-  const avgCheck = checks ? Math.round(revenue / checks) : 0;
-  const prevAvg = prevChecks ? Math.round(prevRevenue / prevChecks) : 0;
-  const avgGrowth = prevAvg ? ((avgCheck - prevAvg) / prevAvg) * 100 : null;
-
-  const pay = reports.reduce(
-    (o, r) => {
-      o.cash += (r.fiscal || 0) + (r.nonFiscal || 0);
-      o.humo += r.humo || 0;
-      o.uzcard += r.uzcard || 0;
-      o.click += r.click || 0;
-      o.payme += r.payme || 0;
-      o.uzum += r.uzumTezkor || 0;
-      o.yandex += r.yandex || 0;
-      o.transfer += r.transfer || 0;
-      return o;
-    },
-    {
-      cash: 0,
-      humo: 0,
-      uzcard: 0,
-      click: 0,
-      payme: 0,
-      uzum: 0,
-      yandex: 0,
-      transfer: 0,
-    },
-  );
   // Цвет для типа оплаты: по известным названиям, иначе — из палитры по кругу.
   const PAY_COLORS = {
     налич: C.brandA,
@@ -9679,36 +9636,11 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     for (const key in PAY_COLORS) if (k.includes(key)) return PAY_COLORS[key];
     return PAY_FALLBACK[i % PAY_FALLBACK.length];
   };
-  const demoPayRows = [
-    ["Наличные", pay.cash, C.brandA],
-    ["Humo", pay.humo, "#7C3AED"],
-    ["Uzcard", pay.uzcard, C.violet],
-    ["Click", pay.click, C.brandB],
-    ["Payme", pay.payme, "#0EA5E9"],
-    ["Uzum Tezkor", pay.uzum, C.ok],
-    ["Yandex Еда", pay.yandex, "#F59E0B"],
-    ["Перечисление", pay.transfer, C.warn],
-  ]
-    .filter((r) => r[1] > 0)
-    .sort((a, b) => b[1] - a[1]);
   // Оплаты из iiko (реальные; пусто → пусто, без демо).
   const payRows = liveOn
     ? (live.pay || []).map((p, i) => [p.name, p.value, payColor(p.name, i)])
-    : demoPayRows;
+    : [];
   const payTotal = payRows.reduce((a, r) => a + r[1], 0) || 1;
-
-  // динамика по дням
-  const dayMap = {};
-  reports.forEach((r) => {
-    dayMap[r.date] = (dayMap[r.date] || 0) + cashCalc(r).total;
-  });
-  const series = Object.keys(dayMap)
-    .sort()
-    .map((d) => ({
-      label: d.slice(8) + "." + d.slice(5, 7),
-      day: d,
-      revenue: dayMap[d],
-    }));
 
   // Показываем реальные продажи iiko (нули, если продаж нет). Демо не подставляем.
   const displayRevenue = liveOn ? live.total || 0 : 0;
@@ -9725,17 +9657,6 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
       }))
     : [];
 
-  // товары + ABC
-  const pm = {};
-  reports.forEach((r) =>
-    dayProductSales(r.date, r.branchId, cashCalc(r).total).forEach((ps) => {
-      if (!pm[ps.id])
-        pm[ps.id] = { name: ps.name, cat: ps.cat, qty: 0, sum: 0 };
-      pm[ps.id].qty += ps.qty;
-      pm[ps.id].sum += ps.sum;
-    }),
-  );
-  const demoProducts = Object.values(pm).sort((a, b) => b.sum - a.sum);
   // Блюда из iiko (реальные; пусто → пусто, без демо).
   const products = liveOn
     ? (live.products || []).map((p) => ({
@@ -9744,7 +9665,7 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
         qty: p.qty,
         sum: p.sum,
       }))
-    : demoProducts;
+    : [];
   // Продажи по часам (0–23) из iiko — для вкладки «По времени».
   const liveHours = liveOn && live.hours ? live.hours : null;
   // Блюда по часам (для раскрытия по клику на час).
@@ -9893,16 +9814,6 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
       )}
     </div>
   );
-  const growthSub = (g) =>
-    g == null
-      ? { s: tr("нет данных за прошлый период"), t: "flat" }
-      : {
-          s: `${g >= 0 ? "▲ +" : "▼ "}${g.toFixed(1)}% ${tr("к прошлому периоду")}`,
-          t: g >= 0 ? "up" : "down",
-        };
-  const gr = growthSub(growth);
-  const agr = growthSub(avgGrowth);
-
   return (
     <div className="space-y-5 max-w-5xl">
       {/* проверка подключения iiko */}
@@ -10004,9 +9915,7 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
         />
         <KPI
           label={tr("Прошлый период")}
-          value={fmtSum(
-            liveOn ? (prevIikoOn ? livePrev.total || 0 : 0) : prevRevenue,
-          )}
+          value={fmtSum(prevIikoOn ? livePrev.total || 0 : 0)}
           sub={`${dm(prevFrom)} — ${dm(prevTo)}`}
         />
       </div>
