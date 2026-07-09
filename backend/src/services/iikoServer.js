@@ -613,16 +613,18 @@ function buildPnlSection(accounts, type, turnover, sign) {
   const hasCodes = inType.some((a) => a.code != null && String(a.code) !== "");
   if (hasCodes)
     Object.keys(childrenOf).forEach((p) => childrenOf[p].sort(byAccount));
+  // Ненулевой оборот с допуском на копейки — обороты это разность двух
+  // балансов-float, поэтому точное сравнение с 0 пропускало бы призрачные
+  // строки вроде 1e-9. Порог — половина копейки.
+  const nz = (v) => Math.abs(v) >= 0.005;
   const node = (a) => {
     const label = a.name || a.code || "—";
     // Скрываем нулевые под-статьи — как в отчёте iiko (там строк с 0 нет).
-    const kids = (childrenOf[a.id] || [])
-      .map(node)
-      .filter((k) => k.value !== 0);
+    const kids = (childrenOf[a.id] || []).map(node).filter((k) => nz(k.value));
     // Двойная запись iiko: доходные счета кредитовые (оборот отрицательный),
     // расходные дебетовые (положительный). sign=-1 у доходов делает их плюсом.
     const own = (turnover[a.id] || 0) * sign;
-    if (kids.length && own) {
+    if (kids.length && nz(own)) {
       kids.push({ name: `${label}, прочие`, value: own, children: [] });
     }
     const value = kids.length ? kids.reduce((s, k) => s + k.value, 0) : own;
@@ -632,7 +634,7 @@ function buildPnlSection(accounts, type, turnover, sign) {
   // отсортирован), только с ненулевым оборотом.
   const roots = (childrenOf.__root__ || [])
     .map(node)
-    .filter((n) => n.value !== 0);
+    .filter((n) => nz(n.value));
   const total = roots.reduce((s, n) => s + n.value, 0);
   return { total, lines: roots };
 }
