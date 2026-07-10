@@ -202,6 +202,37 @@ model MoneyDict {
   @@index([type])
 }
 
+// Регулярные (периодические) проводки: известные ежемесячные расходы —
+// аренда, амортизация, зарплата и т.п. Система сама заводит движение (MoneyTx)
+// раз в месяц в назначенный день, идемпотентно (refId = recur-<id>-<YYYYMM>).
+model MoneyRecurring {
+  id              String   @id @default(cuid())
+  name            String // «Аренда Микрорайон», «Амортизация цех»…
+  direction       String   @default("expense") // income | expense
+  category        String
+  ddsArticle      String   @default("")
+  paymentType     String   @default("Наличные")
+  legalEntity     String   @default("")
+  account         String   @default("")
+  counterparty    String   @default("")
+  comment         String   @default("")
+  amount          BigInt // сумма в валюте currency
+  currency        String   @default("UZS")
+  rate            Float    @default(1)
+  branchId        String?
+  branchName      String   @default("")
+  dayOfMonth      Int      @default(1) // день месяца для проводки (1..28)
+  startMonth      String // YYYY-MM — с какого месяца заводить
+  endMonth        String   @default("") // YYYY-MM — по какой (пусто = бессрочно)
+  autoApprove     Boolean  @default(true) // проводить сразу (согласовано)
+  active          Boolean  @default(true)
+  lastPostedMonth String   @default("") // YYYY-MM последнего заведённого месяца
+  createdById     String?
+  createdAt       DateTime @default(now())
+
+  @@index([active])
+}
+
 // Журнал безопасности — кто что выгружал, кто пытался копировать
 model AuditLog {
   id     String   @id @default(cuid())

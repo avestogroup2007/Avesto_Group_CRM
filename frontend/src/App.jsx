@@ -8352,6 +8352,423 @@ function DictManager({
   );
 }
 
+// ── Регулярные (периодические) проводки ─────────────────────────────────────
+// Шаблоны ежемесячных расходов/приходов (аренда, амортизация, зарплата…).
+// Система сама заводит движение раз в месяц в назначенный день — без ручного
+// ввода и без дублей.
+function RecurringManager({ list, branches, dnames, onSave, onDelete }) {
+  const curMonth = ymdNow().slice(0, 7);
+  const empty = {
+    name: "",
+    direction: "expense",
+    category: "",
+    ddsArticle: "",
+    paymentType: "Наличные",
+    counterparty: "",
+    amount: "",
+    currency: "UZS",
+    rate: "",
+    branchVal: 0,
+    dayOfMonth: "1",
+    startMonth: curMonth,
+    endMonth: "",
+    autoApprove: true,
+  };
+  const [f, setF] = useState(empty);
+  const [editId, setEditId] = useState(null);
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 13.5,
+    background: "#fff",
+    color: C.ink,
+    borderRadius: 10,
+    padding: "8px 11px",
+    width: "100%",
+  };
+  const lblSt = {
+    fontSize: 11.5,
+    color: C.faint,
+    fontWeight: 600,
+    display: "block",
+    marginBottom: 3,
+  };
+  const branchOpts = [
+    { value: 0, label: "— не указан —" },
+    ...(branches || []).map((b) => ({ value: b.id, label: b.name })),
+    ...dnames("branch").map((nm) => ({ value: `d:${nm}`, label: nm })),
+  ];
+  const startEdit = (t) => {
+    setEditId(t.id);
+    const bv =
+      t.branchId != null ? t.branchId : t.branchName ? `d:${t.branchName}` : 0;
+    setF({
+      name: t.name,
+      direction: t.direction,
+      category: t.category,
+      ddsArticle: t.ddsArticle || "",
+      paymentType: t.paymentType || "Наличные",
+      counterparty: t.counterparty || "",
+      amount: String(t.amount || ""),
+      currency: t.currency || "UZS",
+      rate: t.rate && t.rate !== 1 ? String(t.rate) : "",
+      branchVal: bv,
+      dayOfMonth: String(t.dayOfMonth || 1),
+      startMonth: t.startMonth,
+      endMonth: t.endMonth || "",
+      autoApprove: t.autoApprove !== false,
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const cancel = () => {
+    setEditId(null);
+    setF(empty);
+  };
+  const submit = () => {
+    const amount = Number(String(f.amount).replace(/\s/g, ""));
+    if (!f.name.trim()) return alert("Укажите название");
+    if (!f.category.trim()) return alert("Укажите статью/тип");
+    if (!(amount > 0)) return alert("Укажите сумму");
+    if (!/^\d{4}-\d{2}$/.test(f.startMonth))
+      return alert("Укажите месяц начала");
+    let branchId = null;
+    let branchName = "";
+    if (typeof f.branchVal === "string" && f.branchVal.startsWith("d:")) {
+      branchName = f.branchVal.slice(2);
+    } else if (f.branchVal) {
+      const b = (branches || []).find((x) => x.id === f.branchVal);
+      branchId = String(f.branchVal);
+      branchName = b ? b.name : "";
+    }
+    const rate = f.currency === "UZS" ? 1 : Number(f.rate) || 0;
+    if (f.currency !== "UZS" && !(rate > 0))
+      return alert("Укажите курс к суму");
+    onSave(
+      {
+        name: f.name.trim(),
+        direction: f.direction,
+        category: f.category.trim(),
+        ddsArticle: f.ddsArticle,
+        paymentType: f.paymentType || "Наличные",
+        counterparty: f.counterparty.trim(),
+        amount,
+        currency: f.currency,
+        rate,
+        branchId,
+        branchName,
+        dayOfMonth: Number(f.dayOfMonth) || 1,
+        startMonth: f.startMonth,
+        endMonth: f.endMonth || "",
+        autoApprove: !!f.autoApprove,
+      },
+      editId,
+    );
+    cancel();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 15 }}>
+          {editId
+            ? "Изменить регулярную проводку"
+            : "Новая регулярная проводка"}
+        </h3>
+        <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>
+          Система сама заведёт это движение каждый месяц в указанный день
+          (аренда, амортизация и т.п.). Дубли исключены.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="col-span-2">
+            <label style={lblSt}>Название</label>
+            <input
+              value={f.name}
+              onChange={(e) => set("name", e.target.value)}
+              style={inpSt}
+              placeholder="напр. Аренда Микрорайон"
+            />
+          </div>
+          <div>
+            <label style={lblSt}>Тип</label>
+            <select
+              value={f.direction}
+              onChange={(e) => set("direction", e.target.value)}
+              style={inpSt}
+            >
+              <option value="expense">Расход</option>
+              <option value="income">Приход</option>
+            </select>
+          </div>
+          <div>
+            <label style={lblSt}>Статья / тип</label>
+            <input
+              value={f.category}
+              onChange={(e) => set("category", e.target.value)}
+              style={inpSt}
+              list="rec-cats"
+              placeholder="напр. Аренда"
+            />
+            <datalist id="rec-cats">
+              {dnames("category").map((nm) => (
+                <option key={nm} value={nm} />
+              ))}
+            </datalist>
+          </div>
+          <div>
+            <label style={lblSt}>Статья ДДС</label>
+            <input
+              value={f.ddsArticle}
+              onChange={(e) => set("ddsArticle", e.target.value)}
+              style={inpSt}
+              list="rec-dds"
+            />
+            <datalist id="rec-dds">
+              {dnames("ddsArticle").map((nm) => (
+                <option key={nm} value={nm} />
+              ))}
+            </datalist>
+          </div>
+          <div>
+            <label style={lblSt}>Контрагент</label>
+            <input
+              value={f.counterparty}
+              onChange={(e) => set("counterparty", e.target.value)}
+              style={inpSt}
+            />
+          </div>
+          <div>
+            <label style={lblSt}>Сумма</label>
+            <input
+              value={f.amount}
+              onChange={(e) => set("amount", e.target.value)}
+              style={inpSt}
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label style={lblSt}>Валюта</label>
+            <select
+              value={f.currency}
+              onChange={(e) => set("currency", e.target.value)}
+              style={inpSt}
+            >
+              {["UZS", "RUB", "USD", "EUR"].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          {f.currency !== "UZS" && (
+            <div>
+              <label style={lblSt}>Курс к суму</label>
+              <input
+                value={f.rate}
+                onChange={(e) => set("rate", e.target.value)}
+                style={inpSt}
+                placeholder="напр. 12800"
+              />
+            </div>
+          )}
+          <div>
+            <label style={lblSt}>Филиал</label>
+            <select
+              value={f.branchVal}
+              onChange={(e) => {
+                const v = e.target.value;
+                const num = Number(v);
+                set("branchVal", v.startsWith("d:") ? v : num || 0);
+              }}
+              style={inpSt}
+            >
+              {branchOpts.map((o) => (
+                <option key={String(o.value)} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={lblSt}>Число месяца</label>
+            <input
+              type="number"
+              min="1"
+              max="28"
+              value={f.dayOfMonth}
+              onChange={(e) => set("dayOfMonth", e.target.value)}
+              style={inpSt}
+            />
+          </div>
+          <div>
+            <label style={lblSt}>С месяца</label>
+            <input
+              type="month"
+              value={f.startMonth}
+              onChange={(e) => set("startMonth", e.target.value)}
+              style={inpSt}
+            />
+          </div>
+          <div>
+            <label style={lblSt}>По месяц (необязательно)</label>
+            <input
+              type="month"
+              value={f.endMonth}
+              onChange={(e) => set("endMonth", e.target.value)}
+              style={inpSt}
+            />
+          </div>
+        </div>
+        <label
+          className="flex items-center gap-2 mt-3"
+          style={{ fontSize: 12.5, color: C.sub, cursor: "pointer" }}
+        >
+          <input
+            type="checkbox"
+            checked={f.autoApprove}
+            onChange={(e) => set("autoApprove", e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: C.brandA }}
+          />
+          Проводить сразу (без согласования) — для известных расходов
+        </label>
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={submit}
+            className="rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{ background: C.brandGrad, fontSize: 14 }}
+          >
+            {editId ? "Сохранить" : "Добавить шаблон"}
+          </button>
+          {editId && (
+            <button
+              onClick={cancel}
+              className="rounded-xl px-4 py-2.5 font-bold"
+              style={{
+                background: "#fff",
+                color: C.sub,
+                border: `1px solid ${C.border}`,
+                fontSize: 14,
+              }}
+            >
+              Отмена
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="rounded-2xl bg-white p-4 sm:p-5"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 15 }}>
+          Шаблоны ({list.filter((t) => t.active).length} активны)
+        </h3>
+        {list.length === 0 ? (
+          <p style={{ fontSize: 13, color: C.faint }}>
+            Пока нет регулярных проводок — добавьте выше.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {list.map((t) => (
+              <div
+                key={t.id}
+                className="rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap"
+                style={{
+                  border: `1px solid ${C.line}`,
+                  background: t.active ? "#fff" : "#FAFAF9",
+                  opacity: t.active ? 1 : 0.65,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>
+                    {t.name}
+                    <span
+                      className="rounded-md px-1.5 py-0.5"
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        marginLeft: 6,
+                        background:
+                          t.direction === "income" ? "#DCFCE7" : "#FEE2E2",
+                        color: t.direction === "income" ? "#15803D" : C.bad,
+                      }}
+                    >
+                      {t.direction === "income" ? "приход" : "расход"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.sub, marginTop: 2 }}>
+                    {t.category}
+                    {t.branchName ? ` · ${t.branchName}` : ""} · каждое{" "}
+                    {t.dayOfMonth}-е число · с {t.startMonth}
+                    {t.endMonth ? ` по ${t.endMonth}` : ""}
+                    {t.autoApprove === false ? " · на согласование" : ""}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: t.direction === "income" ? C.ok : C.bad,
+                    }}
+                  >
+                    {t.direction === "income" ? "+" : "−"}
+                    {fmtSum(t.amount)}
+                    {t.currency !== "UZS" ? ` ${t.currency}` : ""}
+                  </span>
+                  <button
+                    onClick={() => onSave({ active: !t.active }, t.id)}
+                    className="rounded-full shrink-0"
+                    title={t.active ? "Выключить" : "Включить"}
+                    style={{
+                      width: 40,
+                      height: 22,
+                      background: t.active ? C.ok : C.border,
+                      position: "relative",
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 2,
+                        left: t.active ? 20 : 2,
+                        width: 18,
+                        height: 18,
+                        borderRadius: 99,
+                        background: "#fff",
+                        transition: "left .15s",
+                        boxShadow: "0 1px 3px rgba(0,0,0,.25)",
+                      }}
+                    />
+                  </button>
+                  <button
+                    onClick={() => startEdit(t)}
+                    className="p-1.5 rounded-lg"
+                    style={{ color: C.sub }}
+                    title="Изменить"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => onDelete(t.id)}
+                    className="p-1.5 rounded-lg"
+                    style={{ color: C.bad }}
+                    title="Удалить"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Учёт и контроль денег компании (казначейство) ──────────────────────────
 // Заменяет ручной Excel: ввод приходов/расходов (тип, контрагент, комментарий,
 // сумма+валюта, филиал), баланс, отчёт за период и аналитика. Данные — на
@@ -8443,6 +8860,37 @@ function MoneyView({ s, me, branchScope }) {
       alive = false;
     };
   }, [tick]);
+
+  // Регулярные (периодические) проводки — шаблоны ежемесячных расходов.
+  const [recurring, setRecurring] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    apiGet("/api/money/recurring")
+      .then((d) => alive && setRecurring(Array.isArray(d) ? d : []))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [tick]);
+  const saveRecurring = async (body, id) => {
+    try {
+      if (id) await apiPatch(`/api/money/recurring/${id}`, body);
+      else await apiPost("/api/money/recurring", body);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось сохранить");
+    }
+  };
+  const delRecurring = async (id) => {
+    if (!window.confirm("Удалить шаблон? Заведённые ранее проводки останутся."))
+      return;
+    try {
+      await apiDelete(`/api/money/recurring/${id}`);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось удалить");
+    }
+  };
 
   const balance = summary ? summary.balance : 0;
   const period = (summary && summary.period) || {
@@ -8625,6 +9073,7 @@ function MoneyView({ s, me, branchScope }) {
   const TABS = [
     ["flow", "Движение"],
     ["approvals", "Заявки"],
+    ["recurring", "Регулярные"],
     ["report", "Отчёт"],
     ["stats", "Аналитика"],
     ["dict", "Справочники"],
@@ -9324,6 +9773,17 @@ function MoneyView({ s, me, branchScope }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── ВКЛАДКА «РЕГУЛЯРНЫЕ»: шаблоны ежемесячных проводок ── */}
+      {tab === "recurring" && (
+        <RecurringManager
+          list={recurring}
+          branches={s.branches || []}
+          dnames={dnames}
+          onSave={saveRecurring}
+          onDelete={delRecurring}
+        />
       )}
 
       {/* ── ВКЛАДКА «ОТЧЁТ» ── */}
