@@ -8774,6 +8774,657 @@ function RecurringManager({ list, branches, dnames, onSave, onDelete }) {
 // сумма+валюта, филиал), баланс, отчёт за период и аналитика. Данные — на
 // сервере (общие для офиса). Приход с филиала падает автоматически из
 // принятых инкассаций (раздел «Кассы»).
+// ── Бухгалтерия: проводки двойной записи (Дт/Кт) ────────────────────────────
+// Журнал проводок (авто из движений денег + ручные), оборотно-сальдовая
+// ведомость (ОСВ), план счетов и правила авто-проводки. Самодостаточный:
+// сам тянет данные из /api/postings, наследует период/филиал от «Учёта денег».
+function PostingsManager({ from, to, branchId, branches, dnames }) {
+  const [sub, setSub] = usePersisted("avesto.postings.sub", "journal");
+  const [accounts, setAccounts] = useState([]);
+  const [rules, setRules] = useState([]);
+  const [journal, setJournal] = useState({ status: "loading", items: [] });
+  const [osv, setOsv] = useState(null);
+  const [tick, setTick] = useState(0);
+  const reload = () => setTick((t) => t + 1);
+  const branchQ = branchId ? `&branch=${encodeURIComponent(branchId)}` : "";
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      apiGet("/api/postings/accounts"),
+      apiGet("/api/postings/rules"),
+    ])
+      .then(([a, r]) => {
+        if (!alive) return;
+        setAccounts(Array.isArray(a) ? a : []);
+        setRules(Array.isArray(r) ? r : []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [tick]);
+
+  useEffect(() => {
+    if (sub !== "journal") return;
+    let alive = true;
+    setJournal({ status: "loading", items: [] });
+    apiGet(`/api/postings?from=${from}&to=${to}${branchQ}`)
+      .then((d) => alive && setJournal({ status: "ok", ...d }))
+      .catch((e) => alive && setJournal({ status: "error", error: e.message }));
+    return () => {
+      alive = false;
+    };
+  }, [sub, from, to, branchId, tick]);
+
+  useEffect(() => {
+    if (sub !== "osv") return;
+    let alive = true;
+    setOsv(null);
+    apiGet(`/api/postings/trial-balance?from=${from}&to=${to}${branchQ}`)
+      .then((d) => alive && setOsv(d))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sub, from, to, branchId, tick]);
+
+  const activeAccounts = accounts.filter((a) => a.active !== false);
+  const acctName = (code) => {
+    const a = accounts.find((x) => x.code === code);
+    return a ? a.name : "";
+  };
+  const acctLabel = (code) =>
+    code ? `${code} · ${acctName(code)}` : "— авто —";
+
+  const inpSt = {
+    border: `1px solid ${C.border}`,
+    fontSize: 13.5,
+    background: "#fff",
+    color: C.ink,
+    borderRadius: 10,
+    padding: "8px 11px",
+    width: "100%",
+  };
+  const lblSt = {
+    fontSize: 11.5,
+    color: C.faint,
+    fontWeight: 600,
+    display: "block",
+    marginBottom: 3,
+  };
+  const th = {
+    fontSize: 11,
+    color: C.faint,
+    fontWeight: 700,
+    textAlign: "left",
+    padding: "6px 8px",
+    borderBottom: `1px solid ${C.border}`,
+    whiteSpace: "nowrap",
+  };
+  const td = {
+    fontSize: 13,
+    color: C.ink,
+    padding: "7px 8px",
+    borderBottom: `1px solid ${C.line}`,
+    verticalAlign: "top",
+  };
+
+  // ── Ручная проводка ──
+  const emptyForm = {
+    date: ymdNow(),
+    debit: "",
+    credit: "",
+    amount: "",
+    number: "",
+    description: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [err, setErr] = useState("");
+  const submitPosting = async () => {
+    setErr("");
+    const amount = Number(String(form.amount).replace(/\s/g, ""));
+    if (!form.debit) return setErr("Выберите счёт дебета");
+    if (!form.credit) return setErr("Выберите счёт кредита");
+    if (form.debit === form.credit)
+      return setErr("Дебет и кредит должны различаться");
+    if (!(amount > 0)) return setErr("Укажите сумму");
+    try {
+      await apiPost("/api/postings", {
+        date: form.date,
+        debit: form.debit,
+        credit: form.credit,
+        amount,
+        number: form.number.trim(),
+        description: form.description.trim(),
+      });
+      setForm({ ...emptyForm, date: form.date });
+      reload();
+    } catch (e) {
+      setErr(e.message || "Не удалось сохранить");
+    }
+  };
+  const delPosting = async (id) => {
+    if (!window.confirm("Удалить проводку?")) return;
+    try {
+      await apiDelete(`/api/postings/${id}`);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось удалить");
+    }
+  };
+
+  // ── План счетов ──
+  const [acctForm, setAcctForm] = useState({
+    code: "",
+    name: "",
+    kind: "active",
+  });
+  const saveAccount = async () => {
+    if (!acctForm.code.trim() || !acctForm.name.trim())
+      return alert("Укажите код и название счёта");
+    try {
+      await apiPost("/api/postings/accounts", {
+        code: acctForm.code.trim(),
+        name: acctForm.name.trim(),
+        kind: acctForm.kind,
+      });
+      setAcctForm({ code: "", name: "", kind: "active" });
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось сохранить");
+    }
+  };
+  const delAccount = async (id) => {
+    if (!window.confirm("Удалить счёт из плана счетов?")) return;
+    try {
+      await apiDelete(`/api/postings/accounts/${id}`);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось удалить");
+    }
+  };
+
+  // ── Правила авто-проводки ──
+  const saveRule = async (rule, patch) => {
+    try {
+      if (rule.id) await apiPatch(`/api/postings/rules/${rule.id}`, patch);
+      reload();
+    } catch (e) {
+      alert(e.message || "Не удалось сохранить правило");
+    }
+  };
+  const KIND_LABEL = {
+    active: "Актив",
+    passive: "Пассив",
+    income: "Доход",
+    expense: "Расход",
+    contra: "Контрактив",
+  };
+
+  const SUBS = [
+    ["journal", "Журнал"],
+    ["osv", "ОСВ"],
+    ["chart", "План счетов"],
+    ["rules", "Правила"],
+  ];
+
+  const AccountSelect = ({ value, onChange, allowAuto }) => (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={inpSt}
+    >
+      <option value="">
+        {allowAuto ? "— авто (касса/банк) —" : "— выберите —"}
+      </option>
+      {activeAccounts.map((a) => (
+        <option key={a.code} value={a.code}>
+          {a.code} · {a.name}
+        </option>
+      ))}
+    </select>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1.5">
+        {SUBS.map(([k, lbl]) => (
+          <button
+            key={k}
+            onClick={() => setSub(k)}
+            className="rounded-full px-3.5 py-1.5"
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              border: `1px solid ${sub === k ? C.brandA : C.border}`,
+              background: sub === k ? C.brandA : "#fff",
+              color: sub === k ? "#fff" : C.sub,
+            }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ЖУРНАЛ ПРОВОДОК ── */}
+      {sub === "journal" && (
+        <>
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <h3
+              className="font-bold mb-1"
+              style={{ color: C.ink, fontSize: 15 }}
+            >
+              Ручная проводка
+            </h3>
+            <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>
+              Проводки из движений денег формируются автоматически по правилам.
+              Здесь можно завести проводку вручную (например, начисления).
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div>
+                <label style={lblSt}>Дата</label>
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => setF("date", e.target.value)}
+                  style={inpSt}
+                />
+              </div>
+              <div className="col-span-2 md:col-span-2">
+                <label style={lblSt}>Дебет (Дт)</label>
+                <AccountSelect
+                  value={form.debit}
+                  onChange={(v) => setF("debit", v)}
+                />
+              </div>
+              <div className="col-span-2 md:col-span-2">
+                <label style={lblSt}>Кредит (Кт)</label>
+                <AccountSelect
+                  value={form.credit}
+                  onChange={(v) => setF("credit", v)}
+                />
+              </div>
+              <div>
+                <label style={lblSt}>Сумма, сум</label>
+                <input
+                  value={form.amount}
+                  onChange={(e) => setF("amount", e.target.value)}
+                  style={inpSt}
+                  inputMode="numeric"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label style={lblSt}>№ документа</label>
+                <input
+                  value={form.number}
+                  onChange={(e) => setF("number", e.target.value)}
+                  style={inpSt}
+                  placeholder="—"
+                />
+              </div>
+              <div className="col-span-2 md:col-span-4">
+                <label style={lblSt}>Описание / основание</label>
+                <input
+                  value={form.description}
+                  onChange={(e) => setF("description", e.target.value)}
+                  style={inpSt}
+                  placeholder="за что проводка"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={submitPosting}
+                  className="rounded-xl px-4 py-2 w-full"
+                  style={{
+                    background: C.brandA,
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: 13.5,
+                  }}
+                >
+                  Провести
+                </button>
+              </div>
+            </div>
+            {err && (
+              <div style={{ color: C.bad, fontSize: 12.5, marginTop: 8 }}>
+                {err}
+              </div>
+            )}
+          </div>
+
+          <div
+            className="rounded-2xl bg-white p-4 sm:p-5 overflow-x-auto"
+            style={{ border: `1px solid ${C.border}` }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+                Журнал проводок
+              </h3>
+              <span style={{ fontSize: 12, color: C.faint }}>
+                {journal.count || 0} шт · {fmtSum(journal.total || 0)}
+              </span>
+            </div>
+            {journal.status === "loading" ? (
+              <div style={{ color: C.faint, fontSize: 13 }}>Загрузка…</div>
+            ) : !journal.items || !journal.items.length ? (
+              <div style={{ color: C.faint, fontSize: 13 }}>
+                Проводок за период нет.
+              </div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Дата</th>
+                    <th style={th}>Дт</th>
+                    <th style={th}>Кт</th>
+                    <th style={{ ...th, textAlign: "right" }}>Сумма</th>
+                    <th style={th}>Основание</th>
+                    <th style={th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {journal.items.map((p) => (
+                    <tr key={p.id}>
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>{p.date}</td>
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>
+                        <b>{p.debit}</b>
+                        <div style={{ fontSize: 11, color: C.faint }}>
+                          {acctName(p.debit)}
+                        </div>
+                      </td>
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>
+                        <b>{p.credit}</b>
+                        <div style={{ fontSize: 11, color: C.faint }}>
+                          {acctName(p.credit)}
+                        </div>
+                      </td>
+                      <td
+                        style={{
+                          ...td,
+                          textAlign: "right",
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {fmtSum(p.amount)}
+                      </td>
+                      <td style={td}>
+                        {p.number ? (
+                          <span style={{ color: C.faint }}>№{p.number} </span>
+                        ) : null}
+                        {p.description}
+                        {p.source === "money-tx" && (
+                          <span
+                            className="inline-flex items-center rounded-md px-1.5 py-0.5"
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              marginLeft: 6,
+                              color: C.sub,
+                              background: C.wash || "#F1F5F9",
+                            }}
+                          >
+                            авто
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ ...td, whiteSpace: "nowrap" }}>
+                        {p.source === "manual" && (
+                          <button
+                            onClick={() => delPosting(p.id)}
+                            title="Удалить"
+                            style={{ color: C.bad, padding: 4 }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── ОБОРОТНО-САЛЬДОВАЯ ВЕДОМОСТЬ ── */}
+      {sub === "osv" && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5 overflow-x-auto"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 15 }}>
+            Оборотно-сальдовая ведомость
+          </h3>
+          <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>
+            Обороты за период и конечное сальдо по каждому счёту. Итоговые
+            обороты Дт и Кт должны совпадать — признак верной двойной записи.
+          </p>
+          {!osv ? (
+            <div style={{ color: C.faint, fontSize: 13 }}>Загрузка…</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={th}>Счёт</th>
+                  <th style={th}>Наименование</th>
+                  <th style={{ ...th, textAlign: "right" }}>Оборот Дт</th>
+                  <th style={{ ...th, textAlign: "right" }}>Оборот Кт</th>
+                  <th style={{ ...th, textAlign: "right" }}>Сальдо</th>
+                </tr>
+              </thead>
+              <tbody>
+                {osv.rows
+                  .filter((x) => x.debitTurn || x.creditTurn || x.balance)
+                  .map((x) => (
+                    <tr key={x.code}>
+                      <td style={{ ...td, fontWeight: 700 }}>{x.code}</td>
+                      <td style={td}>{x.name}</td>
+                      <td style={{ ...td, textAlign: "right" }}>
+                        {x.debitTurn ? fmtSum(x.debitTurn) : "—"}
+                      </td>
+                      <td style={{ ...td, textAlign: "right" }}>
+                        {x.creditTurn ? fmtSum(x.creditTurn) : "—"}
+                      </td>
+                      <td
+                        style={{
+                          ...td,
+                          textAlign: "right",
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                          color: x.balance >= 0 ? C.ink : C.brandA,
+                        }}
+                      >
+                        {x.balance
+                          ? `${Math.abs(x.balance).toLocaleString("ru-RU")} ${
+                              x.balance >= 0 ? "Дт" : "Кт"
+                            }`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ ...td, fontWeight: 800 }} colSpan={2}>
+                    Итого обороты
+                  </td>
+                  <td style={{ ...td, textAlign: "right", fontWeight: 800 }}>
+                    {fmtSum(osv.totals.debitTurn)}
+                  </td>
+                  <td style={{ ...td, textAlign: "right", fontWeight: 800 }}>
+                    {fmtSum(osv.totals.creditTurn)}
+                  </td>
+                  <td
+                    style={{
+                      ...td,
+                      textAlign: "right",
+                      fontWeight: 800,
+                      color:
+                        osv.totals.debitTurn === osv.totals.creditTurn
+                          ? C.ok
+                          : C.bad,
+                    }}
+                  >
+                    {osv.totals.debitTurn === osv.totals.creditTurn
+                      ? "✓ сходится"
+                      : "≠"}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── ПЛАН СЧЕТОВ ── */}
+      {sub === "chart" && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5 overflow-x-auto"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 15 }}>
+            План счетов
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+            <input
+              value={acctForm.code}
+              onChange={(e) =>
+                setAcctForm((p) => ({ ...p, code: e.target.value }))
+              }
+              style={inpSt}
+              placeholder="Код (напр. 5010)"
+            />
+            <input
+              value={acctForm.name}
+              onChange={(e) =>
+                setAcctForm((p) => ({ ...p, name: e.target.value }))
+              }
+              style={{ ...inpSt, gridColumn: "span 2" }}
+              className="col-span-2"
+              placeholder="Наименование счёта"
+            />
+            <select
+              value={acctForm.kind}
+              onChange={(e) =>
+                setAcctForm((p) => ({ ...p, kind: e.target.value }))
+              }
+              style={inpSt}
+            >
+              {Object.entries(KIND_LABEL).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={saveAccount}
+              className="rounded-xl px-4 py-2"
+              style={{
+                background: C.brandA,
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 13.5,
+              }}
+            >
+              Добавить
+            </button>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Код</th>
+                <th style={th}>Наименование</th>
+                <th style={th}>Тип</th>
+                <th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a) => (
+                <tr key={a.id}>
+                  <td style={{ ...td, fontWeight: 700 }}>{a.code}</td>
+                  <td style={td}>{a.name}</td>
+                  <td style={{ ...td, color: C.sub }}>
+                    {KIND_LABEL[a.kind] || a.kind}
+                  </td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>
+                    <button
+                      onClick={() => delAccount(a.id)}
+                      title="Удалить"
+                      style={{ color: C.bad, padding: 4 }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── ПРАВИЛА АВТО-ПРОВОДКИ ── */}
+      {sub === "rules" && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5 overflow-x-auto"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 15 }}>
+            Правила авто-проводки
+          </h3>
+          <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>
+            Для каждой статьи движения денег задаётся пара счетов Дт/Кт. Пустая
+            сторона = авто-подстановка кассы (5010) или банка (5110) по типу
+            оплаты. Строка со статьёй «—» — правило по умолчанию.
+          </p>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Направление</th>
+                <th style={th}>Статья</th>
+                <th style={th}>Дебет (Дт)</th>
+                <th style={th}>Кредит (Кт)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule) => (
+                <tr key={rule.id}>
+                  <td style={{ ...td, whiteSpace: "nowrap" }}>
+                    {rule.direction === "expense" ? "Расход" : "Приход"}
+                  </td>
+                  <td style={td}>{rule.category || "— по умолчанию —"}</td>
+                  <td style={{ ...td, minWidth: 180 }}>
+                    <AccountSelect
+                      value={rule.debit}
+                      allowAuto
+                      onChange={(v) => saveRule(rule, { debit: v })}
+                    />
+                  </td>
+                  <td style={{ ...td, minWidth: 180 }}>
+                    <AccountSelect
+                      value={rule.credit}
+                      allowAuto
+                      onChange={(v) => saveRule(rule, { credit: v })}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MoneyView({ s, me, branchScope }) {
   const pad = (x) => String(x).padStart(2, "0");
   const today = ymdNow();
@@ -9074,6 +9725,7 @@ function MoneyView({ s, me, branchScope }) {
     ["flow", "Движение"],
     ["approvals", "Заявки"],
     ["recurring", "Регулярные"],
+    ["postings", "Проводки"],
     ["report", "Отчёт"],
     ["stats", "Аналитика"],
     ["dict", "Справочники"],
@@ -9783,6 +10435,17 @@ function MoneyView({ s, me, branchScope }) {
           dnames={dnames}
           onSave={saveRecurring}
           onDelete={delRecurring}
+        />
+      )}
+
+      {/* ── ВКЛАДКА «ПРОВОДКИ»: бухгалтерия двойной записи (Дт/Кт) ── */}
+      {tab === "postings" && (
+        <PostingsManager
+          from={from}
+          to={to}
+          branchId={fBranch}
+          branches={s.branches || []}
+          dnames={dnames}
         />
       )}
 
