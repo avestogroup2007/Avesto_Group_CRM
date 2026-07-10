@@ -11,6 +11,7 @@ import {
   listEmployees,
   pnlReport,
   riskyReport,
+  productionRefs,
 } from "../services/iikoServer.js";
 import {
   syncEmployeesToDb,
@@ -99,6 +100,17 @@ r.get(
   "/employees",
   handleIiko(async (req, res) => {
     res.json(await listEmployees());
+  })
+);
+
+// Справочники для «Акта приготовления»: блюда/заготовки (с тех.картой) и
+// склады из iiko. Пока только чтение — проверяем данные перед записью актов.
+// Доступ — офисные роли и управляющий.
+r.get(
+  "/production/refs",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  handleIiko(async (req, res) => {
+    res.json(await productionRefs());
   })
 );
 

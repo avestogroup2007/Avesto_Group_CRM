@@ -362,6 +362,138 @@ export async function listEmployees() {
   }
 }
 
+// ── Производство: номенклатура и склады (для «Акта приготовления») ──────────
+// Чтение справочников iiko, нужных чтобы завести акт приготовления: список
+// блюд/заготовок (у которых есть тех.карта — их можно «приготовить») и склады.
+// Пока только ЧТЕНИЕ — проверяем корректность данных перед записью в iiko.
+
+// Разбор списка складов из XML-ответа /resto/api/corporation/stores.
+function parseStoresXml(xml) {
+  const blocks =
+    xml.match(/<corporateItemDto\b[^>]*>[\s\S]*?<\/corporateItemDto>/g) || [];
+  return blocks.map((b) => {
+    const one = (tag) => {
+      const m = b.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+      return m ? decodeXml(m[1].trim()) : "";
+    };
+    return {
+      id: one("id"),
+      code: one("code"),
+      name: one("name"),
+      type: one("type"),
+    };
+  });
+}
+
+// Разбор списка товаров из XML (запасной путь, если сервер отдал не JSON).
+function parseProductsXml(xml) {
+  const blocks =
+    xml.match(/<productDto\b[^>]*>[\s\S]*?<\/productDto>/g) ||
+    xml.match(/<product\b[^>]*>[\s\S]*?<\/product>/g) ||
+    [];
+  return blocks.map((b) => {
+    const one = (tag) => {
+      const m = b.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+      return m ? decodeXml(m[1].trim()) : "";
+    };
+    return {
+      id: one("id"),
+      name: one("name"),
+      num: one("num"),
+      code: one("code"),
+      type: one("type"),
+    };
+  });
+}
+
+// Блюда/заготовки, которые можно «приготовить» (есть тех.карта): DISH, PREPARED.
+const PRODUCIBLE_TYPES = new Set(["DISH", "PREPARED"]);
+
+async function fetchProducts(key) {
+  const res = await fetch(
+    `${BASE}/resto/api/v2/entities/products/list?key=${encodeURIComponent(
+      key
+    )}&includeDeleted=false`,
+    { headers: { Accept: "application/json" } }
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `iiko products → ${res.status} ${text.slice(0, 300)}`.trim()
+    );
+  }
+  let arr = [];
+  try {
+    const j = JSON.parse(text);
+    arr = Array.isArray(j) ? j : Array.isArray(j.response) ? j.response : [];
+  } catch {
+    arr = parseProductsXml(text);
+  }
+  const norm = arr
+    .map((p) => ({
+      id: p.id,
+      name: p.name || "",
+      num: p.num || "",
+      code: p.code || "",
+      type: p.type || "",
+    }))
+    .filter((p) => p.id && PRODUCIBLE_TYPES.has(p.type))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
+  return { products: norm, total: arr.length, sample: text.slice(0, 1200) };
+}
+
+async function fetchStores(key) {
+  const res = await fetch(
+    `${BASE}/resto/api/corporation/stores?key=${encodeURIComponent(key)}`
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`iiko stores → ${res.status} ${text.slice(0, 300)}`.trim());
+  }
+  let stores = [];
+  try {
+    const j = JSON.parse(text);
+    if (Array.isArray(j)) {
+      stores = j.map((s) => ({
+        id: s.id,
+        code: s.code || "",
+        name: s.name || "",
+        type: s.type || "",
+      }));
+    }
+  } catch {
+    stores = parseStoresXml(text);
+  }
+  if (!stores.length) stores = parseStoresXml(text);
+  stores = stores
+    .filter((s) => s.id)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ru"));
+  return { stores, sample: text.slice(0, 1200) };
+}
+
+// Справочники для акта приготовления в одной сессии iiko (login → … → logout).
+export async function productionRefs() {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await auth();
+  try {
+    const p = await fetchProducts(key);
+    const s = await fetchStores(key);
+    const result = {
+      products: p.products,
+      stores: s.stores,
+      productCount: p.products.length,
+      storeCount: s.stores.length,
+    };
+    // Диагностика: если разобрать не удалось — вернём образец сырого ответа,
+    // чтобы по нему уточнить формат конкретного сервера.
+    if (!p.products.length) result.productsSample = p.sample;
+    if (!s.stores.length) result.storesSample = s.sample;
+    return result;
+  } finally {
+    await logout(key);
+  }
+}
+
 // Полный отчёт продаж за период (одна сессия iiko, несколько OLAP-срезов):
 //  - byDay:   по дню и филиалу (выручка/график/KPI);
 //  - byPay:   по типам оплат (вкладка «Оплаты»);

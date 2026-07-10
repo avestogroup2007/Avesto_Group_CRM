@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
+import IikoProduction from "./IikoProduction.jsx";
 import { apiGet, apiPost, apiPatch, apiDelete } from "./api.js";
 
 /* ============================================================================
@@ -10941,6 +10942,9 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
     <div className="space-y-5 max-w-5xl">
       {/* проверка подключения iiko */}
       <IikoPanel />
+
+      {/* акт приготовления — чтение справочников iiko (блюда/склады) */}
+      <IikoProduction />
 
       {/* период + филиал */}
       <div
