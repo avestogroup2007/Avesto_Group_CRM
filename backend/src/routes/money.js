@@ -87,10 +87,98 @@ function toUzs(amount, rate) {
   return Math.round(amount * (rate || 1));
 }
 
+// ── Регулярные проводки: авто-заведение ежемесячных движений ────────────────
+const pad2 = (x) => String(x).padStart(2, "0");
+// Текущая дата в TZ сервера (Asia/Tashkent задаётся переменной TZ).
+function ymdNow() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+function nextMonth(m) {
+  let y = +m.slice(0, 4);
+  let mo = +m.slice(5, 7) + 1;
+  if (mo > 12) {
+    mo = 1;
+    y += 1;
+  }
+  return `${y}-${pad2(mo)}`;
+}
+function daysInMonth(m) {
+  return new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
+}
+
+// Заводит недостающие ежемесячные движения по активным шаблонам. Идемпотентно:
+// на каждый месяц свой refId (recur-<id>-<YYYYMM>), повторный вызов не дублирует.
+// Вызывается лениво при чтении модуля денег. Ошибки не пробрасываем.
+async function ensureRecurringPosted() {
+  const today = ymdNow();
+  const curMonth = today.slice(0, 7);
+  const curDay = +today.slice(8, 10);
+  const templates = await db.moneyRecurring.findMany({
+    where: { active: true },
+  });
+  for (const t of templates) {
+    if (!t.startMonth) continue;
+    // Начинаем с месяца после последнего заведённого (или со startMonth).
+    let m =
+      t.lastPostedMonth && t.lastPostedMonth >= t.startMonth
+        ? nextMonth(t.lastPostedMonth)
+        : t.startMonth;
+    let last = t.lastPostedMonth;
+    let guard = 0;
+    while (m <= curMonth && guard < 60) {
+      guard += 1;
+      if (t.endMonth && m > t.endMonth) break;
+      // Для текущего месяца ждём назначенный день; прошлые месяцы — сразу.
+      if (m === curMonth && curDay < t.dayOfMonth) break;
+      const day = Math.min(t.dayOfMonth || 1, daysInMonth(m));
+      const date = `${m}-${pad2(day)}`;
+      const rate = t.currency === "UZS" ? 1 : t.rate || 1;
+      const refId = `recur-${t.id}-${m.replace("-", "")}`;
+      const approved = t.autoApprove !== false;
+      await db.moneyTx.upsert({
+        where: { refId },
+        update: {}, // уже заведён — не трогаем (историю не переписываем)
+        create: {
+          date,
+          direction: t.direction || "expense",
+          category: t.category,
+          ddsArticle: t.ddsArticle || "",
+          paymentType: t.paymentType || "Наличные",
+          legalEntity: t.legalEntity || "",
+          account: t.account || "",
+          counterparty: t.counterparty || "",
+          comment: t.comment || t.name,
+          amount: t.amount,
+          currency: t.currency || "UZS",
+          rate,
+          amountUzs: BigInt(toUzs(Number(t.amount), rate)),
+          branchId: t.branchId || null,
+          branchName: t.branchName || "",
+          source: "recurring",
+          refId,
+          createdById: t.createdById || null,
+          approval: approved ? "approved" : "pending",
+          ...(approved ? { approvedAt: new Date() } : {}),
+        },
+      });
+      last = m;
+      m = nextMonth(m);
+    }
+    if (last && last !== t.lastPostedMonth) {
+      await db.moneyRecurring.update({
+        where: { id: t.id },
+        data: { lastPostedMonth: last },
+      });
+    }
+  }
+}
+
 // ── Список движений за период (с фильтрами) ────────────────────────────────
 r.get(
   "/",
   asyncHandler(async (req, res) => {
+    await ensureRecurringPosted().catch(() => {});
     const { from, to, branch, direction, category, q } = req.query;
     const where = {};
     if (from || to) where.date = {};
@@ -135,6 +223,7 @@ r.get(
 r.get(
   "/summary",
   asyncHandler(async (req, res) => {
+    await ensureRecurringPosted().catch(() => {});
     const { from, to, branch } = req.query;
 
     // Баланс за всё время (по филиалу или по всей компании). Только
@@ -627,6 +716,153 @@ r.post(
       },
     });
     res.status(201).json(ser(tx));
+  })
+);
+
+// ── Регулярные проводки (шаблоны ежемесячных расходов/приходов) ──────────────
+const RecurringSchema = z.object({
+  name: z.string().min(1),
+  direction: z.enum(["income", "expense"]).default("expense"),
+  category: z.string().min(1),
+  ddsArticle: z.string().default(""),
+  paymentType: z.string().default("Наличные"),
+  legalEntity: z.string().default(""),
+  account: z.string().default(""),
+  counterparty: z.string().default(""),
+  comment: z.string().default(""),
+  amount: z.number().positive(),
+  currency: z.enum(["UZS", "RUB", "USD", "EUR"]).default("UZS"),
+  rate: z.number().positive().default(1),
+  branchId: z.string().nullable().optional(),
+  branchName: z.string().default(""),
+  dayOfMonth: z.number().int().min(1).max(28).default(1),
+  startMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  endMonth: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .or(z.literal(""))
+    .default(""),
+  autoApprove: z.boolean().default(true),
+  active: z.boolean().default(true),
+});
+
+function serRec(t) {
+  return { ...t, amount: n(t.amount) };
+}
+
+// Список шаблонов.
+r.get(
+  "/recurring",
+  asyncHandler(async (req, res) => {
+    const rows = await db.moneyRecurring.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(rows.map(serRec));
+  })
+);
+
+// Создать шаблон (и сразу завести уже наступившие месяцы).
+r.post(
+  "/recurring",
+  asyncHandler(async (req, res) => {
+    const parsed = RecurringSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Неверный формат шаблона" });
+    }
+    const d = parsed.data;
+    const rate = d.currency === "UZS" ? 1 : d.rate;
+    const created = await db.moneyRecurring.create({
+      data: {
+        name: d.name,
+        direction: d.direction,
+        category: d.category,
+        ddsArticle: d.ddsArticle || "",
+        paymentType: d.paymentType,
+        legalEntity: d.legalEntity || "",
+        account: d.account || "",
+        counterparty: d.counterparty || "",
+        comment: d.comment || "",
+        amount: BigInt(Math.round(d.amount)),
+        currency: d.currency,
+        rate,
+        branchId: d.branchId || null,
+        branchName: d.branchName || "",
+        dayOfMonth: d.dayOfMonth,
+        startMonth: d.startMonth,
+        endMonth: d.endMonth || "",
+        autoApprove: d.autoApprove,
+        active: d.active,
+        createdById: req.user.uid,
+      },
+    });
+    await ensureRecurringPosted().catch(() => {});
+    res.status(201).json(serRec(created));
+  })
+);
+
+// Изменить шаблон.
+r.patch(
+  "/recurring/:id",
+  asyncHandler(async (req, res) => {
+    const parsed = RecurringSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Неверный формат" });
+    }
+    const d = parsed.data;
+    const data = {};
+    for (const k of [
+      "name",
+      "direction",
+      "category",
+      "ddsArticle",
+      "paymentType",
+      "legalEntity",
+      "account",
+      "counterparty",
+      "comment",
+      "currency",
+      "branchName",
+      "dayOfMonth",
+      "startMonth",
+      "endMonth",
+      "autoApprove",
+      "active",
+    ]) {
+      if (d[k] !== undefined) data[k] = d[k];
+    }
+    if (d.branchId !== undefined) data.branchId = d.branchId || null;
+    if (
+      d.amount !== undefined ||
+      d.currency !== undefined ||
+      d.rate !== undefined
+    ) {
+      const existing = await db.moneyRecurring.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!existing) return res.status(404).json({ error: "Не найдено" });
+      const amount = d.amount ?? Number(existing.amount);
+      const currency = d.currency ?? existing.currency;
+      const rate = currency === "UZS" ? 1 : (d.rate ?? existing.rate);
+      data.amount = BigInt(Math.round(amount));
+      data.rate = rate;
+    }
+    const updated = await db.moneyRecurring.update({
+      where: { id: req.params.id },
+      data,
+    });
+    await ensureRecurringPosted().catch(() => {});
+    res.json(serRec(updated));
+  })
+);
+
+// Удалить шаблон (заведённые ранее движения остаются в истории).
+r.delete(
+  "/recurring/:id",
+  asyncHandler(async (req, res) => {
+    await db.moneyRecurring
+      .delete({ where: { id: req.params.id } })
+      .catch(() => {});
+    res.json({ ok: true });
   })
 );
 
