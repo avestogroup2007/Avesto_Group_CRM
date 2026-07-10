@@ -41,6 +41,11 @@ const EnvSchema = z.object({
   // chat_id — id личного чата или группы, куда бот добавлен.
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_CHAT_ID: z.string().min(1).optional(),
+  // Политика входа: пускаем только сотрудников из iiko (source=iiko, не
+  // уволенные). Одна защищённая учётка-администратор пускается всегда — для
+  // первичной синхронизации и на случай, если iiko-сервер недоступен. Логин
+  // этой учётки задаётся здесь (по умолчанию «sysadmin» — демо-админ из сида).
+  BOOTSTRAP_ADMIN_LOGIN: z.string().min(1).default("sysadmin"),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
