@@ -10,21 +10,40 @@ import { db } from "../src/db.js";
 
 const TEST_LOGIN = "ci_test_user";
 const TEST_PASSWORD = "ci_test_password_123";
+// Ручная (не из iiko) учётка — политика входа должна её блокировать.
+const MANUAL_LOGIN = "ci_test_manual";
+const MANUAL_PASSWORD = "ci_test_manual_123";
 
 let server;
 let base;
 
 before(async () => {
-  // Собственный пользователь теста — не зависим от seed и демо-паролей.
+  // Основной тестовый пользователь — «из iiko» (source=iiko): политика входа
+  // пускает только таких. Не зависим от seed и демо-паролей.
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
   await db.user.upsert({
     where: { name: TEST_LOGIN },
-    update: { passwordHash, role: "director", active: true },
+    update: { passwordHash, role: "director", active: true, source: "iiko" },
     create: {
       name: TEST_LOGIN,
       passwordHash,
       role: "director",
       position: "CI",
+      source: "iiko",
+    },
+  });
+
+  // Ручная учётка (source=manual, не админ-исключение) — вход запрещён политикой.
+  const manualHash = await bcrypt.hash(MANUAL_PASSWORD, 10);
+  await db.user.upsert({
+    where: { name: MANUAL_LOGIN },
+    update: { passwordHash: manualHash, active: true, source: "manual" },
+    create: {
+      name: MANUAL_LOGIN,
+      passwordHash: manualHash,
+      role: "staff",
+      position: "CI",
+      source: "manual",
     },
   });
 
@@ -35,8 +54,12 @@ before(async () => {
 });
 
 after(async () => {
-  await db.auditLog.deleteMany({ where: { user: { name: TEST_LOGIN } } });
-  await db.user.deleteMany({ where: { name: TEST_LOGIN } });
+  await db.auditLog.deleteMany({
+    where: { user: { name: { in: [TEST_LOGIN, MANUAL_LOGIN] } } },
+  });
+  await db.user.deleteMany({
+    where: { name: { in: [TEST_LOGIN, MANUAL_LOGIN] } },
+  });
   await new Promise((resolve) => server.close(resolve));
   await db.$disconnect();
 });
@@ -84,6 +107,15 @@ test("login с пустым телом → 400", async () => {
 test("несуществующий маршрут → 404", async () => {
   const res = await fetch(`${base}/api/nope`);
   assert.equal(res.status, 404);
+});
+
+test("вход ручной (не из iiko) учётки → 403 (пароль верный)", async () => {
+  const res = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: MANUAL_LOGIN, password: MANUAL_PASSWORD }),
+  });
+  assert.equal(res.status, 403, "не-iiko учётку политика не пускает");
 });
 
 test("полный поток: login → me → logout → me 401", async () => {

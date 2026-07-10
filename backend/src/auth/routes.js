@@ -18,6 +18,19 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+// Политика доступа: работать в программе могут только сотрудники из iiko
+// (source=iiko и не уволены). Исключение — одна защищённая учётка-администратор
+// (BOOTSTRAP_ADMIN_LOGIN): для первичной синхронизации и на случай, когда
+// iiko-сервер недоступен. Демо/ручные учётки войти не могут.
+function isBootstrapAdmin(user) {
+  const key = env.BOOTSTRAP_ADMIN_LOGIN;
+  return user.name === key || user.login === key;
+}
+function loginAllowed(user) {
+  if (isBootstrapAdmin(user)) return true;
+  return user.source === "iiko" && !user.iikoDeleted;
+}
+
 // Общие параметры cookie в одном месте — чтобы logout снимал ровно ту же cookie.
 function cookieOptions() {
   return {
@@ -52,6 +65,15 @@ r.post(
       : false;
     if (!user || !ok) {
       return res.status(401).json({ error: "Неверный логин или пароль" });
+    }
+
+    // Пароль верный, но учётка не из iiko (и не админ-исключение) — не пускаем.
+    // Проверяем ПОСЛЕ пароля, чтобы нельзя было перебором вычислять учётки.
+    if (!loginAllowed(user)) {
+      return res.status(403).json({
+        error:
+          "Доступ разрешён только сотрудникам из iiko. Обратитесь к администратору.",
+      });
     }
 
     // В токен кладём только id и роль — ничего секретного.
@@ -103,18 +125,30 @@ r.get(
       select: {
         id: true,
         name: true,
+        login: true,
         displayName: true,
         role: true,
         branchId: true,
         position: true,
         active: true,
+        source: true,
+        iikoDeleted: true,
         mustChangePassword: true,
       },
     });
-    if (!user || !user.active) {
+    if (!user || !user.active || !loginAllowed(user)) {
       return res.status(401).json({ error: "Пользователь недоступен" });
     }
-    res.json(user);
+    // source/iikoDeleted/login — служебные, наружу не отдаём.
+    res.json({
+      id: user.id,
+      name: user.name,
+      displayName: user.displayName,
+      role: user.role,
+      branchId: user.branchId,
+      position: user.position,
+      mustChangePassword: user.mustChangePassword,
+    });
   })
 );
 

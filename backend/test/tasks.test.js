@@ -52,16 +52,41 @@ before(async () => {
   });
   branchId = branch.id;
 
+  // source=iiko — политика входа пускает только сотрудников из iiko.
   const exec = await db.user.upsert({
     where: { name: EXEC },
-    update: { passwordHash, role: "staff", active: true, branchId },
-    create: { name: EXEC, passwordHash, role: "staff", branchId },
+    update: {
+      passwordHash,
+      role: "staff",
+      active: true,
+      branchId,
+      source: "iiko",
+    },
+    create: {
+      name: EXEC,
+      passwordHash,
+      role: "staff",
+      branchId,
+      source: "iiko",
+    },
   });
   execId = exec.id;
   const ctrl = await db.user.upsert({
     where: { name: CTRL },
-    update: { passwordHash, role: "manager", active: true, branchId },
-    create: { name: CTRL, passwordHash, role: "manager", branchId },
+    update: {
+      passwordHash,
+      role: "manager",
+      active: true,
+      branchId,
+      source: "iiko",
+    },
+    create: {
+      name: CTRL,
+      passwordHash,
+      role: "manager",
+      branchId,
+      source: "iiko",
+    },
   });
   ctrlId = ctrl.id;
 
