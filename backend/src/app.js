@@ -13,6 +13,7 @@ import authRoutes from "./auth/routes.js";
 import iikoRoutes from "./routes/iiko.js";
 import taskRoutes from "./routes/tasks.js";
 import moneyRoutes from "./routes/money.js";
+import postingRoutes from "./routes/postings.js";
 import telegramRoutes from "./routes/telegram.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
@@ -54,6 +55,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/iiko", iikoRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/money", moneyRoutes);
+app.use("/api/postings", postingRoutes);
 app.use("/api/telegram", telegramRoutes);
 
 // Здесь позже подключим:

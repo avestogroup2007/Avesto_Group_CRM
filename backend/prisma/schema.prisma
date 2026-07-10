@@ -233,6 +233,62 @@ model MoneyRecurring {
   @@index([active])
 }
 
+// ── Бухгалтерия: двойная запись (Дт/Кт) ────────────────────────────────────
+
+// План счетов (справочник бухгалтерских счетов, НСБУ Узбекистана).
+// kind: active | passive | income | expense | contra — для знака сальдо в ОСВ.
+model LedgerAccount {
+  id        String   @id @default(cuid())
+  code      String   @unique // «5010», «6710», «9420»…
+  name      String // «Касса», «Административные расходы»…
+  kind      String   @default("active") // active|passive|income|expense|contra
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([code])
+}
+
+// Правило авто-проводки: по направлению и статье движения денег определяет
+// пару счетов Дт/Кт. Пустой debit/credit = «авто» (сторона кассы/банка по типу
+// оплаты). category = "" — правило по умолчанию (fallback) для направления.
+model PostingRule {
+  id        String   @id @default(cuid())
+  direction String // income | expense
+  category  String   @default("") // статья движения ("" = по умолчанию)
+  debit     String   @default("") // код счёта Дт ("" = авто)
+  credit    String   @default("") // код счёта Кт ("" = авто)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([direction, category])
+}
+
+// Проводка (бухгалтерская запись двойной записи): дебет одного счёта и кредит
+// другого на одну сумму. Формируется автоматически из движения денег (MoneyTx)
+// по правилам PostingRule (идемпотентно, refId = mtx-<id>) либо вручную.
+model Posting {
+  id          String   @id @default(cuid())
+  date        String // YYYY-MM-DD
+  number      String   @default("") // номер документа/проводки
+  debit       String // код счёта по дебету
+  credit      String // код счёта по кредиту
+  amount      BigInt // сумма в сумах (UZS)
+  currency    String   @default("UZS")
+  description String   @default("")
+  legalEntity String   @default("")
+  branchId    String?
+  branchName  String   @default("")
+  source      String   @default("manual") // manual | money-tx
+  refId       String?  @unique // идемпотентность авто-проводки (mtx-<id>)
+  moneyTxId   String? // связь с движением денег
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+  @@index([debit])
+  @@index([credit])
+}
+
 // Журнал безопасности — кто что выгружал, кто пытался копировать
 model AuditLog {
   id     String   @id @default(cuid())
