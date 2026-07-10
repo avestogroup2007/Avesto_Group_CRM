@@ -494,6 +494,97 @@ export async function productionRefs() {
   }
 }
 
+// Экранирование значений для XML тела документа.
+function escXml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// Строит XML акта приготовления (productionDocument) для импорта в iiko.
+// Все позиции производятся и списываются на одном складе storeId.
+export function buildProductionXml({
+  date,
+  storeId,
+  items,
+  number = "",
+  comment = "",
+  status = "PROCESSED",
+}) {
+  const dt = `${date}T12:00:00`;
+  const rows = (items || [])
+    .map(
+      (it) =>
+        `<item>` +
+        `<productId>${escXml(it.productId)}</productId>` +
+        `<storeId>${escXml(storeId)}</storeId>` +
+        `<amount>${Number(it.amount)}</amount>` +
+        `</item>`
+    )
+    .join("");
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<document>` +
+    (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
+    `<dateIncoming>${dt}</dateIncoming>` +
+    `<status>${status}</status>` +
+    (comment ? `<comment>${escXml(comment)}</comment>` : "") +
+    `<items>${rows}</items>` +
+    `</document>`
+  );
+}
+
+// Создаёт акт приготовления в iiko. dryRun=true — только строит XML и НИЧЕГО
+// не пишет (предпросмотр). Иначе — импортирует документ и возвращает результат
+// с ответом iiko (для показа ошибок валидации при неверных данных/правах).
+export async function createProduction({
+  date,
+  storeId,
+  items,
+  number = "",
+  comment = "",
+  dryRun = false,
+}) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const xml = buildProductionXml({ date, storeId, items, number, comment });
+  if (dryRun) return { dryRun: true, xml };
+  const key = await auth();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/documents/import/productionDocument?key=${encodeURIComponent(
+        key
+      )}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/xml" },
+        body: xml,
+      }
+    );
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(
+        `iiko production → ${res.status} ${text.slice(0, 500)}`.trim()
+      );
+    }
+    // Ответ iiko — XML с результатом. valid=false + errorMessage при ошибке.
+    const valid = !/<valid>\s*false\s*<\/valid>/i.test(text);
+    const errMatch = text.match(/<errorMessage>([\s\S]*?)<\/errorMessage>/i);
+    const idMatch = text.match(/<documentNumber>([\s\S]*?)<\/documentNumber>/i);
+    return {
+      ok: valid,
+      documentNumber: idMatch ? decodeXml(idMatch[1].trim()) : "",
+      error: errMatch ? decodeXml(errMatch[1].trim()) : "",
+      response: text.slice(0, 2000),
+      xml,
+    };
+  } finally {
+    await logout(key);
+  }
+}
+
 // Полный отчёт продаж за период (одна сессия iiko, несколько OLAP-срезов):
 //  - byDay:   по дню и филиалу (выручка/график/KPI);
 //  - byPay:   по типам оплат (вкладка «Оплаты»);

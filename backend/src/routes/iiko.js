@@ -1,6 +1,7 @@
 // Прокси-маршруты iiko (iikoServer API): фронтенд обращается сюда, а не к iiko
 // напрямую — логин/пароль остаются на сервере. Все маршруты требуют входа.
 import { Router } from "express";
+import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -12,6 +13,7 @@ import {
   pnlReport,
   riskyReport,
   productionRefs,
+  createProduction,
 } from "../services/iikoServer.js";
 import {
   syncEmployeesToDb,
@@ -111,6 +113,54 @@ r.get(
   requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
     res.json(await productionRefs());
+  })
+);
+
+// Создание «Акта приготовления» в iiko. Тело:
+// { date, storeId, items:[{productId, amount}], number?, comment?, dryRun? }.
+// dryRun:true — только предпросмотр XML (в iiko ничего не пишется). Реальное
+// проведение (dryRun:false) меняет остатки в iiko — фиксируем в журнале.
+r.post(
+  "/production/act",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  handleIiko(async (req, res) => {
+    const { date, storeId, items, number, comment, dryRun } = req.body || {};
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) {
+      return res.status(400).json({ error: "Нужна дата (ГГГГ-ММ-ДД)" });
+    }
+    if (!storeId) return res.status(400).json({ error: "Выберите склад" });
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(400).json({ error: "Добавьте хотя бы одно блюдо" });
+    }
+    for (const it of items) {
+      if (!it || !it.productId || !(Number(it.amount) > 0)) {
+        return res
+          .status(400)
+          .json({ error: "У каждой позиции нужен продукт и количество > 0" });
+      }
+    }
+    const result = await createProduction({
+      date,
+      storeId,
+      items,
+      number: number || "",
+      comment: comment || "",
+      dryRun: !!dryRun,
+    });
+    // В журнал пишем только реальное проведение (не предпросмотр).
+    if (!dryRun) {
+      await db.auditLog
+        .create({
+          data: {
+            userId: req.user.uid,
+            event: "iiko_production_act",
+            detail: `Акт приготовления в iiko: склад ${storeId}, позиций ${items.length}, дата ${date}`,
+            ip: req.ip,
+          },
+        })
+        .catch(() => {});
+    }
+    res.json(result);
   })
 );
 
