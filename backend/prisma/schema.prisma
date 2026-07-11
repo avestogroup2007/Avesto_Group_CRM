@@ -193,6 +193,8 @@ model MoneyTx {
   @@index([branchId])
   @@index([category])
   @@index([approval])
+  @@index([branchId, date])
+  @@index([approval, direction, branchId])
 }
 
 // Справочники модуля денег: типы/статьи, контрагенты, статьи ДДС, филиалы,
@@ -295,6 +297,8 @@ model Posting {
   @@index([date])
   @@index([debit])
   @@index([credit])
+  @@index([debit, date])
+  @@index([credit, date])
 }
 
 // Журнал безопасности — кто что выгружал, кто пытался копировать
@@ -309,6 +313,8 @@ model AuditLog {
 
   @@index([userId])
   @@index([event])
+  @@index([userId, event, ip])
+  @@index([at])
 }
 
 // Сданный через бота (или приложение) чек-лист смены. Хранит отметки и

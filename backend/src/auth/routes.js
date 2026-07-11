@@ -9,6 +9,7 @@ import { env } from "../env.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { verifyIikoCredentials } from "../services/iikoServer.js";
+import { sendTelegram, topicFor, esc } from "../services/telegram.js";
 
 const r = Router();
 
@@ -99,6 +100,16 @@ r.post(
       }
     }
     if (!user || !ok) {
+      // Неудачную попытку по СУЩЕСТВУЮЩЕЙ учётке пишем в журнал безопасности —
+      // серия таких записей видна как перебор пароля. Ответ одинаковый для
+      // «нет пользователя» и «неверный пароль» — логины не раскрываем.
+      if (user) {
+        await db.auditLog
+          .create({
+            data: { userId: user.id, event: "login_failed", ip: req.ip },
+          })
+          .catch(() => {});
+      }
       return res.status(401).json({ error: "Неверный логин или пароль" });
     }
 
@@ -123,10 +134,37 @@ r.post(
       maxAge: TOKEN_TTL_HOURS * 3600 * 1000,
     });
 
-    // Пишем вход в журнал безопасности.
+    // Пишем вход в журнал безопасности (detail — устройство/браузер).
+    const userAgent = String(req.headers["user-agent"] || "").slice(0, 250);
+    // Видели ли этот IP у этого пользователя раньше — до записи нового входа.
+    const knownIp = await db.auditLog
+      .findFirst({
+        where: { userId: user.id, event: "login", ip: req.ip },
+        select: { id: true },
+      })
+      .catch(() => null);
     await db.auditLog.create({
-      data: { userId: user.id, event: "login", ip: req.ip },
+      data: { userId: user.id, event: "login", ip: req.ip, detail: userAgent },
     });
+    // Вход управленческой учётки с нового IP — уведомление в тему «Персонал»
+    // (best-effort). Линейный персонал не алертим: мобильные IP меняются часто.
+    const OFFICE_ALERT_ROLES = new Set([
+      "director",
+      "finance",
+      "accountant",
+      "sysadmin",
+      "manager",
+    ]);
+    if (!knownIp && OFFICE_ALERT_ROLES.has(user.role)) {
+      sendTelegram(
+        `🔐 <b>Вход с нового адреса</b>\n` +
+          `${esc(user.displayName || user.name)} (${esc(user.role)})\n` +
+          `IP: ${esc(req.ip || "—")}\n` +
+          `Устройство: ${esc(userAgent.slice(0, 120) || "—")}`,
+        undefined,
+        topicFor("staff")
+      ).catch(() => {});
+    }
 
     res.json({
       // token в теле — для кросс-доменной связки (фронт на github.io ↔ бэкенд
