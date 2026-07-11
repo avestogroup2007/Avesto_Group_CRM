@@ -122,7 +122,7 @@ const M = 60_000,
   H = 3_600_000,
   D = 86_400_000;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-const STORAGE_KEY = "avesto.crm.v10"; // реальные юрлица и филиалы Avesto — старые локальные данные игнорируются
+const STORAGE_KEY = "avesto.crm.v11"; // продакшн-старт без демо-данных — старые локальные данные (демо) игнорируются
 
 /* ============================ ДВУЯЗЫЧНОСТЬ (RU / UZ) ======================== */
 let LANG = "ru";
@@ -1324,22 +1324,27 @@ function makeSeed() {
     });
   });
 
+  // Продакшн-старт: демо-данные (сотрудники, задачи, кассы, табель) НЕ заводим —
+  // они появляются из реальной работы и синхронизации кадров с iiko. Оставляем
+  // только справочники-конфигурацию: филиалы, юр.лица, отделы, маршруты, SLA.
+  void tasks;
+  void history;
+  void shifts;
+  void timesheet;
+  void cashReports;
+  void cashHandovers;
   return {
-    tasks,
-    history,
-    shifts,
-    timesheet,
-    cashReports,
-    cashHandovers,
-    currentUserId: "u4",
+    tasks: [],
+    history: [],
+    shifts: {},
+    timesheet: [],
+    cashReports: [],
+    cashHandovers: [],
+    currentUserId: null,
     companies: COMPANIES.map((c) => ({ ...c })),
     branches: BRANCHES.map((b) => ({ ...b })),
     positions: POSITIONS.map((p) => ({ ...p })),
-    users: USERS.map((u) => ({
-      ...u,
-      active: true,
-      departmentId: USER_DEPT[u.id] || "d5",
-    })),
+    users: [],
     departments: DEPARTMENTS.map((d) => ({ ...d })),
     catDept: { ...CAT_DEPT },
     routes: ROUTE_TEMPLATES.map((r) => ({
@@ -13308,13 +13313,12 @@ export default function App({ authUser, onLogout }) {
     s.filters,
   ]);
 
-  // Реальный вход: роль приходит с сервера — открываем приложение под ролью
-  // (демо-пользователь той же роли ведёт демо-данные до переноса данных на сервер).
+  // Реальный вход: действующий пользователь берётся из авторизации (сервер),
+  // а не из демо-списка. Роль/имя/должность приходят с /api/auth/me.
   useEffect(() => {
     if (!authUser || !s.hydrated) return;
-    const demo = USERS.find((u) => u.role === authUser.role) || USERS[0];
-    if (s.currentUserId !== demo.id)
-      dispatch({ type: "SET_USER", id: demo.id });
+    const id = authUser.id || "me";
+    if (s.currentUserId !== id) dispatch({ type: "SET_USER", id });
   }, [authUser, s.hydrated]); // eslint-disable-line
 
   useEffect(() => {
@@ -13329,7 +13333,27 @@ export default function App({ authUser, onLogout }) {
 
   syncOrg(s);
   syncLang(s);
-  const me = userById(s.currentUserId) || USERS[0];
+  // Действующий пользователь — из реальной авторизации (сервер). Демо-список
+  // сотрудников убран; филиальная привязка появится при синхронизации кадров.
+  const me = authUser
+    ? {
+        id: authUser.id || "me",
+        name: authUser.displayName || authUser.name || "Пользователь",
+        role: authUser.role || "staff",
+        pos: authUser.position || "",
+        branchId: null,
+        departmentId: null,
+        level: 1,
+      }
+    : userById(s.currentUserId) || {
+        id: "me",
+        name: "—",
+        role: "staff",
+        pos: "",
+        branchId: null,
+        departmentId: null,
+        level: 1,
+      };
   const myShift = s.shifts[s.currentUserId] || { open: false };
   // Единый охват по филиалу: старший (руководство/финансы/сисадмин) выбирает любой;
   // сотрудник филиала «привязан» к своему и видит только его данные.

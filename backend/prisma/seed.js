@@ -1,21 +1,17 @@
-// Начальное наполнение БД: компания, филиалы и по одному пользователю на роль.
-// Демо-учётки нужны, чтобы проверить вход на Этапе 1. В проде замените их
-// реальными сотрудниками и удалите демо-пароли.
+// Начальное наполнение БД: компания, филиалы и ОДНА служебная учётка
+// администратора (sysadmin). Демо-сотрудники не заводятся — реальные приходят
+// из синхронизации кадров с iiko. Пароль sysadmin сменить после первого входа.
 import bcrypt from "bcrypt";
 import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
 
-// Единый демо-пароль для всех учёток на старте. Меняется при заведении реальных людей.
+// Стартовый пароль служебной учётки. Обязательно сменить в проде.
 const DEMO_PASSWORD = process.env.SEED_PASSWORD || "changeme123";
 
+// Только администратор для первичной настройки и запуска синхронизации кадров.
 const ROLES = [
-  { name: "director", role: "director", position: "Директор" },
-  { name: "finance", role: "finance", position: "Финансовый директор" },
-  { name: "manager", role: "manager", position: "Управляющий филиалом" },
-  { name: "accountant", role: "accountant", position: "Бухгалтер" },
   { name: "sysadmin", role: "sysadmin", position: "Системный администратор" },
-  { name: "staff", role: "staff", position: "Сотрудник" },
 ];
 
 async function main() {
