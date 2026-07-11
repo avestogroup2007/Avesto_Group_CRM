@@ -18,7 +18,7 @@ import { apiGet, apiPost, apiPatch } from "../api.js";
 import { C } from "../lib/theme.js";
 import { tr } from "../lib/i18n.js";
 import { uid } from "../lib/format.js";
-import { BRANCHES } from "../lib/org.js";
+import { BRANCHES, ROLE_OPTS } from "../lib/org.js";
 import {
   Avatar,
   Badge,
@@ -29,15 +29,6 @@ import {
   AdCard,
 } from "../components/ui.jsx";
 import { AdminRoutes } from "../pages/Routes.jsx";
-
-export const ROLE_OPTS = [
-  ["director", "Руководство"],
-  ["finance", "Финансист"],
-  ["manager", "Управляющий"],
-  ["accountant", "Бухгалтер"],
-  ["sysadmin", "Сист. администратор"],
-  ["staff", "Сотрудник"],
-];
 
 // Предпросмотр списка сотрудников из iiko (шаг 1: только чтение). iiko —
 // источник правды по кадрам; на следующем шаге отсюда будем импортировать

@@ -402,3 +402,13 @@ export const budgetFor = (id) => ORG.budgets[id] || 0;
 export const slaFor = (pr) => (ORG.sla[pr] != null ? ORG.sla[pr] : 24);
 export const sopFor = (cat) =>
   ORG.sops[cat] || ORG.sops["Прочее"] || { steps: [], requirePhoto: false };
+
+// Роли CRM для выпадающих списков (профиль, кадры, доступы).
+export const ROLE_OPTS = [
+  ["director", "Руководство"],
+  ["finance", "Финансист"],
+  ["manager", "Управляющий"],
+  ["accountant", "Бухгалтер"],
+  ["sysadmin", "Сист. администратор"],
+  ["staff", "Сотрудник"],
+];
