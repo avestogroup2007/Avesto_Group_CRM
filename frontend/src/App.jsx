@@ -12946,10 +12946,12 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
             Бот чек-листов для персонала
           </div>
           <p style={{ color: C.sub, fontSize: 12, marginBottom: 8 }}>
-            Уборщицы и линейный персонал проходят чек-листы прямо в личном чате
-            с ботом. Нужны переменные окружения <b>TELEGRAM_WEBHOOK_SECRET</b> и{" "}
-            <b>PUBLIC_BASE_URL</b> (адрес бэкенда). Привязка сотрудника к
-            филиалу — в разделе «Учётные записи из iiko».
+            Сотрудник открывает бота, жмёт <b>/start</b> и входит по своему{" "}
+            <b>логину и паролю</b> (как в CRM/iiko) — бот сам узнаёт сотрудника
+            и привязывает Telegram, вручную ID вводить не нужно. Нужны
+            переменные окружения <b>TELEGRAM_WEBHOOK_SECRET</b> и{" "}
+            <b>PUBLIC_BASE_URL</b> (адрес бэкенда). Поля Telegram ID/филиал в
+            «Учётных записях из iiko» — для ручной привязки при необходимости.
           </p>
           <div className="flex flex-wrap gap-2">
             <button

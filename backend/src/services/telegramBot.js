@@ -5,10 +5,12 @@
 //
 // Приём обновлений — через вебхук (routes/telegram.js → handleUpdate). Токен и
 // секрет вебхука задаются ТОЛЬКО в окружении хостинга.
+import bcrypt from "bcrypt";
 import { env } from "../env.js";
 import { db } from "../db.js";
 import { log } from "../logger.js";
 import { sendTelegram, topicFor, esc } from "./telegram.js";
+import { verifyIikoCredentials } from "./iikoServer.js";
 
 const API = "https://api.telegram.org";
 
@@ -119,6 +121,8 @@ const answerCb = (id, text) =>
     callback_query_id: id,
     ...(text ? { text } : {}),
   });
+const deleteMsg = (chatId, msgId) =>
+  tg("deleteMessage", { chat_id: chatId, message_id: msgId });
 
 // ── Сессия диалога (черновик чек-листа) ─────────────────────────────────────
 async function getSession(tid) {
@@ -143,11 +147,120 @@ async function clearSession(tid) {
     .catch(() => {});
 }
 
-// Привязанный HR сотрудник по Telegram id.
+// Привязанный сотрудник по Telegram id.
 async function linkedUser(tid) {
   return db.user
     .findUnique({ where: { telegramId: String(tid) } })
     .catch(() => null);
+}
+
+// Самостоятельный вход в бота: сотрудник вводит свой логин и пароль (как в
+// приложении). Проверка та же, что при веб-входе: живой пароль iiko (SSO), при
+// сбое — локальный bcrypt. Пускаем сотрудников из iiko и bootstrap-админа.
+async function botAuthenticate(login, password) {
+  const user = await db.user
+    .findFirst({
+      where: { active: true, OR: [{ login }, { name: login }] },
+    })
+    .catch(() => null);
+  if (!user) return null;
+  let ok = false;
+  if (user.source === "iiko" && user.login) {
+    ok = await verifyIikoCredentials(user.login, password).catch(() => false);
+    if (!ok && user.passwordHash)
+      ok = await bcrypt.compare(password, user.passwordHash).catch(() => false);
+  } else if (user.passwordHash) {
+    ok = await bcrypt.compare(password, user.passwordHash).catch(() => false);
+  }
+  if (!ok) return null;
+  const allowed =
+    user.source === "iiko" || user.name === env.BOOTSTRAP_ADMIN_LOGIN;
+  return allowed ? user : null;
+}
+
+// Клавиатура выбора филиала (после привязки, если он ещё не задан).
+function branchPickView() {
+  const rows = [];
+  for (let i = 0; i < BRANCHES.length; i += 2) {
+    rows.push(
+      BRANCHES.slice(i, i + 2).map((b) => ({
+        text: b.name,
+        callback_data: `setbr|${b.id}`,
+      }))
+    );
+  }
+  return { text: "Выберите ваш филиал:", keyboard: rows };
+}
+
+// Начать самостоятельный вход (запросить логин).
+async function beginAuth(chatId, from) {
+  await setSession(from.id, { flow: "auth", step: "login" });
+  await sendMsg(chatId, "🔐 <b>Вход</b>\nВведите ваш логин (как в CRM/iiko):");
+}
+
+// Шаг диалога входа: получаем логин, затем пароль; при успехе привязываем
+// Telegram к учётной записи. Сообщение с паролем удаляем из чата.
+async function authStep(chatId, from, session, msg) {
+  const text = (msg.text || "").trim();
+  if (session.step === "login") {
+    if (!text || text.startsWith("/")) {
+      await sendMsg(chatId, "Введите логин (как в CRM/iiko):");
+      return;
+    }
+    await setSession(from.id, { flow: "auth", step: "password", login: text });
+    await sendMsg(chatId, "Введите пароль:");
+    return;
+  }
+  if (session.step === "password") {
+    const password = text;
+    // Пароль в чате не храним — удаляем сообщение (в личке бот это может).
+    await deleteMsg(chatId, msg.message_id);
+    const user = await botAuthenticate(session.login, password);
+    if (!user) {
+      await clearSession(from.id);
+      await sendMsg(
+        chatId,
+        "❌ Неверный логин или пароль. Отправьте /start, чтобы попробовать снова."
+      );
+      return;
+    }
+    // Привязываем Telegram к сотруднику (один Telegram — один сотрудник).
+    try {
+      await db.user.update({
+        where: { id: user.id },
+        data: { telegramId: String(from.id) },
+      });
+    } catch (e) {
+      await clearSession(from.id);
+      if (e.code === "P2002") {
+        await sendMsg(
+          chatId,
+          "Этот Telegram уже привязан к другому сотруднику. Обратитесь к администратору."
+        );
+      } else {
+        await sendMsg(chatId, "Не удалось привязать. Попробуйте позже.");
+      }
+      return;
+    }
+    await clearSession(from.id);
+    const linked = await linkedUser(from.id);
+    await sendMsg(
+      chatId,
+      `✅ Вход выполнен: <b>${esc(linked.displayName || linked.login || "")}</b>` +
+        (linked.position ? `\n${esc(linked.position)}` : "")
+    );
+    if (!linked.checklistBranch) {
+      const bp = branchPickView();
+      await sendMsg(chatId, bp.text, bp.keyboard);
+    } else {
+      const view = await menuView(linked);
+      await sendMsg(chatId, view.text, view.keyboard);
+    }
+    return;
+  }
+  // Непонятное состояние — сброс.
+  await clearSession(from.id);
+  await sendMsg(chatId, "Отправьте /start, чтобы войти.");
 }
 
 // ── Рендер ──────────────────────────────────────────────────────────────────
@@ -232,20 +345,15 @@ function freshItems(kind) {
 
 // ── Обработчики ──────────────────────────────────────────────────────────────
 async function onStart(chatId, from, user) {
-  await clearSession(from.id);
   if (!user) {
-    const who = esc(
-      [from.first_name, from.last_name].filter(Boolean).join(" ") ||
-        from.username ||
-        ""
-    );
-    await sendMsg(
-      chatId,
-      `👋 Здравствуйте${who ? ", " + who : ""}!\n\n` +
-        `Ваш Telegram ещё не привязан к филиалу. Передайте в HR ваш ID:\n` +
-        `<b>${from.id}</b>\n\n` +
-        `После привязки снова отправьте /start.`
-    );
+    // Не привязан — запускаем самостоятельный вход по логину/паролю.
+    await beginAuth(chatId, from);
+    return;
+  }
+  await clearSession(from.id);
+  if (!user.checklistBranch) {
+    const bp = branchPickView();
+    await sendMsg(chatId, bp.text, bp.keyboard);
     return;
   }
   const view = await menuView(user);
@@ -303,6 +411,17 @@ async function onCallback(cbq) {
   const parts = data.split("|");
   const cmd = parts[0];
 
+  if (cmd === "setbr") {
+    // Выбор филиала после привязки.
+    const bid = parts[1];
+    const updated = await db.user
+      .update({ where: { id: user.id }, data: { checklistBranch: bid } })
+      .catch(() => null);
+    const view = await menuView(updated || { ...user, checklistBranch: bid });
+    await editMsg(chatId, msgId, view.text, view.keyboard);
+    await answerCb(cbq.id, "Филиал сохранён");
+    return;
+  }
   if (cmd === "pick") {
     await openChecklist(chatId, msgId, from, user, parts[1], parts[2]);
     await answerCb(cbq.id);
@@ -457,14 +576,32 @@ export async function handleUpdate(update) {
     const from = msg.from || {};
     // В боте работаем только в личных чатах.
     if (msg.chat?.type !== "private") return;
-    if (Array.isArray(msg.photo) && msg.photo.length) {
-      await onPhoto(chatId, from, msg.photo);
-      return;
-    }
     const text = (msg.text || "").trim();
     const user = await linkedUser(from.id);
+
+    // /start и /menu доступны всегда (в т.ч. начинают вход, если не привязан).
     if (text === "/start" || text === "/menu") {
       await onStart(chatId, from, user);
+      return;
+    }
+
+    // Не привязан — ведём диалог входа (логин → пароль).
+    if (!user) {
+      const session = await getSession(from.id);
+      if (session && session.flow === "auth") {
+        await authStep(chatId, from, session, msg);
+        return;
+      }
+      await sendMsg(
+        chatId,
+        "Отправьте /start, чтобы войти по вашему логину и паролю."
+      );
+      return;
+    }
+
+    // Привязан — обычная работа.
+    if (Array.isArray(msg.photo) && msg.photo.length) {
+      await onPhoto(chatId, from, msg.photo);
       return;
     }
     if (text === "/id") {
