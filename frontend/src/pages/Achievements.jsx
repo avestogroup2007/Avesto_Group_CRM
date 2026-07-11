@@ -23,7 +23,7 @@ import { C } from "../lib/theme.js";
 import { M, H, fmtDur, lightTone } from "../lib/format.js";
 import { branchById } from "../lib/org.js";
 import { Avatar, Kpi, Ring } from "../components/ui.jsx";
-import { ROLE_OPTS } from "../admin/Admin.jsx";
+import { ROLE_OPTS } from "../lib/org.js";
 import { PasswordModal } from "../components/layout.jsx";
 import { getEnter } from "../lib/tasks.js";
 

@@ -9,7 +9,7 @@ import { C } from "../lib/theme.js";
 import { tr, LANG } from "../lib/i18n.js";
 import { fmtDur } from "../lib/format.js";
 import { Avatar } from "../components/ui.jsx";
-import { ROLE_OPTS } from "../admin/Admin.jsx";
+import { ROLE_OPTS } from "../lib/org.js";
 import { NAV, NAV_SHORT, navAllowed } from "../lib/nav.js";
 
 export function Sidebar({ view, setView, role }) {

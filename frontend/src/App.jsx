@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useMemo, useReducer } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useReducer,
+  lazy,
+  Suspense,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   BarChart,
@@ -60,9 +67,6 @@ import {
   Cake,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
-import IikoPanel from "./IikoPanel.jsx";
-import CakeConstructor from "./CakeConstructor.jsx";
-import IikoProduction from "./IikoProduction.jsx";
 import { apiGet, apiPost, apiPatch, apiDelete, changePassword } from "./api.js";
 import { FONT, C, PHASES } from "./lib/theme.js";
 import {
@@ -86,11 +90,6 @@ import {
   AdToggle,
   AdCard,
 } from "./components/ui.jsx";
-import TimesheetView from "./pages/Timesheet.jsx";
-import ShiftChecklistsView from "./pages/ShiftChecklists.jsx";
-import CashRegisterView from "./pages/CashRegister.jsx";
-import MoneyView from "./pages/Money.jsx";
-import SalesAnalytics from "./pages/SalesAnalytics.jsx";
 import { usePersisted } from "./lib/hooks.js";
 import { detectAnomalies, visibleTasks, applyFilters } from "./lib/tasks.js";
 import {
@@ -104,13 +103,6 @@ import { init, reducer, store } from "./lib/store.js";
 import { NAV, navAllowed, VIEW_TITLE } from "./lib/nav.js";
 import { Sidebar, BottomNav, MoreSheet, TopBar } from "./components/layout.jsx";
 import Board, { TaskDetail, CreatePage } from "./pages/Tasks.jsx";
-import Analytics from "./pages/Analytics.jsx";
-import PersonalAchievements from "./pages/Achievements.jsx";
-import OrgStructure from "./pages/OrgStructure.jsx";
-import ArchiveView from "./pages/Archive.jsx";
-import AboutView from "./pages/About.jsx";
-import AutomationView from "./pages/Automation.jsx";
-import AdminPanel from "./admin/Admin.jsx";
 import { LANG, syncLang, tr } from "./lib/i18n.js";
 import {
   M,
@@ -153,6 +145,36 @@ import {
   slaFor,
   sopFor,
 } from "./lib/org.js";
+
+// Ленивая загрузка экранов: браузер получает код раздела при первом входе в
+// него, а не весь бандл сразу. Задачи (Board/TaskDetail) — стартовый экран,
+// они загружаются сразу вместе с каркасом.
+const TimesheetView = lazy(() => import("./pages/Timesheet.jsx"));
+const ShiftChecklistsView = lazy(() => import("./pages/ShiftChecklists.jsx"));
+const CashRegisterView = lazy(() => import("./pages/CashRegister.jsx"));
+const MoneyView = lazy(() => import("./pages/Money.jsx"));
+const SalesAnalytics = lazy(() => import("./pages/SalesAnalytics.jsx"));
+const Analytics = lazy(() => import("./pages/Analytics.jsx"));
+const PersonalAchievements = lazy(() => import("./pages/Achievements.jsx"));
+const OrgStructure = lazy(() => import("./pages/OrgStructure.jsx"));
+const ArchiveView = lazy(() => import("./pages/Archive.jsx"));
+const AboutView = lazy(() => import("./pages/About.jsx"));
+const AutomationView = lazy(() => import("./pages/Automation.jsx"));
+const AdminPanel = lazy(() => import("./admin/Admin.jsx"));
+const CakeConstructor = lazy(() => import("./CakeConstructor.jsx"));
+const IikoProduction = lazy(() => import("./IikoProduction.jsx"));
+
+// Заглушка на время подгрузки кода раздела.
+function ViewLoader() {
+  return (
+    <div
+      className="flex items-center justify-center"
+      style={{ minHeight: 240, color: C.faint, fontWeight: 600, fontSize: 15 }}
+    >
+      Загрузка раздела…
+    </div>
+  );
+}
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -509,234 +531,237 @@ export default function App({ authUser, onLogout }) {
             key={s.view}
             className="flex-1 p-4 md:p-6 pb-28 md:pb-6 fade-up"
           >
-            <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-4">
-              <h1
-                className="font-extrabold"
-                style={{
-                  color: C.ink,
-                  fontSize: 24,
-                  overflowWrap: "break-word",
-                }}
-              >
-                {tr(VIEW_TITLE[s.view] || "")}
-              </h1>
-              {s.view === "inbox" && (
-                <span
+            <Suspense fallback={<ViewLoader />}>
+              <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mb-4">
+                <h1
+                  className="font-extrabold"
                   style={{
-                    fontSize: 13.5,
-                    color: C.faint,
-                    whiteSpace: "nowrap",
+                    color: C.ink,
+                    fontSize: 24,
+                    overflowWrap: "break-word",
                   }}
                 >
-                  {filtered.filter((t) => t.phase < 5).length} {tr("активных")}
-                </span>
-              )}
-              {[
-                "inbox",
-                "archive",
-                "analytics",
-                "time",
-                "cash",
-                "money",
-                "sales",
-                "reports",
-              ].includes(s.view) && (
-                <div className="ml-auto flex items-center gap-2">
-                  {canPickBranch ? (
-                    <NiceSelect
-                      value={branchScope}
-                      width={186}
-                      align="right"
-                      onChange={(v) =>
-                        dispatch({
-                          type: "SET_SETTING",
-                          key: "branchScope",
-                          value: +v,
-                        })
-                      }
-                      options={[
-                        { value: 0, label: tr("Все филиалы") },
-                        ...(s.branches || []).map((b) => ({
-                          value: b.id,
-                          label: b.name,
-                        })),
-                      ]}
-                    />
-                  ) : me.branchId ? (
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2"
-                      style={{
-                        border: `1px solid ${C.border}`,
-                        background: "#fff",
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: C.ink,
-                      }}
-                    >
-                      <Building2 size={14} color={C.faint} />{" "}
-                      {branchById(me.branchId)?.name}
-                    </span>
-                  ) : null}
-                </div>
-              )}
-            </div>
-
-            {s.view === "inbox" && hint && (
-              <div
-                className="mb-4 rounded-xl px-4 py-3 flex items-start gap-2.5"
-                style={{ background: "#EFF4FF", border: `1px solid #BFDBFE` }}
-              >
-                <Info size={17} color={C.brandA} style={{ marginTop: 1 }} />
-                <div style={{ fontSize: 13.5, color: "#1E3A8A", flex: 1 }}>
-                  {tr(
-                    "Рабочий прототип. Откройте задачу, где вы исполнитель или контролёр — фаза «Отправлено» сама станет «Просмотрено» (защита «я не видел»). Кнопки действий зависят от роли и открытой смены — переключайте роль через профиль справа вверху.",
-                  )}
-                </div>
-                <button
-                  onClick={() => setHint(false)}
-                  className="p-1 rounded-lg"
-                  style={{ color: C.brandA }}
-                >
-                  <X size={16} />
-                </button>
+                  {tr(VIEW_TITLE[s.view] || "")}
+                </h1>
+                {s.view === "inbox" && (
+                  <span
+                    style={{
+                      fontSize: 13.5,
+                      color: C.faint,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {filtered.filter((t) => t.phase < 5).length}{" "}
+                    {tr("активных")}
+                  </span>
+                )}
+                {[
+                  "inbox",
+                  "archive",
+                  "analytics",
+                  "time",
+                  "cash",
+                  "money",
+                  "sales",
+                  "reports",
+                ].includes(s.view) && (
+                  <div className="ml-auto flex items-center gap-2">
+                    {canPickBranch ? (
+                      <NiceSelect
+                        value={branchScope}
+                        width={186}
+                        align="right"
+                        onChange={(v) =>
+                          dispatch({
+                            type: "SET_SETTING",
+                            key: "branchScope",
+                            value: +v,
+                          })
+                        }
+                        options={[
+                          { value: 0, label: tr("Все филиалы") },
+                          ...(s.branches || []).map((b) => ({
+                            value: b.id,
+                            label: b.name,
+                          })),
+                        ]}
+                      />
+                    ) : me.branchId ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2"
+                        style={{
+                          border: `1px solid ${C.border}`,
+                          background: "#fff",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: C.ink,
+                        }}
+                      >
+                        <Building2 size={14} color={C.faint} />{" "}
+                        {branchById(me.branchId)?.name}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
-            )}
 
-            {s.view === "inbox" && (
-              <Board
-                tasks={filtered}
-                now={now}
-                onOpen={onOpen}
-                onFav={(id) => dispatch({ type: "TOGGLE_FAV", id })}
-                flags={flags}
-                me={me}
-                dispatch={dispatch}
-                notify={notify}
-                shiftOpen={myShift.open}
-              />
-            )}
-            {s.view === "create" && (
-              <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />
-            )}
-            {s.view === "me" && (
-              <PersonalAchievements
-                me={me}
-                tasks={s.tasks}
-                history={s.history}
-                shift={myShift}
-                now={now}
-                timesheet={s.timesheet}
-                authUser={authUser}
-              />
-            )}
-            {s.view === "archive" && (
-              <ArchiveView tasks={scoped} onOpen={onOpen} />
-            )}
-            {s.view === "analytics" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "analytics").roles },
-                me.role,
-              ) && (
-                <Analytics
+              {s.view === "inbox" && hint && (
+                <div
+                  className="mb-4 rounded-xl px-4 py-3 flex items-start gap-2.5"
+                  style={{ background: "#EFF4FF", border: `1px solid #BFDBFE` }}
+                >
+                  <Info size={17} color={C.brandA} style={{ marginTop: 1 }} />
+                  <div style={{ fontSize: 13.5, color: "#1E3A8A", flex: 1 }}>
+                    {tr(
+                      "Рабочий прототип. Откройте задачу, где вы исполнитель или контролёр — фаза «Отправлено» сама станет «Просмотрено» (защита «я не видел»). Кнопки действий зависят от роли и открытой смены — переключайте роль через профиль справа вверху.",
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setHint(false)}
+                    className="p-1 rounded-lg"
+                    style={{ color: C.brandA }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              {s.view === "inbox" && (
+                <Board
                   tasks={filtered}
+                  now={now}
+                  onOpen={onOpen}
+                  onFav={(id) => dispatch({ type: "TOGGLE_FAV", id })}
+                  flags={flags}
+                  me={me}
+                  dispatch={dispatch}
+                  notify={notify}
+                  shiftOpen={myShift.open}
+                />
+              )}
+              {s.view === "create" && (
+                <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />
+              )}
+              {s.view === "me" && (
+                <PersonalAchievements
+                  me={me}
+                  tasks={s.tasks}
                   history={s.history}
+                  shift={myShift}
                   now={now}
-                  filters={s.filters}
+                  timesheet={s.timesheet}
+                  authUser={authUser}
+                />
+              )}
+              {s.view === "archive" && (
+                <ArchiveView tasks={scoped} onOpen={onOpen} />
+              )}
+              {s.view === "analytics" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "analytics").roles },
+                  me.role,
+                ) && (
+                  <Analytics
+                    tasks={filtered}
+                    history={s.history}
+                    now={now}
+                    filters={s.filters}
+                    dispatch={dispatch}
+                    role={me.role}
+                    notify={notify}
+                  />
+                )}
+              {s.view === "time" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "time").roles },
+                  me.role,
+                ) && (
+                  <TimesheetView
+                    s={s}
+                    me={me}
+                    now={now}
+                    branchScope={branchScope}
+                  />
+                )}
+              {s.view === "cash" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "cash").roles },
+                  me.role,
+                ) && (
+                  <CashRegisterView
+                    s={s}
+                    me={me}
+                    dispatch={dispatch}
+                    notify={notify}
+                    branchScope={branchScope}
+                  />
+                )}
+              {s.view === "checklists" && (
+                <ShiftChecklistsView
+                  s={s}
+                  me={me}
                   dispatch={dispatch}
-                  role={me.role}
-                  notify={notify}
-                />
-              )}
-            {s.view === "time" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "time").roles },
-                me.role,
-              ) && (
-                <TimesheetView
-                  s={s}
-                  me={me}
-                  now={now}
-                  branchScope={branchScope}
-                />
-              )}
-            {s.view === "cash" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "cash").roles },
-                me.role,
-              ) && (
-                <CashRegisterView
-                  s={s}
-                  me={me}
-                  dispatch={dispatch}
                   notify={notify}
                   branchScope={branchScope}
                 />
               )}
-            {s.view === "checklists" && (
-              <ShiftChecklistsView
-                s={s}
-                me={me}
-                dispatch={dispatch}
-                notify={notify}
-                branchScope={branchScope}
-              />
-            )}
-            {s.view === "cakes" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "cakes").roles },
-                me.role,
-              ) && (
-                <CakeConstructor s={s} dispatch={dispatch} notify={notify} />
+              {s.view === "cakes" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "cakes").roles },
+                  me.role,
+                ) && (
+                  <CakeConstructor s={s} dispatch={dispatch} notify={notify} />
+                )}
+              {s.view === "money" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "money").roles },
+                  me.role,
+                ) && <MoneyView s={s} me={me} branchScope={branchScope} />}
+              {s.view === "sales" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "sales").roles },
+                  me.role,
+                ) && (
+                  <SalesAnalytics
+                    s={s}
+                    me={me}
+                    branchScope={branchScope}
+                    mode="analytics"
+                  />
+                )}
+              {s.view === "production" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "production").roles },
+                  me.role,
+                ) && <IikoProduction />}
+              {s.view === "reports" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "reports").roles },
+                  me.role,
+                ) && (
+                  <SalesAnalytics
+                    s={s}
+                    me={me}
+                    branchScope={branchScope}
+                    mode="reports"
+                  />
+                )}
+              {s.view === "org" && <OrgStructure />}
+              {s.view === "about" && <AboutView />}
+              {s.view === "automation" &&
+                (me.role === "director" || me.role === "sysadmin") && (
+                  <AutomationView
+                    rules={autoRules}
+                    setRules={setAutoRules}
+                    log={autoLog}
+                    setLog={setAutoLog}
+                    now={now}
+                  />
+                )}
+              {s.view === "admin" && me.role === "sysadmin" && (
+                <AdminPanel s={s} dispatch={dispatch} notify={notify} />
               )}
-            {s.view === "money" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "money").roles },
-                me.role,
-              ) && <MoneyView s={s} me={me} branchScope={branchScope} />}
-            {s.view === "sales" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "sales").roles },
-                me.role,
-              ) && (
-                <SalesAnalytics
-                  s={s}
-                  me={me}
-                  branchScope={branchScope}
-                  mode="analytics"
-                />
-              )}
-            {s.view === "production" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "production").roles },
-                me.role,
-              ) && <IikoProduction />}
-            {s.view === "reports" &&
-              navAllowed(
-                { roles: NAV.find((n) => n.key === "reports").roles },
-                me.role,
-              ) && (
-                <SalesAnalytics
-                  s={s}
-                  me={me}
-                  branchScope={branchScope}
-                  mode="reports"
-                />
-              )}
-            {s.view === "org" && <OrgStructure />}
-            {s.view === "about" && <AboutView />}
-            {s.view === "automation" &&
-              (me.role === "director" || me.role === "sysadmin") && (
-                <AutomationView
-                  rules={autoRules}
-                  setRules={setAutoRules}
-                  log={autoLog}
-                  setLog={setAutoLog}
-                  now={now}
-                />
-              )}
-            {s.view === "admin" && me.role === "sysadmin" && (
-              <AdminPanel s={s} dispatch={dispatch} notify={notify} />
-            )}
+            </Suspense>
           </main>
         </div>
       </div>
