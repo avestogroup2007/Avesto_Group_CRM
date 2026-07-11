@@ -1,6 +1,16 @@
 import React, { useState, useMemo } from "react";
-import { apiGet } from "./api.js";
-import { Cake, Plus, Minus, Trash2, Search, RefreshCw } from "lucide-react";
+import { apiGet, apiPost } from "./api.js";
+import {
+  Cake,
+  Plus,
+  Minus,
+  Trash2,
+  Search,
+  RefreshCw,
+  Lock,
+  Sparkles,
+  ChevronRight,
+} from "lucide-react";
 
 const INK = "#1B1512";
 const SUB = "#5E5049";
@@ -42,15 +52,17 @@ function stdDesc(it) {
   return "";
 }
 
-// Конструктор заказных тортов (Этап 1).
-// «Стандарты» — каталог основ/покрытий/украшений, привязанных к позициям iiko
-// (для точной себестоимости и будущего акта приготовления). «Конструктор» —
-// быстрый сбор торта из стандартов с мгновенным расчётом себестоимости.
+// Конструктор заказных тортов.
+// Пошаговый мастер: 1) основа — после подтверждения зафиксирована (изменить
+// нельзя, только «Начать заново»); 2) крем/покрытие; 3) украшения — без
+// ограничений, сколько угодно раз. Себестоимость считается по граммовке.
+// «Стандарты» — каталог, привязанный к позициям iiko.
 export default function CakeConstructor({ s, dispatch, notify }) {
   const cfg = s.cakeConfig || { bases: [], coatings: [], decors: [] };
   const [tab, setTab] = useState("build"); // build | standards
 
   // выбор в конструкторе
+  const [step, setStep] = useState(1); // 1 основа · 2 покрытие · 3 украшения
   const [baseId, setBaseId] = useState("");
   const [coatingId, setCoatingId] = useState("");
   const [decorQty, setDecorQty] = useState({}); // {stdId: qty}
@@ -76,10 +88,29 @@ export default function CakeConstructor({ s, dispatch, notify }) {
       return { ...q, [id]: v };
     });
   const reset = () => {
+    setStep(1);
     setBaseId("");
     setCoatingId("");
     setDecorQty({});
     setBatch(1);
+  };
+
+  // Применить предложение ИИ-помощника к конструктору.
+  const applySuggestion = (sug) => {
+    if (!sug) return;
+    if (sug.baseId && cfg.bases.some((b) => b.id === sug.baseId)) {
+      setBaseId(sug.baseId);
+      setStep(3); // основа выбрана ИИ → сразу к украшениям
+    }
+    if (sug.coatingId && cfg.coatings.some((c) => c.id === sug.coatingId)) {
+      setCoatingId(sug.coatingId);
+    }
+    const q = {};
+    (sug.decors || []).forEach((d) => {
+      if (cfg.decors.some((x) => x.id === d.id) && d.qty > 0) q[d.id] = d.qty;
+    });
+    setDecorQty(q);
+    notify && notify("Состав применён — проверьте и дополните");
   };
 
   const box = {
@@ -136,10 +167,10 @@ export default function CakeConstructor({ s, dispatch, notify }) {
       <p
         style={{ color: SUB, fontSize: 12.5, marginBottom: 12, maxWidth: 720 }}
       >
-        Соберите заказной торт из готовых стандартов — основа, крем/покрытие и
-        украшения. Себестоимость считается по граммовке: например, 100 г крема ×
-        50 000/кг = 5 000. Стандарты и цены привязаны к позициям iiko (вкладка
-        «Стандарты»).
+        Пошаговая сборка заказного торта: основа → покрытие → украшения.
+        Себестоимость считается по граммовке (100 г крема × 50 000/кг = 5 000).
+        После подтверждения основы изменить её нельзя — только начать заново,
+        как на производстве.
       </p>
 
       {/* Вкладки */}
@@ -167,6 +198,8 @@ export default function CakeConstructor({ s, dispatch, notify }) {
       {tab === "build" && (
         <BuildTab
           cfg={cfg}
+          step={step}
+          setStep={setStep}
           base={base}
           baseId={baseId}
           setBaseId={setBaseId}
@@ -183,6 +216,7 @@ export default function CakeConstructor({ s, dispatch, notify }) {
           reset={reset}
           Card={Card}
           notify={notify}
+          applySuggestion={applySuggestion}
         />
       )}
 
@@ -214,9 +248,45 @@ function EmptyHint({ text }) {
   );
 }
 
+// Индикатор шагов мастера.
+function StepsBar({ step }) {
+  const items = [
+    [1, "Основа"],
+    [2, "Покрытие"],
+    [3, "Украшения"],
+  ];
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mb-3">
+      {items.map(([n, label], i) => {
+        const done = step > n;
+        const active = step === n;
+        return (
+          <React.Fragment key={n}>
+            {i > 0 && <ChevronRight size={14} color={FAINT} />}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5"
+              style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                background: active ? BRAND : done ? "#DCFCE7" : "#F1F5F9",
+                color: active ? "#fff" : done ? "#15803D" : "#64748B",
+              }}
+            >
+              {done && n === 1 ? <Lock size={12} /> : null}
+              {n}. {label}
+            </span>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 function BuildTab(props) {
   const {
     cfg,
+    step,
+    setStep,
     base,
     baseId,
     setBaseId,
@@ -232,6 +302,8 @@ function BuildTab(props) {
     total,
     reset,
     Card,
+    notify,
+    applySuggestion,
   } = props;
 
   const grid = "grid grid-cols-2 sm:grid-cols-3 gap-2";
@@ -243,124 +315,263 @@ function BuildTab(props) {
       <EmptyHint text="Стандартов пока нет. Откройте вкладку «Стандарты», загрузите позиции из iiko и добавьте основы, покрытия и украшения — они появятся здесь для быстрого выбора." />
     );
 
+  const confirmBase = () => {
+    if (!baseId) {
+      notify && notify("Выберите основу торта");
+      return;
+    }
+    setStep(2);
+  };
+  const toDecors = () => setStep(3);
+
+  const nextBtn = {
+    background: BRAND,
+    color: "#fff",
+    fontSize: 13.5,
+    fontWeight: 700,
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 space-y-4">
-        {/* Основа */}
-        <div>
-          <h4 className="font-bold mb-2" style={{ color: INK, fontSize: 13.5 }}>
-            1. Основа
-          </h4>
-          {cfg.bases.length ? (
-            <div className={grid}>
-              {cfg.bases.map((b) => (
-                <Card
-                  key={b.id}
-                  item={b}
-                  selected={baseId === b.id}
-                  onClick={() => setBaseId(baseId === b.id ? "" : b.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyHint text="Нет основ — добавьте во вкладке «Стандарты»." />
-          )}
-        </div>
+        <StepsBar step={step} />
 
-        {/* Покрытие */}
-        <div>
-          <h4 className="font-bold mb-2" style={{ color: INK, fontSize: 13.5 }}>
-            2. Крем / покрытие
-          </h4>
-          {cfg.coatings.length ? (
-            <div className={grid}>
-              {cfg.coatings.map((c) => (
-                <Card
-                  key={c.id}
-                  item={c}
-                  selected={coatingId === c.id}
-                  onClick={() => setCoatingId(coatingId === c.id ? "" : c.id)}
-                />
-              ))}
+        {/* Зафиксированная основа (после подтверждения) */}
+        {step > 1 && base && (
+          <div
+            className="flex items-center justify-between gap-2 rounded-xl p-3"
+            style={{ border: `1.5px solid ${BRAND}`, background: "#FDF6F2" }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Lock size={15} color={BRAND} />
+              <div className="min-w-0">
+                <div
+                  className="font-bold truncate"
+                  style={{ color: INK, fontSize: 13.5 }}
+                >
+                  Основа: {base.name}
+                </div>
+                <div style={{ color: FAINT, fontSize: 11 }}>
+                  {stdDesc(base)} · {money(stdCost(base))} сум · зафиксирована —
+                  изменить нельзя
+                </div>
+              </div>
             </div>
-          ) : (
-            <EmptyHint text="Нет покрытий — добавьте во вкладке «Стандарты»." />
-          )}
-        </div>
+            <button
+              onClick={reset}
+              className="rounded-lg px-2.5 py-1.5 shrink-0"
+              style={{
+                border: `1px solid ${BORDER}`,
+                color: SUB,
+                fontSize: 12,
+                fontWeight: 600,
+                background: "#fff",
+              }}
+            >
+              Начать заново
+            </button>
+          </div>
+        )}
 
-        {/* Украшения */}
-        <div>
-          <h4 className="font-bold mb-2" style={{ color: INK, fontSize: 13.5 }}>
-            3. Украшения
-          </h4>
-          {cfg.decors.length ? (
-            <div className={grid}>
-              {cfg.decors.map((d) => {
-                const qty = decorQty[d.id] || 0;
-                return (
-                  <div
-                    key={d.id}
-                    className="rounded-xl p-2.5"
-                    style={{
-                      border: `1.5px solid ${qty > 0 ? BRAND : LINE}`,
-                      background: qty > 0 ? "#FDF6F2" : "#fff",
-                    }}
+        {/* Шаг 1 — основа */}
+        {step === 1 && (
+          <div>
+            <h4
+              className="font-bold mb-2"
+              style={{ color: INK, fontSize: 13.5 }}
+            >
+              Шаг 1. Выберите основу торта
+            </h4>
+            {cfg.bases.length ? (
+              <>
+                <div className={grid}>
+                  {cfg.bases.map((b) => (
+                    <Card
+                      key={b.id}
+                      item={b}
+                      selected={baseId === b.id}
+                      onClick={() => setBaseId(baseId === b.id ? "" : b.id)}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={confirmBase}
+                    disabled={!baseId}
+                    className="rounded-xl px-4 py-2.5"
+                    style={{ ...nextBtn, opacity: baseId ? 1 : 0.5 }}
                   >
+                    Подтвердить основу →
+                  </button>
+                  <span style={{ color: FAINT, fontSize: 11.5 }}>
+                    После подтверждения основу изменить нельзя
+                  </span>
+                </div>
+              </>
+            ) : (
+              <EmptyHint text="Нет основ — добавьте во вкладке «Стандарты»." />
+            )}
+          </div>
+        )}
+
+        {/* Шаг 2 — покрытие */}
+        {step === 2 && (
+          <div>
+            <h4
+              className="font-bold mb-2"
+              style={{ color: INK, fontSize: 13.5 }}
+            >
+              Шаг 2. Крем / покрытие
+            </h4>
+            <p style={{ color: SUB, fontSize: 12, marginBottom: 8 }}>
+              Обычно — крем (банановый, крем-чиз) или шоколад/шоколадный крем.
+            </p>
+            {cfg.coatings.length ? (
+              <>
+                <div className={grid}>
+                  {cfg.coatings.map((c) => (
+                    <Card
+                      key={c.id}
+                      item={c}
+                      selected={coatingId === c.id}
+                      onClick={() =>
+                        setCoatingId(coatingId === c.id ? "" : c.id)
+                      }
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={toDecors}
+                    disabled={!coatingId}
+                    className="rounded-xl px-4 py-2.5"
+                    style={{ ...nextBtn, opacity: coatingId ? 1 : 0.5 }}
+                  >
+                    Далее: украшения →
+                  </button>
+                  <button
+                    onClick={toDecors}
+                    style={{ color: FAINT, fontSize: 12 }}
+                  >
+                    пропустить (без покрытия)
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <EmptyHint text="Покрытий пока нет в стандартах." />
+                <button
+                  onClick={toDecors}
+                  className="rounded-xl px-4 py-2.5 mt-3"
+                  style={nextBtn}
+                >
+                  Далее: украшения →
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Шаг 3 — украшения (без ограничений) */}
+        {step === 3 && (
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h4 className="font-bold" style={{ color: INK, fontSize: 13.5 }}>
+                Шаг 3. Украшения — сколько нужно
+              </h4>
+              <button
+                onClick={() => setStep(2)}
+                style={{ color: SUB, fontSize: 12, fontWeight: 600 }}
+              >
+                ‹ покрытие
+              </button>
+            </div>
+            <p style={{ color: SUB, fontSize: 12, marginBottom: 8 }}>
+              Добавляйте без ограничений: шоколадные узоры, декоративные
+              игрушки, бумажные топперы, свечи, цифры (день рождения), имена
+              (свадьба) и т.д.
+            </p>
+            {cfg.decors.length ? (
+              <div className={grid}>
+                {cfg.decors.map((d) => {
+                  const qty = decorQty[d.id] || 0;
+                  return (
                     <div
-                      className="font-semibold truncate"
-                      style={{ color: INK, fontSize: 13.5 }}
+                      key={d.id}
+                      className="rounded-xl p-2.5"
+                      style={{
+                        border: `1.5px solid ${qty > 0 ? BRAND : LINE}`,
+                        background: qty > 0 ? "#FDF6F2" : "#fff",
+                      }}
                     >
-                      {d.name}
-                    </div>
-                    <div style={{ color: FAINT, fontSize: 10.5, marginTop: 1 }}>
-                      {stdDesc(d)}
-                    </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span
-                        style={{ color: BRAND, fontSize: 12, fontWeight: 700 }}
+                      <div
+                        className="font-semibold truncate"
+                        style={{ color: INK, fontSize: 13.5 }}
                       >
-                        {money(stdCost(d))} сум
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => bump(d.id, -1)}
-                          className="rounded-md"
-                          style={{ border: `1px solid ${BORDER}`, padding: 3 }}
-                        >
-                          <Minus size={13} color={SUB} />
-                        </button>
+                        {d.name}
+                      </div>
+                      <div
+                        style={{ color: FAINT, fontSize: 10.5, marginTop: 1 }}
+                      >
+                        {stdDesc(d)}
+                      </div>
+                      <div className="flex items-center justify-between mt-1.5">
                         <span
                           style={{
-                            minWidth: 18,
-                            textAlign: "center",
-                            color: INK,
+                            color: BRAND,
+                            fontSize: 12,
                             fontWeight: 700,
-                            fontSize: 13,
                           }}
                         >
-                          {qty}
+                          {money(stdCost(d))} сум
                         </span>
-                        <button
-                          onClick={() => bump(d.id, 1)}
-                          className="rounded-md"
-                          style={{ border: `1px solid ${BORDER}`, padding: 3 }}
-                        >
-                          <Plus size={13} color={BRAND} />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => bump(d.id, -1)}
+                            className="rounded-md"
+                            style={{
+                              border: `1px solid ${BORDER}`,
+                              padding: 3,
+                            }}
+                          >
+                            <Minus size={13} color={SUB} />
+                          </button>
+                          <span
+                            style={{
+                              minWidth: 18,
+                              textAlign: "center",
+                              color: INK,
+                              fontWeight: 700,
+                              fontSize: 13,
+                            }}
+                          >
+                            {qty}
+                          </span>
+                          <button
+                            onClick={() => bump(d.id, 1)}
+                            className="rounded-md"
+                            style={{
+                              border: `1px solid ${BORDER}`,
+                              padding: 3,
+                            }}
+                          >
+                            <Plus size={13} color={BRAND} />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyHint text="Нет украшений — добавьте во вкладке «Стандарты»." />
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyHint text="Нет украшений — добавьте во вкладке «Стандарты»." />
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Итог / спецификация */}
-      <div>
+      {/* Итог / спецификация + ИИ-помощник */}
+      <div className="space-y-4">
         <div
           className="rounded-2xl p-4 sticky"
           style={{ border: `1px solid ${BORDER}`, background: BG, top: 12 }}
@@ -464,14 +675,155 @@ function BuildTab(props) {
               background: "#fff",
             }}
           >
-            Сбросить
+            Начать заново
           </button>
           <p style={{ color: FAINT, fontSize: 11, marginTop: 8 }}>
             Далее (следующий этап): акт приготовления в iiko и внутренние
             перемещения ингредиентов со складов.
           </p>
         </div>
+
+        <AiHelper cfg={cfg} onApply={applySuggestion} />
       </div>
+    </div>
+  );
+}
+
+// ИИ-помощник: по описанию заказа подбирает состав из стандартов.
+// Ключ ИИ хранится только на сервере (Render); фронт зовёт /api/ai/cake-suggest.
+function AiHelper({ cfg, onApply }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sug, setSug] = useState(null);
+  const [err, setErr] = useState("");
+
+  const ask = async () => {
+    if (!text.trim()) {
+      setErr("Опишите заказ — например: «свадебный торт 2 кг, имена, узоры»");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    setSug(null);
+    try {
+      const slim = (list) =>
+        (list || []).map((x) => ({
+          id: x.id,
+          name: x.name,
+          cost: Math.round(stdCost(x)),
+        }));
+      const r = await apiPost("/api/ai/cake-suggest", {
+        order: text.trim().slice(0, 600),
+        standards: {
+          bases: slim(cfg.bases),
+          coatings: slim(cfg.coatings),
+          decors: slim(cfg.decors),
+        },
+      });
+      setSug(r);
+    } catch (e) {
+      setErr(e.message || "ИИ-помощник недоступен");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const nameOf = (list, id) =>
+    (list.find((x) => x.id === id) || {}).name || null;
+
+  return (
+    <div
+      className="rounded-2xl p-4"
+      style={{ border: `1px solid ${BORDER}`, background: "#fff" }}
+    >
+      <div className="flex items-center gap-1.5 mb-1">
+        <Sparkles size={15} color={BRAND} />
+        <h4 className="font-bold" style={{ color: INK, fontSize: 13.5 }}>
+          ИИ-помощник
+        </h4>
+      </div>
+      <p style={{ color: SUB, fontSize: 11.5, marginBottom: 8 }}>
+        Опишите заказ — помощник предложит состав из ваших стандартов.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        placeholder="напр.: свадебный торт на 30 человек, белый крем, имена Алишер и Мадина, живые цветы"
+        style={{
+          width: "100%",
+          border: `1px solid ${BORDER}`,
+          borderRadius: 10,
+          padding: "8px 10px",
+          fontSize: 12.5,
+          color: INK,
+          resize: "vertical",
+        }}
+      />
+      <button
+        onClick={ask}
+        disabled={busy}
+        className="w-full mt-2 rounded-xl px-3 py-2 font-bold text-white inline-flex items-center justify-center gap-1.5"
+        style={{ background: BRAND, fontSize: 13, opacity: busy ? 0.6 : 1 }}
+      >
+        <Sparkles size={14} />
+        {busy ? "Подбираю…" : "Подсказать состав (ИИ)"}
+      </button>
+
+      {err && (
+        <div style={{ color: "#DC2626", fontSize: 11.5, marginTop: 6 }}>
+          {err}
+        </div>
+      )}
+
+      {sug && (
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{ background: BG, border: `1px solid ${LINE}` }}
+        >
+          <div className="space-y-1" style={{ fontSize: 12, color: INK }}>
+            {sug.baseId && nameOf(cfg.bases, sug.baseId) && (
+              <div>
+                <b>Основа:</b> {nameOf(cfg.bases, sug.baseId)}
+              </div>
+            )}
+            {sug.coatingId && nameOf(cfg.coatings, sug.coatingId) && (
+              <div>
+                <b>Покрытие:</b> {nameOf(cfg.coatings, sug.coatingId)}
+              </div>
+            )}
+            {(sug.decors || []).length > 0 && (
+              <div>
+                <b>Украшения:</b>{" "}
+                {(sug.decors || [])
+                  .map((d) => {
+                    const n = nameOf(cfg.decors, d.id);
+                    return n ? `${n} ×${d.qty}` : null;
+                  })
+                  .filter(Boolean)
+                  .join(", ")}
+              </div>
+            )}
+          </div>
+          {sug.note && (
+            <p style={{ color: SUB, fontSize: 11.5, marginTop: 6 }}>
+              {sug.note}
+            </p>
+          )}
+          <button
+            onClick={() => onApply(sug)}
+            className="w-full mt-2 rounded-lg px-3 py-2 font-bold"
+            style={{
+              border: `1px solid ${BRAND}`,
+              color: BRAND,
+              fontSize: 12.5,
+              background: "#fff",
+            }}
+          >
+            Применить состав
+          </button>
+        </div>
+      )}
     </div>
   );
 }

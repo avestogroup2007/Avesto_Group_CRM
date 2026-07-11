@@ -55,6 +55,9 @@ const EnvSchema = z.object({
   // внешний адрес бэкенда для setWebhook (на Render можно RENDER_EXTERNAL_URL).
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
   PUBLIC_BASE_URL: z.string().url().optional(),
+  // ИИ-помощник (Claude API). Ключ задаётся ТОЛЬКО в окружении хостинга
+  // (Render) и никогда не уходит клиенту. Не задан — ИИ-эндпоинты вернут 503.
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
   // Политика входа: пускаем только сотрудников из iiko (source=iiko, не
   // уволенные). Одна защищённая учётка-администратор пускается всегда — для
   // первичной синхронизации и на случай, если iiko-сервер недоступен. Логин

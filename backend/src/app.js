@@ -15,6 +15,7 @@ import taskRoutes from "./routes/tasks.js";
 import moneyRoutes from "./routes/money.js";
 import postingRoutes from "./routes/postings.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
+import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -61,6 +62,7 @@ app.use("/api/tasks", taskRoutes);
 app.use("/api/money", moneyRoutes);
 app.use("/api/postings", postingRoutes);
 app.use("/api/telegram", telegramRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Здесь позже подключим:
 // app.use("/api/cash", cashRoutes);
