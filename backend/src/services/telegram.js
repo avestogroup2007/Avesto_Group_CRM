@@ -12,23 +12,35 @@ export function telegramConfigured() {
   return Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID);
 }
 
+// Тема (message_thread_id) для вида уведомления. Позволяет раскладывать разные
+// уведомления по темам одной группы: расходы — в свою тему, задачи — в свою.
+// Id темы берётся из окружения (не секрет), пусто = общая лента группы.
+export function topicFor(kind) {
+  if (kind === "expense") return env.TELEGRAM_TOPIC_EXPENSES || undefined;
+  if (kind === "task") return env.TELEGRAM_TOPIC_TASKS || undefined;
+  if (kind === "cash") return env.TELEGRAM_TOPIC_CASH || undefined;
+  return undefined;
+}
+
 // Отправить сообщение. best-effort: ошибки не пробрасываем наверх, чтобы сбой
 // Telegram не ломал основную операцию (создание заявки, согласование и т.п.).
-// chatId по умолчанию — из окружения; можно передать явный.
-export async function sendTelegram(text, chatId) {
+// chatId по умолчанию — из окружения; threadId — тема супергруппы (topic).
+export async function sendTelegram(text, chatId, threadId) {
   const token = env.TELEGRAM_BOT_TOKEN;
   const chat = chatId || env.TELEGRAM_CHAT_ID;
   if (!token || !chat || !text) return { ok: false, skipped: true };
   try {
+    const payload = {
+      chat_id: chat,
+      text: String(text).slice(0, 4000),
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    };
+    if (threadId) payload.message_thread_id = Number(threadId);
     const res = await fetch(`${API}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chat,
-        text: String(text).slice(0, 4000),
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
@@ -62,6 +74,7 @@ export async function getBotInfo() {
     tokenValid: false,
     unreachable: false, // сетевой сбой (Telegram недоступен), не «неверный токен»
     chats: [],
+    topics: [], // темы супергруппы (message_thread_id + название), если видны
     hint: "",
   };
   // getMe — в отдельном try: сетевой сбой (недоступен Telegram) НЕ равен
@@ -104,6 +117,7 @@ export async function getBotInfo() {
     const up = await upRes.json().catch(() => ({}));
     if (up.ok && Array.isArray(up.result)) {
       const seen = new Map();
+      const topics = new Map();
       for (const u of up.result) {
         const m =
           u.message ||
@@ -124,8 +138,19 @@ export async function getBotInfo() {
             title,
           });
         }
+        // Темы супергруппы: сообщение в теме несёт message_thread_id; имя темы
+        // приходит в служебном forum_topic_created (в этом же или другом апдейте).
+        const msg = u.message || u.edited_message;
+        const tid = msg && msg.message_thread_id;
+        if (tid != null && msg.is_topic_message) {
+          const prev = topics.get(tid) || { id: String(tid), name: "" };
+          const created = msg.forum_topic_created;
+          if (created && created.name) prev.name = created.name;
+          topics.set(tid, prev);
+        }
       }
       result.chats = [...seen.values()];
+      result.topics = [...topics.values()];
       if (!result.chats.length) {
         result.hint =
           "Бот в группе есть, но пока не «увидел» её. В Telegram у ботов включён " +

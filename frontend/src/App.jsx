@@ -12453,6 +12453,55 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
                         "Чатов пока не видно. Напишите боту/в группу и нажмите «Проверить бота»."}
                     </div>
                   )}
+                  {/* Темы супергруппы: раскладываем уведомления по темам */}
+                  <div className="mt-3">
+                    <div style={{ color: C.sub, marginBottom: 4 }}>
+                      Темы группы — чтобы разные уведомления шли в свои темы:
+                    </div>
+                    {tgInfo.topics && tgInfo.topics.length ? (
+                      <div className="space-y-1">
+                        {tgInfo.topics.map((t) => (
+                          <div
+                            key={t.id}
+                            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5"
+                            style={{
+                              background: "#fff",
+                              border: `1px solid ${C.line}`,
+                            }}
+                          >
+                            <span style={{ color: C.ink }}>
+                              {t.name || "Тема"}
+                            </span>
+                            <button
+                              onClick={() => copyText(t.id)}
+                              className="rounded-md px-2 py-1 font-mono shrink-0"
+                              style={{
+                                border: `1px solid ${C.border}`,
+                                color: C.brandA,
+                                fontSize: 12,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {t.id}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: C.faint, fontSize: 12 }}>
+                        Темы пока не видны. Включите темы в группе (Управление
+                        группой → Темы), напишите по одному сообщению в нужную
+                        тему и нажмите «Проверить бота».
+                      </div>
+                    )}
+                    <div style={{ color: C.sub, fontSize: 12, marginTop: 6 }}>
+                      Скопируйте id темы и впишите в переменные окружения на
+                      Render: <b>TELEGRAM_TOPIC_EXPENSES</b>{" "}
+                      (расходы/согласования), <b>TELEGRAM_TOPIC_TASKS</b>{" "}
+                      (задачи), <b>TELEGRAM_TOPIC_CASH</b> (касса). Пусто —
+                      уведомление идёт в общую ленту группы.
+                    </div>
+                  </div>
                 </>
               )}
             </div>
