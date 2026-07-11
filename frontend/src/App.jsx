@@ -5567,6 +5567,14 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
   };
   const live = cashCalc(form);
 
+  // Уведомление в Telegram по кассе/отчётам (best-effort, в свою тему).
+  const tgNotify = (text, kind) =>
+    apiPost("/api/telegram/notify", {
+      text: String(text).slice(0, 1000),
+      kind,
+    }).catch(() => {});
+  const fmtSum = (v) => Number(v || 0).toLocaleString("ru-RU");
+
   const save = () => {
     if (!editable) {
       notify(tr("Редактирование закрыто"));
@@ -5586,10 +5594,23 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
     }
     dispatch({ type: "SAVE_CASH_REPORT", report: { ...form, userId: me.id } });
     notify(tr("Отчёт сдан и ожидает подтверждения"));
+    tgNotify(
+      `Касса сдана: ${branchById(form.branchId)?.name || "—"}, ${form.date} — ` +
+        `${fmtSum((form.fiscal || 0) + (form.nonFiscal || 0))} сум` +
+        (live.diff !== 0 ? ` · расхождение ${fmtSum(live.diff)}` : ""),
+      "cash",
+    );
   };
   const confirmReport = (id) => {
     dispatch({ type: "CONFIRM_CASH_REPORT", id, userId: me.id });
     notify(tr("Отчёт подтверждён"));
+    const rep = (s.cashReports || []).find((r) => r.id === id);
+    if (rep)
+      tgNotify(
+        `Отчёт по кассе подтверждён: ${branchById(rep.branchId)?.name || "—"}, ` +
+          `${rep.date} — ${fmtSum((rep.fiscal || 0) + (rep.nonFiscal || 0))} сум`,
+        "report",
+      );
   };
 
   // ---------- сейф филиала и инкассация ----------
@@ -5655,6 +5676,11 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
     });
     setHo({ amount: 0, via: "", note: "" });
     notify(tr("Передача отправлена — ожидает подтверждения офиса"));
+    tgNotify(
+      `Инкассация: ${branchById(safeBranchId)?.name || "—"} → офис — ` +
+        `${fmtSum(amt)} сум (через ${ho.via.trim()})`,
+      "cash",
+    );
   };
   const confirmHandover = (h) => {
     dispatch({ type: "CONFIRM_HANDOVER", id: h.id, userId: me.id });
@@ -12498,8 +12524,10 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
                       Скопируйте id темы и впишите в переменные окружения на
                       Render: <b>TELEGRAM_TOPIC_EXPENSES</b>{" "}
                       (расходы/согласования), <b>TELEGRAM_TOPIC_TASKS</b>{" "}
-                      (задачи), <b>TELEGRAM_TOPIC_CASH</b> (касса). Пусто —
-                      уведомление идёт в общую ленту группы.
+                      (задачи/заявки), <b>TELEGRAM_TOPIC_CASH</b>{" "}
+                      (касса/инкассация), <b>TELEGRAM_TOPIC_STAFF</b>{" "}
+                      (персонал), <b>TELEGRAM_TOPIC_REPORTS</b> (отчёты/сводки).
+                      Пусто — уведомление идёт в общую ленту группы.
                     </div>
                   </div>
                 </>
