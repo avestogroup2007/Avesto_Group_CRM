@@ -14,7 +14,7 @@ import iikoRoutes from "./routes/iiko.js";
 import taskRoutes from "./routes/tasks.js";
 import moneyRoutes from "./routes/money.js";
 import postingRoutes from "./routes/postings.js";
-import telegramRoutes from "./routes/telegram.js";
+import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -48,6 +48,10 @@ const authLimiter = rateLimit({
 
 // Проверка живости.
 app.get("/api/health", (req, res) => res.json({ ok: true, time: Date.now() }));
+
+// Публичный вебхук Telegram-бота — ДО защищённого роутера /api/telegram,
+// т.к. Telegram вызывает его без токена авторизации (защита — секрет в заголовке).
+app.post("/api/telegram/webhook", telegramWebhook);
 
 // Маршруты.
 app.use("/api/auth/login", authLimiter);

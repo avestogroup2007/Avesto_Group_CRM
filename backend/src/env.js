@@ -50,6 +50,11 @@ const EnvSchema = z.object({
   TELEGRAM_TOPIC_STAFF: z.string().min(1).optional(), // персонал (синхро iiko, доступ)
   TELEGRAM_TOPIC_REPORTS: z.string().min(1).optional(), // отчёты/сводки
   TELEGRAM_TOPIC_CHECKLIST: z.string().min(1).optional(), // чек-листы смены
+  // Интерактивный бот чек-листов (вебхук). Секрет проверяется в заголовке
+  // X-Telegram-Bot-Api-Secret-Token; пусто = вебхук отключён. PUBLIC_BASE_URL —
+  // внешний адрес бэкенда для setWebhook (на Render можно RENDER_EXTERNAL_URL).
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
+  PUBLIC_BASE_URL: z.string().url().optional(),
   // Политика входа: пускаем только сотрудников из iiko (source=iiko, не
   // уволенные). Одна защищённая учётка-администратор пускается всегда — для
   // первичной синхронизации и на случай, если iiko-сервер недоступен. Логин
