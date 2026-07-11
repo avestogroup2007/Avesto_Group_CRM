@@ -12,6 +12,7 @@ import {
   telegramConfigured,
   sendTelegram,
   getBotInfo,
+  topicFor,
   esc,
 } from "../services/telegram.js";
 
@@ -77,7 +78,11 @@ r.post(
       return res.status(400).json({ error: "Нужен непустой text" });
     }
     if (!telegramConfigured()) return res.status(204).end();
-    await sendTelegram(`🔔 ${esc(parsed.data.text)}`);
+    await sendTelegram(
+      `🔔 ${esc(parsed.data.text)}`,
+      undefined,
+      topicFor("task")
+    );
     res.json({ ok: true });
   })
 );

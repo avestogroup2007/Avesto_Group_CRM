@@ -11,7 +11,7 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
-import { sendTelegram, esc } from "../services/telegram.js";
+import { sendTelegram, esc, topicFor } from "../services/telegram.js";
 
 // Сумма для Telegram-сообщений (с разделителями разрядов).
 const fmtMoney = (v) => Number(v).toLocaleString("ru-RU");
@@ -544,7 +544,9 @@ r.post(
             : "") +
           (created.comment ? `${esc(created.comment)}\n` : "") +
           `Филиал: ${esc(created.branchName || "—")}\n` +
-          `Ожидает согласования.`
+          `Ожидает согласования.`,
+        undefined,
+        topicFor("expense")
       );
     }
     res.status(201).json(ser(created));
@@ -573,7 +575,9 @@ r.post(
     });
     sendTelegram(
       `✅ <b>Расход согласован</b>\n` +
-        `${esc(updated.category)} — <b>${fmtMoney(updated.amountUzs)} сум</b>`
+        `${esc(updated.category)} — <b>${fmtMoney(updated.amountUzs)} сум</b>`,
+      undefined,
+      topicFor("expense")
     );
     res.json(ser(updated));
   })
@@ -602,7 +606,9 @@ r.post(
     sendTelegram(
       `❌ <b>Заявка отклонена</b>\n` +
         `${esc(updated.category)} — <b>${fmtMoney(updated.amountUzs)} сум</b>` +
-        (reason ? `\nПричина: ${esc(reason)}` : "")
+        (reason ? `\nПричина: ${esc(reason)}` : ""),
+      undefined,
+      topicFor("expense")
     );
     res.json(ser(updated));
   })

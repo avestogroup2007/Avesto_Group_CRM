@@ -41,6 +41,12 @@ const EnvSchema = z.object({
   // chat_id — id личного чата или группы, куда бот добавлен.
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_CHAT_ID: z.string().min(1).optional(),
+  // Темы (topics) супергруппы: раскладывают разные уведомления по своим темам
+  // одной группы. Id темы (message_thread_id) — не секрет; берётся из помощника
+  // подключения. Пусто = уведомление уходит в общую ленту группы.
+  TELEGRAM_TOPIC_EXPENSES: z.string().min(1).optional(), // расходы/согласования
+  TELEGRAM_TOPIC_TASKS: z.string().min(1).optional(), // задачи/автоматизация
+  TELEGRAM_TOPIC_CASH: z.string().min(1).optional(), // касса/инкассация
   // Политика входа: пускаем только сотрудников из iiko (source=iiko, не
   // уволенные). Одна защищённая учётка-администратор пускается всегда — для
   // первичной синхронизации и на случай, если iiko-сервер недоступен. Логин
