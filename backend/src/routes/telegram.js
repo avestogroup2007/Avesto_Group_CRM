@@ -73,6 +73,7 @@ const TOPIC_KINDS = [
   { kind: "cash", label: "Касса" },
   { kind: "staff", label: "Персонал" },
   { kind: "report", label: "Отчёты" },
+  { kind: "checklist", label: "Чек-лист" },
 ];
 r.post(
   "/test-topics",
@@ -113,7 +114,9 @@ r.post(
 // kind — в какую тему направить (см. topicFor). По умолчанию «task».
 const NotifySchema = z.object({
   text: z.string().min(1).max(1000),
-  kind: z.enum(["task", "cash", "report", "expense", "staff"]).default("task"),
+  kind: z
+    .enum(["task", "cash", "report", "expense", "staff", "checklist"])
+    .default("task"),
 });
 r.post(
   "/notify",

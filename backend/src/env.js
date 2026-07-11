@@ -49,6 +49,7 @@ const EnvSchema = z.object({
   TELEGRAM_TOPIC_CASH: z.string().min(1).optional(), // касса/инкассация
   TELEGRAM_TOPIC_STAFF: z.string().min(1).optional(), // персонал (синхро iiko, доступ)
   TELEGRAM_TOPIC_REPORTS: z.string().min(1).optional(), // отчёты/сводки
+  TELEGRAM_TOPIC_CHECKLIST: z.string().min(1).optional(), // чек-листы смены
   // Политика входа: пускаем только сотрудников из iiko (source=iiko, не
   // уволенные). Одна защищённая учётка-администратор пускается всегда — для
   // первичной синхронизации и на случай, если iiko-сервер недоступен. Логин
