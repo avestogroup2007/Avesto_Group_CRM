@@ -19,6 +19,29 @@ const CATS = [
 
 const money = (v) => Number(v || 0).toLocaleString("ru-RU");
 
+// Себестоимость одного использования стандарта.
+// unit "г": amount — граммовка на торт, price — цена за КГ (из iiko) →
+//   cost = amount/1000 × price. Пример: 100 г × 50 000/кг = 5 000.
+// unit "шт": price — цена за штуку, amount — количество за одно использование.
+// Обратная совместимость: старые стандарты хранили плоское поле cost.
+function stdCost(it) {
+  if (!it) return 0;
+  if (it.unit == null && it.cost != null) return Number(it.cost) || 0;
+  const price = Number(it.price) || 0;
+  const amount = Number(it.amount) || 0;
+  if (it.unit === "г") return (amount / 1000) * price;
+  return (amount || 1) * price;
+}
+// Краткое описание нормы (для карточек).
+function stdDesc(it) {
+  if (!it) return "";
+  if (it.unit === "г")
+    return `${Number(it.amount) || 0} г · ${money(it.price)}/кг`;
+  if (it.unit === "шт")
+    return `${Number(it.amount) || 1} шт · ${money(it.price)}/шт`;
+  return "";
+}
+
 // Конструктор заказных тортов (Этап 1).
 // «Стандарты» — каталог основ/покрытий/украшений, привязанных к позициям iiko
 // (для точной себестоимости и будущего акта приготовления). «Конструктор» —
@@ -40,12 +63,9 @@ export default function CakeConstructor({ s, dispatch, notify }) {
     .filter((d) => d.qty > 0);
 
   const unit = useMemo(() => {
-    const b = Number(base?.cost || 0);
-    const c = Number(coating?.cost || 0);
-    const dec = chosenDecors.reduce(
-      (a, d) => a + Number(d.cost || 0) * d.qty,
-      0,
-    );
+    const b = stdCost(base);
+    const c = stdCost(coating);
+    const dec = chosenDecors.reduce((a, d) => a + stdCost(d) * d.qty, 0);
     return b + c + dec;
   }, [base, coating, chosenDecors]);
   const total = unit * Math.max(1, Number(batch) || 1);
@@ -93,9 +113,12 @@ export default function CakeConstructor({ s, dispatch, notify }) {
       >
         {item.name}
       </div>
+      <div style={{ color: FAINT, fontSize: 10.5, marginTop: 1 }}>
+        {stdDesc(item)}
+      </div>
       <div className="flex items-center justify-between mt-1">
-        <span style={{ color: FAINT, fontSize: 11.5 }}>
-          {money(item.cost)} сум
+        <span style={{ color: BRAND, fontSize: 12, fontWeight: 700 }}>
+          {money(stdCost(item))} сум
         </span>
         {right}
       </div>
@@ -114,8 +137,9 @@ export default function CakeConstructor({ s, dispatch, notify }) {
         style={{ color: SUB, fontSize: 12.5, marginBottom: 12, maxWidth: 720 }}
       >
         Соберите заказной торт из готовых стандартов — основа, крем/покрытие и
-        украшения. Себестоимость считается сразу. Стандарты привязаны к позициям
-        iiko (вкладка «Стандарты»).
+        украшения. Себестоимость считается по граммовке: например, 100 г крема ×
+        50 000/кг = 5 000. Стандарты и цены привязаны к позициям iiko (вкладка
+        «Стандарты»).
       </p>
 
       {/* Вкладки */}
@@ -288,9 +312,14 @@ function BuildTab(props) {
                     >
                       {d.name}
                     </div>
+                    <div style={{ color: FAINT, fontSize: 10.5, marginTop: 1 }}>
+                      {stdDesc(d)}
+                    </div>
                     <div className="flex items-center justify-between mt-1.5">
-                      <span style={{ color: FAINT, fontSize: 11.5 }}>
-                        {money(d.cost)} сум
+                      <span
+                        style={{ color: BRAND, fontSize: 12, fontWeight: 700 }}
+                      >
+                        {money(stdCost(d))} сум
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -343,19 +372,19 @@ function BuildTab(props) {
             <Row
               label="Основа"
               value={base ? base.name : "—"}
-              cost={base?.cost}
+              cost={stdCost(base)}
             />
             <Row
               label="Покрытие"
               value={coating ? coating.name : "—"}
-              cost={coating?.cost}
+              cost={stdCost(coating)}
             />
             {chosenDecors.map((d) => (
               <Row
                 key={d.id}
                 label={`${d.name} ×${d.qty}`}
                 value=""
-                cost={Number(d.cost || 0) * d.qty}
+                cost={stdCost(d) * d.qty}
               />
             ))}
           </div>
@@ -465,7 +494,8 @@ function StandardsTab({ cfg, catList, dispatch, notify }) {
   const [refs, setRefs] = useState({ kind: "idle" }); // idle|loading|ok|error
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("bases");
-  const [draft, setDraft] = useState(null); // {product, name, cost}
+  // draft: { product, name, unit ("г"|"шт"), amount, price }
+  const [draft, setDraft] = useState(null);
 
   const load = async () => {
     setRefs({ kind: "loading" });
@@ -487,16 +517,28 @@ function StandardsTab({ cfg, catList, dispatch, notify }) {
       )
     : products;
 
+  const num = (v) =>
+    Number(
+      String(v)
+        .replace(",", ".")
+        .replace(/[^\d.]/g, ""),
+    ) || 0;
   const addStandard = () => {
     if (!draft) return;
     const item = {
       name: (draft.name || draft.product.name || "").trim(),
-      cost: Number(String(draft.cost).replace(",", ".")) || 0,
+      unit: draft.unit || "г",
+      amount: num(draft.amount),
+      price: num(draft.price),
       iikoId: draft.product.id,
       iikoName: draft.product.name,
-      unit: draft.product.mainUnit || "шт",
     };
     if (!item.name) return notify && notify("Укажите название стандарта");
+    if (!item.amount)
+      return (
+        notify &&
+        notify(item.unit === "г" ? "Укажите вес (г)" : "Укажите количество")
+      );
     dispatch({ type: "CAKE_STD_ADD", cat, item });
     setDraft(null);
     notify && notify("Стандарт добавлен");
@@ -580,7 +622,13 @@ function StandardsTab({ cfg, catList, dispatch, notify }) {
                   </span>
                   <button
                     onClick={() =>
-                      setDraft({ product: p, name: p.name, cost: "" })
+                      setDraft({
+                        product: p,
+                        name: p.name,
+                        unit: "г",
+                        amount: "",
+                        price: "",
+                      })
                     }
                     className="rounded-md px-2 py-1 shrink-0"
                     style={{
@@ -643,17 +691,68 @@ function StandardsTab({ cfg, catList, dispatch, notify }) {
                   placeholder="напр. Бисквит + банановый крем"
                 />
               </div>
-              <div>
-                <label style={{ fontSize: 11.5, color: FAINT }}>
-                  Себестоимость, сум
-                </label>
-                <input
-                  value={draft.cost}
-                  onChange={(e) => setDraft({ ...draft, cost: e.target.value })}
-                  inputMode="decimal"
-                  style={inp}
-                  placeholder="0"
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label style={{ fontSize: 11.5, color: FAINT }}>Норма</label>
+                  <select
+                    value={draft.unit}
+                    onChange={(e) =>
+                      setDraft({ ...draft, unit: e.target.value })
+                    }
+                    style={inp}
+                  >
+                    <option value="г">в граммах</option>
+                    <option value="шт">в штуках</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11.5, color: FAINT }}>
+                    {draft.unit === "г" ? "Вес, г" : "Кол-во, шт"}
+                  </label>
+                  <input
+                    value={draft.amount}
+                    onChange={(e) =>
+                      setDraft({ ...draft, amount: e.target.value })
+                    }
+                    inputMode="decimal"
+                    style={inp}
+                    placeholder={draft.unit === "г" ? "напр. 100" : "напр. 1"}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11.5, color: FAINT }}>
+                    {draft.unit === "г" ? "Цена за кг" : "Цена за шт"}
+                  </label>
+                  <input
+                    value={draft.price}
+                    onChange={(e) =>
+                      setDraft({ ...draft, price: e.target.value })
+                    }
+                    inputMode="decimal"
+                    style={inp}
+                    placeholder="сум"
+                  />
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: SUB }}>
+                Себестоимость:{" "}
+                <b style={{ color: BRAND }}>
+                  {money(
+                    stdCost({
+                      unit: draft.unit,
+                      amount: num(draft.amount),
+                      price: num(draft.price),
+                    }),
+                  )}{" "}
+                  сум
+                </b>
+                {draft.unit === "г" && (
+                  <span style={{ color: FAINT }}>
+                    {" "}
+                    (цену за кг возьмём из iiko автоматически на следующем
+                    этапе)
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex gap-2 mt-3">
@@ -710,19 +809,21 @@ function StandardsTab({ cfg, catList, dispatch, notify }) {
                         className="truncate"
                         style={{ color: FAINT, fontSize: 11 }}
                       >
-                        iiko: {it.iikoName}
+                        {stdDesc(it) ? stdDesc(it) + " · " : ""}
+                        {money(stdCost(it))} сум · iiko: {it.iikoName}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <input
-                        value={it.cost}
+                        value={it.amount != null ? it.amount : ""}
                         onChange={(e) =>
                           dispatch({
                             type: "CAKE_STD_UPD",
                             cat: c.key,
                             id: it.id,
                             patch: {
-                              cost:
+                              unit: it.unit || "г",
+                              amount:
                                 Number(
                                   String(e.target.value)
                                     .replace(/[^\d.,]/g, "")
@@ -732,17 +833,52 @@ function StandardsTab({ cfg, catList, dispatch, notify }) {
                           })
                         }
                         inputMode="decimal"
+                        title={it.unit === "шт" ? "кол-во, шт" : "вес, г"}
                         style={{
-                          width: 84,
+                          width: 56,
                           textAlign: "right",
                           border: `1px solid ${BORDER}`,
                           borderRadius: 8,
-                          padding: "4px 7px",
-                          fontSize: 12.5,
+                          padding: "4px 6px",
+                          fontSize: 12,
                           color: INK,
                         }}
                       />
-                      <span style={{ color: FAINT, fontSize: 11 }}>сум</span>
+                      <span style={{ color: FAINT, fontSize: 11 }}>
+                        {it.unit === "шт" ? "шт" : "г"}
+                      </span>
+                      <input
+                        value={it.price != null ? it.price : ""}
+                        onChange={(e) =>
+                          dispatch({
+                            type: "CAKE_STD_UPD",
+                            cat: c.key,
+                            id: it.id,
+                            patch: {
+                              price:
+                                Number(
+                                  String(e.target.value)
+                                    .replace(/[^\d.,]/g, "")
+                                    .replace(",", "."),
+                                ) || 0,
+                            },
+                          })
+                        }
+                        inputMode="decimal"
+                        title={it.unit === "шт" ? "цена за шт" : "цена за кг"}
+                        style={{
+                          width: 76,
+                          textAlign: "right",
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: 8,
+                          padding: "4px 6px",
+                          fontSize: 12,
+                          color: INK,
+                        }}
+                      />
+                      <span style={{ color: FAINT, fontSize: 10 }}>
+                        {it.unit === "шт" ? "/шт" : "/кг"}
+                      </span>
                       <button
                         onClick={() =>
                           dispatch({
