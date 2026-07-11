@@ -1,0 +1,207 @@
+# Avesto Group CRM System — документация проекта
+
+CRM/BPM-система для сети заведений Avesto Group (Узбекистан):
+«AVESTO CAFE» OK, «AVESTO SWEETS» OK, «INTERNATIONAL CATERING GROUP» MChJ.
+Валюта — сум (UZS), часовой пояс — Asia/Tashkent. Источник правды по кадрам
+и товарам — iiko.
+
+- **Фронтенд (прод):** https://avestogroup2007.github.io/Avesto_Group_CRM/
+- **Бэкенд (прод):** https://avesto-crm-backend.onrender.com
+- **Репозиторий:** https://github.com/avestogroup2007/Avesto_Group_CRM
+
+---
+
+## 1. Технологии
+
+| Слой | Стек |
+|---|---|
+| Фронтенд | React 18 + Vite, Tailwind CSS + inline-стили, Recharts, lucide-react |
+| Бэкенд | Node.js (ES-модули), Express, Prisma ORM, PostgreSQL |
+| Аутентификация | JWT (Bearer + cookie), bcrypt, живой пароль iiko (SSO) |
+| Интеграции | iiko Server API (resto), Telegram Bot API, Claude API (@anthropic-ai/sdk) |
+| Качество | ESLint, Prettier, node:test (интеграционные тесты), GitHub Actions CI |
+| Деплой | Render (web + PostgreSQL, autodeploy из main), GitHub Pages (фронтенд) |
+
+## 2. Структура репозитория
+
+```
+Avesto_Group_CRM/
+├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma        # схема БД (User, Task, CashReport, MoneyTx,
+│   │   │                        #   Posting, ShiftChecklistRun, BotSession…)
+│   │   ├── migrations/          # миграции (применяются migrate deploy)
+│   │   └── seed.js              # сид: только sysadmin
+│   ├── src/
+│   │   ├── index.js             # точка входа (listen, graceful shutdown)
+│   │   ├── app.js               # Express: helmet, CORS, rate-limit, маршруты
+│   │   ├── env.js               # валидация переменных окружения (zod)
+│   │   ├── db.js                # Prisma-клиент
+│   │   ├── logger.js            # pino
+│   │   ├── auth/routes.js       # login (iiko SSO + bcrypt), me, change-password
+│   │   ├── middleware/          # requireAuth (JWT), requireRole
+│   │   ├── routes/
+│   │   │   ├── iiko.js          # прокси iiko: продажи, PnL, кадры, производство
+│   │   │   ├── tasks.js         # задачи/заявки (CRUD, статусы, комментарии)
+│   │   │   ├── money.js         # учёт денег: движения, согласование расходов,
+│   │   │   │                    #   регулярные операции, приходы филиалов
+│   │   │   ├── postings.js      # двойная запись Дт/Кт: план счетов, правила,
+│   │   │   │                    #   автопроводки, ОСВ
+│   │   │   ├── telegram.js      # уведомления, темы, вебхук бота, /test-topics
+│   │   │   └── ai.js            # ИИ-помощник (Claude API): /cake-suggest
+│   │   └── services/
+│   │       ├── iikoServer.js    # клиент iiko: auth/logout, OLAP-отчёты, PnL,
+│   │       │                    #   сотрудники, справочники и акт приготовления,
+│   │       │                    #   verifyIikoCredentials (SSO)
+│   │       ├── iikoSync.js      # синхронизация кадров iiko → User, доступы
+│   │       ├── telegram.js      # sendTelegram (темы/threads), getBotInfo, esc
+│   │       ├── telegramBot.js   # интерактивный бот чек-листов (вебхук):
+│   │       │                    #   вход по логину/паролю, меню часов, фото
+│   │       └── ai.js            # Claude API: подбор состава торта (JSON-схема)
+│   └── test/                    # node:test — auth, tasks, бот (21 тест)
+├── frontend/
+│   └── src/
+│       ├── main.jsx             # AuthGate: /auth/me → Login → ChangePassword → App
+│       ├── App.jsx              # основное приложение (~17k строк): store
+│       │                        #   (useReducer+localStorage), NAV, все разделы
+│       ├── api.js               # клиент API (VITE_API_URL, Bearer-токен)
+│       ├── Login.jsx            # экран входа
+│       ├── ChangePassword.jsx   # обязательная смена пароля при первом входе
+│       ├── IikoPanel.jsx        # аналитика продаж iiko (выручка, оплаты, блюда)
+│       ├── IikoProduction.jsx   # акт приготовления iiko (чтение + проведение)
+│       ├── CakeConstructor.jsx  # конструктор тортов (мастер + стандарты + ИИ)
+│       └── Logo.jsx
+├── render.yaml                  # Blueprint Render: web + PostgreSQL
+└── .github/workflows/           # CI: бэкенд (линт/формат/тесты), фронтенд (сборка)
+```
+
+## 3. Модули системы (разделы приложения)
+
+| Раздел | Что делает |
+|---|---|
+| Входящие / Создать заявку | Задачи и заявки: ручная форма (исполнитель, контролёр, сумма, срок), маршруты согласования, SLA-таймеры, фазы (новая → в работе → на проверке → закрыта), SOP-чек-листы с фото-гейтом |
+| Мои достижения | Личный кабинет сотрудника: данные из iiko, отработанные часы/дни, эффективность, смена пароля |
+| Аналитика | Кабина директора: воронка задач, просрочки, нагрузка |
+| Учёт времени | Смены, табель |
+| Кассы | Кассовые отчёты по 4 филиалам с кассами (Микрорайон, Узбекистанская, Аэропорт, Наврузий Магазин): сверка с iiko, сейф филиала, инкассация в офис с подтверждением |
+| Учёт денег | Движения денег, заявки на расход с согласованием (директор/финансы), регулярные операции (авто-создание по расписанию, идемпотентно), бюджеты филиалов |
+| Проводки | Двойная запись Дт/Кт: план счетов, правила автопроводок из движений денег, оборотно-сальдовая ведомость (Дт = Кт) |
+| Аналитика продаж | Живые данные iiko: выручка по дням/филиалам, типы оплат, топ блюд, часы, официанты, PnL |
+| Производство | Акт приготовления iiko: справочники (блюда с тех.картой, склады), предпросмотр XML, проведение (списание ингредиентов + оприходование) |
+| Чек-листы смены | Почасовой санитарный обход (окно: производство 07–16, рестораны 08–20), пункты с обязательным фото, открытие/закрытие смены, статусы часов |
+| Торты (конструктор) | Пошаговый мастер: основа (фиксируется 🔒) → покрытие → украшения (без ограничений). Себестоимость по граммовке (вес × цена за кг). Стандарты привязаны к позициям iiko. ИИ-помощник подбирает состав по описанию заказа |
+| Отчёты | Сводные отчёты |
+| Автоматизация | Автоправила по задачам; Telegram: тест, темы, помощник подключения, бот чек-листов (вебхук) |
+| Оргструктура | Компании, филиалы, должности |
+| Админ-панель | Сотрудники (учётки из iiko: роль, вход, привязка Telegram), должности, филиалы/бюджеты, отделы, маршруты, SLA, регламенты, система |
+
+## 4. Интеграции
+
+### 4.1 iiko (iikoServer / resto API)
+- Авторизация: `/resto/api/auth?login=..&pass=SHA1(пароль)` → ключ → `logout`.
+- Продажи: OLAP-отчёты (выручка, оплаты, блюда, часы, официанты), PnL.
+- Кадры: сотрудники → синхронизация в User (уволенные блокируются; линейный
+  персонал создаётся неактивным — доступ открывает администратор).
+- Производство: справочники (`products/list`, `corporation/stores`), акт
+  приготовления через `documents/import/productionDocument` (XML), dry-run.
+- SSO: пароль сотрудника проверяется живьём в iiko при входе (с кэшем bcrypt
+  на случай недоступности iiko).
+
+### 4.2 Telegram
+- Один бот, одна операционная супергруппа, уведомления раскладываются по
+  темам (`message_thread_id`): Расходы, Заявки, Касса, Персонал, Отчёты,
+  Чек-лист.
+- Интерактивный бот чек-листов (вебхук `/api/telegram/webhook`, секрет в
+  заголовке): сотрудник входит по логину/паролю из CRM (SSO iiko), выбирает
+  час обхода, отмечает пункты кнопками, присылает фото (обязательно для
+  санитарных пунктов), итог сохраняется в БД и сводкой с фото уходит в тему.
+- Помощник подключения: getMe/getUpdates, поиск chat_id и id тем, «Проверить
+  темы» — тестовое сообщение в каждую настроенную тему.
+
+### 4.3 Claude API (ИИ)
+- Официальный SDK `@anthropic-ai/sdk`, модель `claude-opus-4-8`.
+- `POST /api/ai/cake-suggest`: по описанию заказа подбирает состав торта
+  строго из стандартов (строгий JSON через `output_config.format`).
+- Ключ `ANTHROPIC_API_KEY` — только в окружении сервера.
+- План: помощники в акте приготовления и аналитике.
+
+## 5. API (основные маршруты)
+
+Все под `/api`, авторизация — Bearer JWT (кроме login и вебхука Telegram).
+
+| Маршрут | Метод | Доступ | Назначение |
+|---|---|---|---|
+| /auth/login | POST | все | вход (iiko SSO → bcrypt), выдаёт JWT |
+| /auth/me | GET | токен | текущий пользователь |
+| /auth/change-password | POST | токен | смена своего пароля |
+| /tasks, /tasks/:id, /tasks/:id/comment | CRUD | по ролям | задачи |
+| /money, /money/:id/approve, /reject | POST | офис | движения и согласование |
+| /money/recurring | CRUD | финансы | регулярные операции |
+| /postings/accounts, /rules, /run, /osv | * | финансы | двойная запись |
+| /iiko/sales, /pnl, /risky | GET | офис | отчёты iiko |
+| /iiko/employees, /employees/sync, /employees/db, /employees/:id | * | директор/сисадмин | кадры и доступы |
+| /iiko/production/refs, /production/act | GET/POST | офис | акт приготовления |
+| /telegram/status, /info, /test, /test-topics, /notify | * | офис | уведомления |
+| /telegram/webhook | POST | секрет | вебхук бота (публичный) |
+| /telegram/webhook/setup, /info, DELETE | * | сисадмин | управление вебхуком |
+| /ai/status, /ai/cake-suggest | * | офис | ИИ-помощник |
+
+## 6. База данных (Prisma, PostgreSQL)
+
+Основные модели: `Company`, `Branch`, `User` (кадры из iiko: iikoId, login,
+telegramId, checklistBranch, роли director/finance/manager/accountant/
+sysadmin/staff), `Task`/`TaskHistory`/`Comment`, `CashReport`, `MoneyTx`
+(идемпотентность по refId), `MoneyDict`, `MoneyRecurring`, `LedgerAccount`/
+`PostingRule`/`Posting` (двойная запись), `AuditLog`, `ShiftChecklistRun`
+(чек-листы из бота), `BotSession` (диалог бота).
+
+Деньги хранятся в BigInt (сумы), сериализация через строку.
+
+## 7. Переменные окружения (Render)
+
+| Переменная | Назначение |
+|---|---|
+| DATABASE_URL | PostgreSQL (Render) |
+| JWT_SECRET | подпись JWT (≥32 символов) |
+| FRONTEND_URL, COOKIE_SAMESITE=none, COOKIE_SECURE=true | кросс-домен GH Pages ↔ Render |
+| IIKO_SERVER_URL / IIKO_SERVER_LOGIN / IIKO_SERVER_PASSWORD | доступ к iiko |
+| TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID | бот и общая группа |
+| TELEGRAM_TOPIC_EXPENSES / _TASKS / _CASH / _STAFF / _REPORTS / _CHECKLIST | id тем группы |
+| TELEGRAM_WEBHOOK_SECRET, PUBLIC_BASE_URL | вебхук бота чек-листов |
+| ANTHROPIC_API_KEY | ИИ-помощник (Claude API) |
+| BOOTSTRAP_ADMIN_LOGIN | защищённая учётка (по умолчанию sysadmin) |
+| TZ=Asia/Tashkent | часовой пояс |
+
+Все секреты задаются только в окружении хостинга и никогда не попадают в код
+или клиент.
+
+## 8. Аутентификация и доступы
+
+- Вход только для сотрудников из iiko (source=iiko, не уволен) + bootstrap-
+  админ; grace-режим до первой синхронизации.
+- Пароль проверяется живьём в iiko (SSO) с локальным bcrypt-кэшем.
+- Первый вход — обязательная смена временного пароля (табельный номер).
+- Линейный персонал (официанты, охрана и т.п.) создаётся без доступа к CRM;
+  доступ конкретному человеку открывает администратор.
+- Telegram-бот: самостоятельная привязка по логину/паролю (сообщение с
+  паролем бот удаляет из чата), один Telegram — один сотрудник.
+
+## 9. Процессы разработки
+
+- Ветка разработки: `claude/new-session-2bbxx0` → PR → CI (бэкенд: линт,
+  формат, тесты; фронтенд: сборка) → squash-merge в `main` → автодеплой
+  Render + GitHub Pages.
+- Тесты: node:test, интеграционные (auth, tasks, telegram-бот) — общая
+  тестовая БД, тесты создают своих пользователей.
+- Стиль: Prettier + ESLint, комментарии на русском.
+
+## 10. Дорожная карта (ближайшее)
+
+1. **Конструктор тортов — автоматика документов**: группы iiko как источник
+   стандартов, автоцена за кг из iiko, при завершении сборки — автогенерация
+   актов приготовления и внутренних перемещений по описанным правилам
+   (фазовое движение товаров по складам).
+2. Хранение чек-листов и стандартов на сервере (общие для всех устройств).
+3. Расширение ИИ-помощника: акт приготовления, аналитика, конструктор в
+   Telegram-боте.
+4. Напоминания сотрудникам по часам обхода в боте.
