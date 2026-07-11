@@ -60,24 +60,32 @@ export async function getBotInfo() {
     currentChatId: env.TELEGRAM_CHAT_ID || "",
     bot: null,
     tokenValid: false,
+    unreachable: false, // сетевой сбой (Telegram недоступен), не «неверный токен»
     chats: [],
     hint: "",
   };
+  // getMe — в отдельном try: сетевой сбой (недоступен Telegram) НЕ равен
+  // «неверный токен», иначе оператор зря пойдёт перевыпускать рабочий токен.
+  let me;
   try {
     const meRes = await fetch(`${API}/bot${token}/getMe`);
-    const me = await meRes.json().catch(() => ({}));
-    if (me.ok && me.result) {
-      result.tokenValid = true;
-      result.bot = {
-        id: me.result.id,
-        username: me.result.username || "",
-        name: me.result.first_name || "",
-      };
-    } else {
+    me = await meRes.json().catch(() => ({}));
+    if (!me.ok || !me.result) {
       result.hint = me.description || `getMe HTTP ${meRes.status}`;
       return result;
     }
-
+  } catch (e) {
+    result.unreachable = true;
+    result.hint = e.message || "Не удалось связаться с Telegram";
+    return result;
+  }
+  result.tokenValid = true;
+  result.bot = {
+    id: me.result.id,
+    username: me.result.username || "",
+    name: me.result.first_name || "",
+  };
+  try {
     const upRes = await fetch(
       `${API}/bot${token}/getUpdates?limit=30&timeout=0`
     );

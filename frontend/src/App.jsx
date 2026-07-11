@@ -12111,11 +12111,17 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
     }
   };
   const copyText = (t) => {
-    try {
-      navigator.clipboard?.writeText(String(t));
-      setTgMsg(`Скопировано: ${t}`);
-    } catch {
-      setTgMsg(String(t));
+    const s = String(t);
+    // «Скопировано» показываем только при реальном успехе. Если Clipboard API
+    // недоступен (не-HTTPS, webview) или запись отклонена — показываем id для
+    // ручного копирования, а не ложный успех.
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(s).then(
+        () => setTgMsg(`Скопировано: ${s}`),
+        () => setTgMsg(`Скопируйте вручную: ${s}`),
+      );
+    } else {
+      setTgMsg(`Скопируйте вручную: ${s}`);
     }
   };
 
@@ -12286,6 +12292,12 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
               {!tgInfo.tokenSet ? (
                 <div style={{ color: C.bad }}>
                   TELEGRAM_BOT_TOKEN не задан в окружении сервера (Render).
+                </div>
+              ) : tgInfo.unreachable ? (
+                <div style={{ color: C.bad }}>
+                  Не удалось связаться с Telegram: {tgInfo.hint}. Проверьте
+                  связь на сервере и попробуйте ещё раз (токен мог остаться
+                  рабочим).
                 </div>
               ) : !tgInfo.tokenValid ? (
                 <div style={{ color: C.bad }}>
