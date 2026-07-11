@@ -19,6 +19,8 @@ export function topicFor(kind) {
   if (kind === "expense") return env.TELEGRAM_TOPIC_EXPENSES || undefined;
   if (kind === "task") return env.TELEGRAM_TOPIC_TASKS || undefined;
   if (kind === "cash") return env.TELEGRAM_TOPIC_CASH || undefined;
+  if (kind === "staff") return env.TELEGRAM_TOPIC_STAFF || undefined;
+  if (kind === "report") return env.TELEGRAM_TOPIC_REPORTS || undefined;
   return undefined;
 }
 

@@ -66,8 +66,10 @@ r.post(
 
 // Переслать уведомление в чат (вызывает автоматизация на фронте). Текст
 // формирует клиент, но обрезаем и экранируем. best-effort: не настроен → 204.
+// kind — в какую тему направить (см. topicFor). По умолчанию «task».
 const NotifySchema = z.object({
   text: z.string().min(1).max(1000),
+  kind: z.enum(["task", "cash", "report", "expense", "staff"]).default("task"),
 });
 r.post(
   "/notify",
@@ -81,7 +83,7 @@ r.post(
     await sendTelegram(
       `🔔 ${esc(parsed.data.text)}`,
       undefined,
-      topicFor("task")
+      topicFor(parsed.data.kind)
     );
     res.json({ ok: true });
   })

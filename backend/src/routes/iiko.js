@@ -20,6 +20,7 @@ import {
   listDbEmployees,
   updateEmployeeAccess,
 } from "../services/iikoSync.js";
+import { sendTelegram, topicFor, esc } from "../services/telegram.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -170,7 +171,16 @@ r.post(
   "/employees/sync",
   requireRole("director", "sysadmin"),
   handleIiko(async (req, res) => {
-    res.json(await syncEmployeesToDb());
+    const result = await syncEmployeesToDb();
+    // Персонал: сводка синхронизации в свою тему (best-effort).
+    sendTelegram(
+      `👥 <b>Синхронизация с iiko</b>\n` +
+        `Всего: ${result.total} · новых: ${result.created} · ` +
+        `обновлено: ${result.updated} · заблокировано: ${result.blocked}`,
+      undefined,
+      topicFor("staff")
+    );
+    res.json(result);
   })
 );
 
@@ -190,7 +200,20 @@ r.patch(
   asyncHandler(async (req, res) => {
     const { role, active } = req.body || {};
     try {
-      res.json(await updateEmployeeAccess(req.params.id, { role, active }));
+      const updated = await updateEmployeeAccess(req.params.id, {
+        role,
+        active,
+      });
+      // Персонал: изменение доступа сотрудника в свою тему (best-effort).
+      sendTelegram(
+        `👤 <b>Доступ сотрудника изменён</b>\n` +
+          `${esc(updated.displayName || updated.login || "—")} — ` +
+          `роль: ${esc(updated.role)}, ` +
+          `${updated.active ? "активен ✅" : "заблокирован ⛔"}`,
+        undefined,
+        topicFor("staff")
+      );
+      res.json(updated);
     } catch (e) {
       res.status(400).json({ error: e.message || "Не удалось обновить" });
     }
