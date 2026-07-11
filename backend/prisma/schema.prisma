@@ -55,6 +55,14 @@ model User {
   hireDate           String? // дата найма из iiko
   fireDate           String? // дата увольнения из iiko
 
+  // ── Телеграм-бот чек-листов (для линейного персонала, напр. уборщиц) ─
+  // HR привязывает Telegram сотрудника к филиалу заранее; бот в личке ведёт
+  // сотрудника по чек-листам. telegramId — числовой id пользователя Telegram.
+  // checklistBranch — id филиала из конфигурации фронтенда (строкой, без FK на
+  // таблицу Branch, т.к. филиалы заданы в приложении числовыми id 1..6).
+  telegramId      String? @unique
+  checklistBranch String?
+
   createdTasks Task[]     @relation("creator")
   auditLogs    AuditLog[]
 
@@ -301,4 +309,30 @@ model AuditLog {
 
   @@index([userId])
   @@index([event])
+}
+
+// Сданный через бота (или приложение) чек-лист смены. Хранит отметки и
+// ссылки на фото (file_id Telegram) для санитарного обхода и открытия/закрытия.
+model ShiftChecklistRun {
+  id        String   @id @default(cuid())
+  branchId  String? // филиал (id из конфигурации, строкой)
+  kind      String // sanitary | open | close
+  date      String // YYYY-MM-DD (Asia/Tashkent)
+  slot      String? // "09:00" для почасового обхода, null для разовых
+  items     Json // [{ text, needPhoto, done, photoFileId }]
+  pct       Int      @default(0)
+  userId    String? // кто сдал (User.id), если известен
+  via       String   @default("bot") // bot | app
+  createdAt DateTime @default(now())
+
+  @@index([branchId, date])
+  @@index([kind, date])
+}
+
+// Состояние диалога бота с пользователем (черновик заполняемого чек-листа).
+// Ключ — telegramId. Обновляется на каждом шаге, очищается после сдачи.
+model BotSession {
+  telegramId String   @id
+  state      Json // { kind, slot, branchId, items:[...], awaitingPhoto }
+  updatedAt  DateTime @updatedAt
 }

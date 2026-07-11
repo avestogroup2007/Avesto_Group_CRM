@@ -198,11 +198,13 @@ r.patch(
   "/employees/:id",
   requireRole("director", "sysadmin"),
   asyncHandler(async (req, res) => {
-    const { role, active } = req.body || {};
+    const { role, active, telegramId, checklistBranch } = req.body || {};
     try {
       const updated = await updateEmployeeAccess(req.params.id, {
         role,
         active,
+        telegramId,
+        checklistBranch,
       });
       // Персонал: изменение доступа сотрудника в свою тему (best-effort).
       sendTelegram(

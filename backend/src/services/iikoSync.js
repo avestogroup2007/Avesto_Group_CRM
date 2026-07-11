@@ -104,9 +104,28 @@ const ALLOWED_ROLES = [
   "staff",
 ];
 
-// Настройка прав синхронизированного сотрудника: роль и/или активность.
-// Разрешено менять только записи из iiko (source=iiko) — демо/ручные не трогаем.
-export async function updateEmployeeAccess(id, { role, active }) {
+// Поля учётной записи сотрудника, отдаваемые на экран управления кадрами.
+const EMP_SELECT = {
+  id: true,
+  displayName: true,
+  login: true,
+  position: true,
+  iikoDepartment: true,
+  role: true,
+  active: true,
+  iikoDeleted: true,
+  mustChangePassword: true,
+  telegramId: true,
+  checklistBranch: true,
+};
+
+// Настройка прав синхронизированного сотрудника: роль, активность и привязка к
+// Telegram-боту чек-листов (telegramId + филиал). Разрешено менять только записи
+// из iiko (source=iiko) — демо/ручные не трогаем.
+export async function updateEmployeeAccess(
+  id,
+  { role, active, telegramId, checklistBranch }
+) {
   const existing = await db.user.findUnique({ where: { id } });
   if (!existing || existing.source !== "iiko") {
     throw new Error("Сотрудник из iiko не найден");
@@ -117,38 +136,36 @@ export async function updateEmployeeAccess(id, { role, active }) {
     data.role = role;
   }
   if (active !== undefined) data.active = Boolean(active);
-  return db.user.update({
-    where: { id },
-    data,
-    select: {
-      id: true,
-      displayName: true,
-      login: true,
-      position: true,
-      iikoDepartment: true,
-      role: true,
-      active: true,
-      iikoDeleted: true,
-      mustChangePassword: true,
-    },
-  });
+  if (telegramId !== undefined) {
+    const tid = String(telegramId || "").trim();
+    if (tid && !/^\d{3,15}$/.test(tid)) {
+      throw new Error("Telegram ID — только цифры");
+    }
+    data.telegramId = tid || null;
+  }
+  if (checklistBranch !== undefined) {
+    const b = String(checklistBranch || "").trim();
+    data.checklistBranch = b || null;
+  }
+  try {
+    return await db.user.update({
+      where: { id },
+      data,
+      select: EMP_SELECT,
+    });
+  } catch (e) {
+    // Уникальность telegramId: один Telegram — один сотрудник.
+    if (e.code === "P2002")
+      throw new Error("Этот Telegram уже привязан к другому сотруднику");
+    throw e;
+  }
 }
 
 // Список синхронизированных из iiko сотрудников (для экрана управления).
 export async function listDbEmployees() {
   return db.user.findMany({
     where: { source: "iiko" },
-    select: {
-      id: true,
-      displayName: true,
-      login: true,
-      position: true,
-      iikoDepartment: true,
-      role: true,
-      active: true,
-      iikoDeleted: true,
-      mustChangePassword: true,
-    },
+    select: EMP_SELECT,
     orderBy: { displayName: "asc" },
   });
 }

@@ -15,6 +15,15 @@ import {
   topicFor,
   esc,
 } from "../services/telegram.js";
+import {
+  handleUpdate,
+  setWebhook,
+  deleteWebhook,
+  webhookInfo,
+  botConfigured,
+} from "../services/telegramBot.js";
+import { env } from "../env.js";
+import { log } from "../logger.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -133,6 +142,74 @@ r.post(
       topicFor(parsed.data.kind)
     );
     res.json({ ok: true });
+  })
+);
+
+// ── Интерактивный бот чек-листов ────────────────────────────────────────────
+
+// Публичный вебхук Telegram (без requireAuth). Защищён секретом в заголовке
+// X-Telegram-Bot-Api-Secret-Token. Отвечаем 200 всегда, чтобы Telegram не
+// повторял доставку; обработку ведём best-effort. Монтируется в app.js ДО
+// защищённого роутера /api/telegram.
+export async function telegramWebhook(req, res) {
+  const secret = env.TELEGRAM_WEBHOOK_SECRET;
+  if (!secret) return res.status(404).end(); // бот не включён
+  const got = req.get("x-telegram-bot-api-secret-token");
+  if (got !== secret) return res.status(401).end();
+  res.json({ ok: true }); // отвечаем сразу
+  try {
+    await handleUpdate(req.body || {});
+  } catch (e) {
+    log.warn({ err: e.message }, "telegram webhook handler");
+  }
+}
+
+// Управление вебхуком (только сисадмин). URL берём из PUBLIC_BASE_URL или
+// RENDER_EXTERNAL_URL. Секрет — TELEGRAM_WEBHOOK_SECRET.
+r.post(
+  "/webhook/setup",
+  requireRole("sysadmin", "director"),
+  asyncHandler(async (req, res) => {
+    if (!botConfigured())
+      return res.status(503).json({ error: "Нет TELEGRAM_BOT_TOKEN" });
+    if (!env.TELEGRAM_WEBHOOK_SECRET)
+      return res
+        .status(503)
+        .json({ error: "Задайте TELEGRAM_WEBHOOK_SECRET в окружении" });
+    const base = env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL;
+    if (!base)
+      return res.status(400).json({
+        error: "Не задан внешний адрес (PUBLIC_BASE_URL / RENDER_EXTERNAL_URL)",
+      });
+    const url = `${base.replace(/\/$/, "")}/api/telegram/webhook`;
+    const out = await setWebhook(url, env.TELEGRAM_WEBHOOK_SECRET);
+    if (!out.ok)
+      return res
+        .status(502)
+        .json({ error: out.description || "setWebhook не удался" });
+    res.json({ ok: true, url });
+  })
+);
+r.get(
+  "/webhook/info",
+  requireRole("sysadmin", "director"),
+  asyncHandler(async (req, res) => {
+    const info = await webhookInfo();
+    const r2 = info.result || {};
+    res.json({
+      ok: !!info.ok,
+      url: r2.url || "",
+      pending: r2.pending_update_count || 0,
+      lastError: r2.last_error_message || "",
+    });
+  })
+);
+r.delete(
+  "/webhook",
+  requireRole("sysadmin", "director"),
+  asyncHandler(async (req, res) => {
+    const out = await deleteWebhook();
+    res.json({ ok: !!out.ok });
   })
 );
 

@@ -12744,6 +12744,38 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
       setTgBusy(false);
     }
   };
+  // Бот чек-листов: включение вебхука и статус.
+  const [hookMsg, setHookMsg] = useState("");
+  const [hookBusy, setHookBusy] = useState(false);
+  const setupHook = async () => {
+    setHookBusy(true);
+    setHookMsg("");
+    try {
+      const r = await apiPost("/api/telegram/webhook/setup", {});
+      setHookMsg(`Бот включён. Вебхук: ${r.url || "установлен"}`);
+    } catch (e) {
+      setHookMsg(e.message || "Не удалось включить бота");
+    } finally {
+      setHookBusy(false);
+    }
+  };
+  const hookStatus = async () => {
+    setHookBusy(true);
+    setHookMsg("");
+    try {
+      const r = await apiGet("/api/telegram/webhook/info");
+      setHookMsg(
+        r.url
+          ? `Вебхук активен: ${r.url}. В очереди: ${r.pending}.` +
+              (r.lastError ? ` Последняя ошибка: ${r.lastError}` : "")
+          : "Вебхук не установлен — нажмите «Включить бота».",
+      );
+    } catch (e) {
+      setHookMsg(e.message || "Не удалось получить статус");
+    } finally {
+      setHookBusy(false);
+    }
+  };
   const copyText = (t) => {
     const s = String(t);
     // «Скопировано» показываем только при реальном успехе. Если Clipboard API
@@ -12901,6 +12933,58 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
             {tgMsg}
           </div>
         )}
+
+        {/* Бот чек-листов: включение вебхука (интерактивный бот для персонала) */}
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{ background: "#FCFAF7", border: `1px solid ${C.line}` }}
+        >
+          <div
+            className="font-bold mb-1"
+            style={{ color: C.ink, fontSize: 13.5 }}
+          >
+            Бот чек-листов для персонала
+          </div>
+          <p style={{ color: C.sub, fontSize: 12, marginBottom: 8 }}>
+            Уборщицы и линейный персонал проходят чек-листы прямо в личном чате
+            с ботом. Нужны переменные окружения <b>TELEGRAM_WEBHOOK_SECRET</b> и{" "}
+            <b>PUBLIC_BASE_URL</b> (адрес бэкенда). Привязка сотрудника к
+            филиалу — в разделе «Учётные записи из iiko».
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={setupHook}
+              disabled={hookBusy}
+              className="rounded-lg px-3 py-2 font-bold text-white"
+              style={{
+                background: C.brandA,
+                fontSize: 13,
+                opacity: hookBusy ? 0.7 : 1,
+              }}
+            >
+              Включить бота
+            </button>
+            <button
+              onClick={hookStatus}
+              disabled={hookBusy}
+              className="rounded-lg px-3 py-2 font-bold"
+              style={{
+                background: "#fff",
+                border: `1px solid ${C.border}`,
+                color: C.brandA,
+                fontSize: 13,
+                opacity: hookBusy ? 0.7 : 1,
+              }}
+            >
+              Статус
+            </button>
+          </div>
+          {hookMsg && (
+            <div style={{ fontSize: 12.5, color: C.sub, marginTop: 8 }}>
+              {hookMsg}
+            </div>
+          )}
+        </div>
 
         {/* Помощник подключения: найти chat_id общего операционного чата */}
         <div
@@ -14858,6 +14942,38 @@ function IikoStaffPreview() {
   );
 }
 
+// Привязка сотрудника к Telegram-боту чек-листов: Telegram ID + филиал.
+// HR задаёт заранее; после этого бот в личке пускает сотрудника к чек-листам.
+function TgLinkCell({ u, patch }) {
+  const [tid, setTid] = useState(u.telegramId || "");
+  const branchOpts = [
+    { value: "", label: "— филиал —" },
+    ...BRANCHES.map((b) => ({ value: String(b.id), label: b.name })),
+  ];
+  const saveTid = () => {
+    const v = tid.trim();
+    if (v !== (u.telegramId || "")) patch(u.id, { telegramId: v });
+  };
+  return (
+    <div className="flex flex-col gap-1" style={{ minWidth: 170 }}>
+      <input
+        value={tid}
+        onChange={(e) => setTid(e.target.value.replace(/[^\d]/g, ""))}
+        onBlur={saveTid}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        placeholder="Telegram ID"
+        className="rounded-lg px-2 py-1"
+        style={{ border: `1px solid ${C.line}`, fontSize: 12.5, color: C.ink }}
+      />
+      <Select
+        value={u.checklistBranch || ""}
+        onChange={(v) => patch(u.id, { checklistBranch: v })}
+        options={branchOpts}
+      />
+    </div>
+  );
+}
+
 // Управление учётными записями сотрудников из iiko (права доступа): роль и
 // доступ ко входу. Уволенные в iiko заблокированы автоматически.
 function IikoStaffAccounts() {
@@ -14929,6 +15045,7 @@ function IikoStaffAccounts() {
                     <th className="pb-2 font-semibold">Должность</th>
                     <th className="pb-2 font-semibold">Филиал</th>
                     <th className="pb-2 font-semibold">Роль (доступ)</th>
+                    <th className="pb-2 font-semibold">Бот чек-листов</th>
                     <th className="pb-2 font-semibold text-center">Вход</th>
                   </tr>
                 </thead>
@@ -14965,6 +15082,9 @@ function IikoStaffAccounts() {
                           onChange={(v) => patch(u.id, { role: v })}
                           options={roleOpts}
                         />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <TgLinkCell u={u} patch={patch} />
                       </td>
                       <td className="py-2 text-center">
                         {u.iikoDeleted ? (
