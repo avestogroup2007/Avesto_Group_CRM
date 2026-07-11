@@ -64,6 +64,50 @@ r.post(
   })
 );
 
+// Проверить темы: шлём по проверочному сообщению в каждую НАСТРОЕННУЮ тему
+// (у которой задан TELEGRAM_TOPIC_*). Оператор сразу видит, что раскладка по
+// темам работает и id указаны верно. Незаданные темы помечаем «пропущено».
+const TOPIC_KINDS = [
+  { kind: "expense", label: "Расходы" },
+  { kind: "task", label: "Заявки" },
+  { kind: "cash", label: "Касса" },
+  { kind: "staff", label: "Персонал" },
+  { kind: "report", label: "Отчёты" },
+];
+r.post(
+  "/test-topics",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  asyncHandler(async (req, res) => {
+    if (!telegramConfigured()) {
+      return res.status(503).json({
+        error: "Telegram не настроен (нет TELEGRAM_BOT_TOKEN/CHAT_ID)",
+        configured: false,
+      });
+    }
+    const results = [];
+    for (const t of TOPIC_KINDS) {
+      const thread = topicFor(t.kind);
+      if (!thread) {
+        results.push({ kind: t.kind, label: t.label, skipped: true });
+        continue;
+      }
+      const out = await sendTelegram(
+        `✅ <b>${esc(t.label)}</b> — тема подключена. Проверочное сообщение CRM.`,
+        undefined,
+        thread
+      );
+      results.push({
+        kind: t.kind,
+        label: t.label,
+        id: String(thread),
+        ok: out.ok,
+        error: out.ok ? undefined : out.error,
+      });
+    }
+    res.json({ ok: true, results });
+  })
+);
+
 // Переслать уведомление в чат (вызывает автоматизация на фронте). Текст
 // формирует клиент, но обрезаем и экранируем. best-effort: не настроен → 204.
 // kind — в какую тему направить (см. topicFor). По умолчанию «task».
