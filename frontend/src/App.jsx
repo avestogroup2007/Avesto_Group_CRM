@@ -57,9 +57,11 @@ import {
   Pencil,
   Check,
   GripVertical,
+  Cake,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
+import CakeConstructor from "./CakeConstructor.jsx";
 import IikoProduction from "./IikoProduction.jsx";
 import { apiGet, apiPost, apiPatch, apiDelete, changePassword } from "./api.js";
 
@@ -1393,6 +1395,7 @@ function makeSeed() {
     cashReports: [],
     cashHandovers: [],
     shiftChecklists: [],
+    cakeConfig: { bases: [], coatings: [], decors: [] },
     currentUserId: null,
     companies: COMPANIES.map((c) => ({ ...c })),
     branches: BRANCHES.map((b) => ({ ...b })),
@@ -1987,6 +1990,39 @@ function reducer(s, a) {
       const next =
         idx >= 0 ? list.map((r, i) => (i === idx ? rec : r)) : [rec, ...list];
       return { ...s, shiftChecklists: next };
+    }
+    case "CAKE_STD_ADD": {
+      const cfg = s.cakeConfig || { bases: [], coatings: [], decors: [] };
+      const listc = cfg[a.cat] || [];
+      return {
+        ...s,
+        cakeConfig: {
+          ...cfg,
+          [a.cat]: [...listc, { ...a.item, id: uid() }],
+        },
+      };
+    }
+    case "CAKE_STD_UPD": {
+      const cfg = s.cakeConfig || { bases: [], coatings: [], decors: [] };
+      return {
+        ...s,
+        cakeConfig: {
+          ...cfg,
+          [a.cat]: (cfg[a.cat] || []).map((x) =>
+            x.id === a.id ? { ...x, ...a.patch } : x,
+          ),
+        },
+      };
+    }
+    case "CAKE_STD_DEL": {
+      const cfg = s.cakeConfig || { bases: [], coatings: [], decors: [] };
+      return {
+        ...s,
+        cakeConfig: {
+          ...cfg,
+          [a.cat]: (cfg[a.cat] || []).filter((x) => x.id !== a.id),
+        },
+      };
     }
     case "CONFIRM_HANDOVER":
       return {
@@ -12627,6 +12663,12 @@ const NAV = [
   },
   { key: "checklists", label: "Чек-листы смены", icon: Check, roles: "all" },
   {
+    key: "cakes",
+    label: "Торты (конструктор)",
+    icon: Cake,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
     key: "reports",
     label: "Отчёты",
     icon: FileText,
@@ -12656,6 +12698,7 @@ const VIEW_TITLE = {
   sales: "Аналитика продаж",
   production: "Производство · Акт приготовления",
   checklists: "Чек-листы смены",
+  cakes: "Конструктор тортов",
   reports: "Отчёты",
   org: "Оргструктура и филиалы",
   about: "О системе",
@@ -14148,6 +14191,7 @@ export default function App({ authUser, onLogout }) {
       cashReports: s.cashReports,
       cashHandovers: s.cashHandovers,
       shiftChecklists: s.shiftChecklists,
+      cakeConfig: s.cakeConfig,
       currentUserId: s.currentUserId,
       companies: s.companies,
       branches: s.branches,
@@ -14174,6 +14218,7 @@ export default function App({ authUser, onLogout }) {
     s.cashReports,
     s.cashHandovers,
     s.shiftChecklists,
+    s.cakeConfig,
     s.currentUserId,
     s.companies,
     s.branches,
@@ -14519,6 +14564,13 @@ export default function App({ authUser, onLogout }) {
                 branchScope={branchScope}
               />
             )}
+            {s.view === "cakes" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "cakes").roles },
+                me.role,
+              ) && (
+                <CakeConstructor s={s} dispatch={dispatch} notify={notify} />
+              )}
             {s.view === "money" &&
               navAllowed(
                 { roles: NAV.find((n) => n.key === "money").roles },
