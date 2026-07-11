@@ -86,8 +86,20 @@ export async function getBotInfo() {
     name: me.result.first_name || "",
   };
   try {
+    // allowed_updates явно включает my_chat_member/chat_member — событие
+    // добавления/повышения бота в группе приходит боту даже при privacy mode и
+    // сразу даёт chat_id группы (обычные сообщения группы privacy mode прячет).
+    const allowed = encodeURIComponent(
+      JSON.stringify([
+        "message",
+        "edited_message",
+        "channel_post",
+        "my_chat_member",
+        "chat_member",
+      ])
+    );
     const upRes = await fetch(
-      `${API}/bot${token}/getUpdates?limit=30&timeout=0`
+      `${API}/bot${token}/getUpdates?limit=50&timeout=0&allowed_updates=${allowed}`
     );
     const up = await upRes.json().catch(() => ({}));
     if (up.ok && Array.isArray(up.result)) {
