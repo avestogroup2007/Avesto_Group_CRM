@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useReducer } from "react";
+import { createPortal } from "react-dom";
 import {
   BarChart,
   Bar,
@@ -11000,9 +11001,6 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
       {/* проверка подключения iiko */}
       <IikoPanel />
 
-      {/* акт приготовления — чтение справочников iiko (блюда/склады) */}
-      <IikoProduction />
-
       {/* период + филиал */}
       <div
         className="rounded-2xl bg-white p-3.5"
@@ -12076,6 +12074,12 @@ const NAV = [
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
   {
+    key: "production",
+    label: "Производство",
+    icon: ListChecks,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
     key: "reports",
     label: "Отчёты",
     icon: FileText,
@@ -12103,6 +12107,7 @@ const VIEW_TITLE = {
   cash: "Кассы филиалов",
   money: "Учёт и контроль денег",
   sales: "Аналитика продаж",
+  production: "Производство · Акт приготовления",
   reports: "Отчёты",
   org: "Оргструктура и филиалы",
   about: "О системе",
@@ -12832,6 +12837,7 @@ const NAV_SHORT = {
   cash: "Кассы",
   money: "Деньги",
   sales: "Продажи",
+  production: "Произв.",
   org: "Структура",
   about: "О системе",
   admin: "Админка",
@@ -13009,7 +13015,9 @@ function PasswordModal({ onClose }) {
     width: "100%",
     fontSize: 14,
   };
-  return (
+  // Портал в body: иначе position:fixed привязывается к шапке с backdrop-filter
+  // (та создаёт containing block) и модалка съезжает в угол вместо центра.
+  return createPortal(
     <div
       onClick={onClose}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -13100,7 +13108,8 @@ function PasswordModal({ onClose }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -13789,6 +13798,11 @@ export default function App({ authUser, onLogout }) {
                   mode="analytics"
                 />
               )}
+            {s.view === "production" &&
+              navAllowed(
+                { roles: NAV.find((n) => n.key === "production").roles },
+                me.role,
+              ) && <IikoProduction />}
             {s.view === "reports" &&
               navAllowed(
                 { roles: NAV.find((n) => n.key === "reports").roles },
