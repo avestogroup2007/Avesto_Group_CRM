@@ -4029,7 +4029,8 @@ function Analytics({ tasks, history, now, filters, dispatch, role, notify }) {
 }
 
 /* ----------------- личная аналитика «Мои достижения» ----------------------- */
-function PersonalAchievements({ me, tasks, history, shift, now }) {
+function PersonalAchievements({ me, tasks, history, shift, now, timesheet }) {
+  const [pwOpen, setPwOpen] = useState(false);
   const enter = useMemo(() => getEnter(history), [history]);
   const own = tasks.filter((t) => t.executorId === me.id);
   const closed = own.filter((t) => t.phase >= 5).length;
@@ -4070,52 +4071,39 @@ function PersonalAchievements({ me, tasks, history, shift, now }) {
     { name: "Норматив", value: normMin },
   ];
 
-  if (total === 0) {
-    return (
-      <div
-        className="rounded-2xl bg-white p-6"
-        style={{ border: `1px solid ${C.border}` }}
-      >
-        <div className="flex items-center gap-3 mb-2">
-          <Avatar id={me.id} size={48} />
-          <div>
-            <div
-              className="font-extrabold"
-              style={{ color: C.ink, fontSize: 19 }}
-            >
-              {me.name}
-            </div>
-            <div style={{ color: C.sub, fontSize: 14 }}>{me.pos}</div>
-          </div>
-        </div>
-        <p style={{ color: C.sub, fontSize: 14 }}>
-          Личная аналитика собирается по задачам, где вы — исполнитель. Войдите
-          как исполнитель (например, «Петров А. И.» или «Зайцев К. В.») через
-          меню профиля, чтобы увидеть экран достижений.
-        </p>
+  // ── Уголок сотрудника: личные данные + отработанное время ──
+  const myTs = (timesheet || []).filter((t) => t.userId === me.id);
+  const workedMs = myTs.reduce((a, t) => a + (t.durationMs || 0), 0);
+  const workedH = Math.round(workedMs / 3600000);
+  const workedDays = new Set(myTs.map((t) => new Date(t.start).toDateString()))
+    .size;
+  const roleLbl = (ROLE_OPTS.find(([k]) => k === me.role) || [])[1] || me.role;
+  const brName = me.branchId ? branchById(me.branchId)?.name : "";
+  const infoCell = (label, value) => (
+    <div>
+      <div style={{ fontSize: 11.5, color: C.faint, fontWeight: 600 }}>
+        {label}
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* шапка */}
-      <div
-        className="rounded-2xl bg-white p-5 flex flex-wrap items-center gap-4"
-        style={{ border: `1px solid ${C.border}` }}
-      >
+      <div style={{ fontSize: 14, color: C.ink, fontWeight: 700 }}>
+        {value || "—"}
+      </div>
+    </div>
+  );
+  const profileCard = (
+    <div
+      className="rounded-2xl bg-white p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div className="flex flex-wrap items-center gap-4">
         <Avatar id={me.id} size={52} />
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div
             className="font-extrabold"
             style={{ color: C.ink, fontSize: 20 }}
           >
             {me.name}
           </div>
-          <div style={{ color: C.sub, fontSize: 14 }}>
-            {me.pos}
-            {me.branchId ? ` · Филиал «${branchById(me.branchId)?.name}»` : ""}
-          </div>
+          <div style={{ color: C.sub, fontSize: 14 }}>{me.pos || roleLbl}</div>
         </div>
         <span
           className="inline-flex items-center gap-2 rounded-xl px-3 py-2 font-bold"
@@ -4128,6 +4116,55 @@ function PersonalAchievements({ me, tasks, history, shift, now }) {
           <Power size={16} /> {shift.open ? "На работе" : "Смена закрыта"}
         </span>
       </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+        {infoCell("Должность", me.pos)}
+        {infoCell("Роль", roleLbl)}
+        {infoCell("Филиал", brName)}
+        {infoCell("Отработано", `${workedH} ч · ${workedDays} дн`)}
+      </div>
+      <div className="flex items-center justify-between flex-wrap gap-2 mt-4">
+        <span style={{ fontSize: 12, color: C.faint, maxWidth: 520 }}>
+          ФИО, должность и филиал — из iiko (меняются в iiko и
+          синхронизируются). Здесь можно сменить пароль для входа.
+        </span>
+        <button
+          onClick={() => setPwOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 font-bold shrink-0"
+          style={{
+            border: `1px solid ${C.border}`,
+            color: C.ink,
+            fontSize: 13,
+          }}
+        >
+          <Lock size={15} /> Сменить пароль
+        </button>
+      </div>
+    </div>
+  );
+
+  if (total === 0) {
+    return (
+      <div className="space-y-5">
+        {profileCard}
+        <div
+          className="rounded-2xl bg-white p-6"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <p style={{ color: C.sub, fontSize: 14 }}>
+            Достижения и эффективность собираются по вашим задачам. Пока задач
+            нет — здесь появятся успеваемость (SLA), скорость работы, закрытые
+            задачи и премия за скорость.
+          </p>
+        </div>
+        {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {profileCard}
+      {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
 
       {/* главные цифры */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -13688,6 +13725,8 @@ export default function App({ authUser, onLogout }) {
                 history={s.history}
                 shift={myShift}
                 now={now}
+                timesheet={s.timesheet}
+                authUser={authUser}
               />
             )}
             {s.view === "archive" && (
