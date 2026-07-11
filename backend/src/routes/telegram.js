@@ -4,6 +4,7 @@
 // на фронте) в чат. Доступ — офисные роли.
 import { Router } from "express";
 import { z } from "zod";
+import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -41,7 +42,16 @@ r.post(
         configured: false,
       });
     }
-    const who = esc(req.user.login || req.user.uid);
+    // Читаемое имя отправителя вместо технического id.
+    const u = await db.user
+      .findUnique({
+        where: { id: req.user.uid },
+        select: { displayName: true, login: true, name: true },
+      })
+      .catch(() => null);
+    const who = esc(
+      (u && (u.displayName || u.login || u.name)) || req.user.uid
+    );
     const out = await sendTelegram(
       `✅ <b>Avesto Group CRM</b>\nПроверочное сообщение. Уведомления подключены.\nОтправил: ${who}`
     );

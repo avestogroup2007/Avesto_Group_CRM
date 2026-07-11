@@ -1462,14 +1462,14 @@ function pickExecutor(branchId, cat) {
     if (f) return f.id;
   }
   const any = inB.find((u) => u.role === "staff" || u.role === "sysadmin");
-  return any ? any.id : "u6";
+  return any ? any.id : ""; // нет подходящего сотрудника — не назначаем
 }
 function pickController(branchId) {
   const m = ORG.users.find(
     (u) =>
       u.role === "manager" && u.branchId === branchId && u.active !== false,
   );
-  return m ? m.id : "u2";
+  return m ? m.id : ""; // нет управляющего — не назначаем
 }
 function aiSummary(t) {
   const ex = userById(t.executorId),
@@ -3280,9 +3280,21 @@ function RespRow({ id, role }) {
 }
 
 /* --------------------------- создание заявки ------------------------------- */
-function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
+function CreateTask({ me, tasks, now, dispatch, notify }) {
+  const firstBranch = (ORG.branches[0] && ORG.branches[0].id) || 1;
+  const blank = () => ({
+    branchId: firstBranch,
+    cat: "Прочее",
+    pr: "Обычный",
+    slaH: slaFor("Обычный"),
+    amount: null,
+    executorId: "",
+    controllerId: "",
+  });
   const [text, setText] = useState("");
-  const [parsed, setParsed] = useState(null);
+  // Форма видна всегда и заполняется вручную (без ИИ). «Распознать (ИИ)» —
+  // необязательный помощник: разбирает текст и подставляет поля.
+  const [parsed, setParsed] = useState(blank);
 
   const recognize = (raw) => {
     const input = raw != null ? raw : text;
@@ -3293,15 +3305,6 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
       executorId: pickExecutor(p.branchId, p.cat),
       controllerId: pickController(p.branchId),
     });
-  };
-  const voice = () => {
-    const sample =
-      VOICE_SAMPLES[Math.floor(Math.random() * VOICE_SAMPLES.length)];
-    setText(sample);
-    recognize(sample);
-    notify(
-      "Демонстрация голосового ввода (реальная версия — распознавание речи)",
-    );
   };
 
   const budget =
@@ -3314,15 +3317,18 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
       : null;
 
   const create = () => {
+    if (!text.trim()) {
+      notify("Опишите заявку в поле «Что случилось?»");
+      return;
+    }
     const over = !!(budget && budget.over);
-    const ctrl = over ? "u3" : parsed.controllerId; // при перерасходе — на финансиста
     const task = {
       id: "t" + uid().slice(0, 6),
-      title: text.trim().split("\n")[0].slice(0, 70),
+      title: text.trim().split("\n")[0].slice(0, 70) || parsed.cat,
       description: text.trim(),
       branchId: parsed.branchId,
-      executorId: parsed.executorId,
-      controllerId: ctrl,
+      executorId: parsed.executorId || "",
+      controllerId: parsed.controllerId || "",
       createdBy: me.id,
       phase: 1,
       cat: parsed.cat,
@@ -3339,11 +3345,11 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
     dispatch({ type: "CREATE_TASK", task });
     notify(
       over
-        ? "Заявка создана и направлена финансисту (превышение бюджета)"
-        : "Заявка создана и направлена исполнителю",
+        ? "Заявка создана (превышение бюджета — на контроль финансисту)"
+        : "Заявка создана",
     );
     setText("");
-    setParsed(null);
+    setParsed(blank());
   };
 
   return (
@@ -3387,16 +3393,6 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
           >
             <Bot size={17} /> {tr("Распознать (ИИ)")}
           </button>
-          {voiceEnabled && (
-            <button
-              onClick={voice}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold"
-              style={{ background: C.line, color: C.ink, fontSize: 14.5 }}
-              title="Демонстрация голосового ввода"
-            >
-              <Mic size={17} /> {tr("Сказать задачу")}
-            </button>
-          )}
         </div>
 
         {parsed && (
@@ -3405,7 +3401,8 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
             style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
           >
             <div style={{ fontSize: 12.5, color: C.faint, fontWeight: 700 }}>
-              ИИ распознал — проверьте и при необходимости поправьте:
+              Заполните поля заявки (или нажмите «Распознать (ИИ)» выше — поля
+              подставятся сами):
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Филиал">
@@ -3470,40 +3467,54 @@ function CreateTask({ me, tasks, now, dispatch, notify, voiceEnabled }) {
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="flex items-center gap-2">
-                <Avatar id={parsed.executorId} size={30} />
-                <div>
-                  <div style={{ fontSize: 11.5, color: C.faint }}>
-                    Исполнитель
-                  </div>
-                  <div
-                    style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}
-                  >
-                    {userById(parsed.executorId)?.name}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Avatar
-                  id={budget && budget.over ? "u3" : parsed.controllerId}
-                  size={30}
+              <Field label="Исполнитель">
+                <Select
+                  value={parsed.executorId || ""}
+                  onChange={(v) => setParsed({ ...parsed, executorId: v })}
+                  options={[
+                    { value: "", label: "— не назначен —" },
+                    ...ORG.users
+                      .filter((u) => u.active !== false)
+                      .map((u) => ({
+                        value: u.id,
+                        label: u.name + (u.pos ? ` · ${u.pos}` : ""),
+                      })),
+                  ]}
                 />
-                <div>
-                  <div style={{ fontSize: 11.5, color: C.faint }}>
-                    Контролёр
-                  </div>
-                  <div
-                    style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}
-                  >
-                    {
-                      userById(
-                        budget && budget.over ? "u3" : parsed.controllerId,
-                      )?.name
-                    }
-                  </div>
-                </div>
-              </div>
+              </Field>
+              <Field label="Контролёр">
+                <Select
+                  value={parsed.controllerId || ""}
+                  onChange={(v) => setParsed({ ...parsed, controllerId: v })}
+                  options={[
+                    { value: "", label: "— не назначен —" },
+                    ...ORG.users
+                      .filter((u) => u.active !== false)
+                      .map((u) => ({
+                        value: u.id,
+                        label: u.name + (u.pos ? ` · ${u.pos}` : ""),
+                      })),
+                  ]}
+                />
+              </Field>
             </div>
+            <Field label="Сумма (если есть расход), сум">
+              <input
+                value={parsed.amount ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, "");
+                  setParsed({ ...parsed, amount: v ? Number(v) : null });
+                }}
+                inputMode="numeric"
+                placeholder="0"
+                className="w-full rounded-lg px-3 py-2"
+                style={{
+                  border: `1px solid ${C.border}`,
+                  fontSize: 14,
+                  color: C.ink,
+                }}
+              />
+            </Field>
             <div className="flex items-center gap-2 flex-wrap pt-1">
               <span style={{ fontSize: 12.5, color: C.faint }}>Отдел:</span>
               <Badge color={C.brandA} bg="#EFF4FF">
@@ -15865,7 +15876,6 @@ function CreatePage({ me, s, dispatch, notify }) {
           now={Date.now()}
           dispatch={dispatch}
           notify={notify}
-          voiceEnabled={s.settings?.voiceInput !== false}
         />
       )}
       {mode === "process" && (
