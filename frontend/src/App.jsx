@@ -12078,6 +12078,8 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
   const [tg, setTg] = useState(null); // null=неизвестно, {configured}
   const [tgMsg, setTgMsg] = useState("");
   const [tgBusy, setTgBusy] = useState(false);
+  const [tgInfo, setTgInfo] = useState(null); // помощник подключения
+  const [tgInfoBusy, setTgInfoBusy] = useState(false);
 
   useEffect(() => {
     apiGet("/api/telegram/status")
@@ -12094,6 +12096,32 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
       setTgMsg(e.message || "Не удалось отправить");
     } finally {
       setTgBusy(false);
+    }
+  };
+  const loadTgInfo = async () => {
+    setTgInfoBusy(true);
+    setTgMsg("");
+    try {
+      const info = await apiGet("/api/telegram/info");
+      setTgInfo(info);
+    } catch (e) {
+      setTgInfo({ error: e.message || "Не удалось проверить бота" });
+    } finally {
+      setTgInfoBusy(false);
+    }
+  };
+  const copyText = (t) => {
+    const s = String(t);
+    // «Скопировано» показываем только при реальном успехе. Если Clipboard API
+    // недоступен (не-HTTPS, webview) или запись отклонена — показываем id для
+    // ручного копирования, а не ложный успех.
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(s).then(
+        () => setTgMsg(`Скопировано: ${s}`),
+        () => setTgMsg(`Скопируйте вручную: ${s}`),
+      );
+    } else {
+      setTgMsg(`Скопируйте вручную: ${s}`);
     }
   };
 
@@ -12223,6 +12251,138 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
             {tgMsg}
           </div>
         )}
+
+        {/* Помощник подключения: найти chat_id общего операционного чата */}
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{ background: "#FCFAF7", border: `1px solid ${C.line}` }}
+        >
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div style={{ fontSize: 12.5, color: C.sub, maxWidth: 560 }}>
+              <b style={{ color: C.ink }}>Помощник подключения.</b> 1) У{" "}
+              <b>@BotFather</b> создайте бота, вставьте{" "}
+              <b>TELEGRAM_BOT_TOKEN</b> в Render. 2) Добавьте бота в{" "}
+              <b>общий рабочий чат</b> и напишите там любое сообщение. 3)
+              Нажмите «Проверить бота», скопируйте id чата и вставьте в{" "}
+              <b>TELEGRAM_CHAT_ID</b> в Render → Deploy.
+            </div>
+            <button
+              onClick={loadTgInfo}
+              disabled={tgInfoBusy}
+              className="rounded-lg px-3 py-2 font-bold shrink-0"
+              style={{
+                border: `1px solid ${C.border}`,
+                color: C.sub,
+                background: "#fff",
+                fontSize: 12.5,
+                opacity: tgInfoBusy ? 0.7 : 1,
+              }}
+            >
+              {tgInfoBusy ? "Проверка…" : "Проверить бота"}
+            </button>
+          </div>
+
+          {tgInfo && tgInfo.error && (
+            <div style={{ fontSize: 12.5, color: C.bad, marginTop: 8 }}>
+              {tgInfo.error}
+            </div>
+          )}
+          {tgInfo && !tgInfo.error && (
+            <div className="mt-2" style={{ fontSize: 12.5 }}>
+              {!tgInfo.tokenSet ? (
+                <div style={{ color: C.bad }}>
+                  TELEGRAM_BOT_TOKEN не задан в окружении сервера (Render).
+                </div>
+              ) : tgInfo.unreachable ? (
+                <div style={{ color: C.bad }}>
+                  Не удалось связаться с Telegram: {tgInfo.hint}. Проверьте
+                  связь на сервере и попробуйте ещё раз (токен мог остаться
+                  рабочим).
+                </div>
+              ) : !tgInfo.tokenValid ? (
+                <div style={{ color: C.bad }}>
+                  Токен недействителен: {tgInfo.hint || "проверьте BotFather"}
+                </div>
+              ) : (
+                <>
+                  <div style={{ color: C.ink }}>
+                    Бот:{" "}
+                    <b>
+                      {tgInfo.bot?.username
+                        ? `@${tgInfo.bot.username}`
+                        : tgInfo.bot?.name}
+                    </b>{" "}
+                    — токен рабочий ✅
+                    {tgInfo.currentChatId ? (
+                      <span style={{ color: C.sub }}>
+                        {" "}
+                        · текущий чат: {tgInfo.currentChatId}
+                      </span>
+                    ) : null}
+                  </div>
+                  {tgInfo.chats && tgInfo.chats.length ? (
+                    <div className="mt-2">
+                      <div style={{ color: C.sub, marginBottom: 4 }}>
+                        Чаты, где бот побывал (нажмите id, чтобы скопировать):
+                      </div>
+                      <div className="space-y-1">
+                        {tgInfo.chats.map((c) => (
+                          <div
+                            key={c.id}
+                            className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5"
+                            style={{
+                              background: "#fff",
+                              border: `1px solid ${C.line}`,
+                            }}
+                          >
+                            <span style={{ color: C.ink }}>
+                              {c.title || "—"}{" "}
+                              <span style={{ color: C.faint, fontSize: 11 }}>
+                                ({c.type})
+                              </span>
+                              {String(c.id) ===
+                                String(tgInfo.currentChatId) && (
+                                <span
+                                  className="rounded px-1.5 py-0.5"
+                                  style={{
+                                    marginLeft: 6,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    background: "#DCFCE7",
+                                    color: "#15803D",
+                                  }}
+                                >
+                                  текущий
+                                </span>
+                              )}
+                            </span>
+                            <button
+                              onClick={() => copyText(c.id)}
+                              className="rounded-md px-2 py-1 font-mono shrink-0"
+                              style={{
+                                border: `1px solid ${C.border}`,
+                                color: C.brandA,
+                                fontSize: 12,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {c.id}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ color: C.sub, marginTop: 6 }}>
+                      {tgInfo.hint ||
+                        "Чатов пока не видно. Напишите боту/в группу и нажмите «Проверить бота»."}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Правила */}

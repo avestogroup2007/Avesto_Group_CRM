@@ -7,13 +7,28 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
-import { telegramConfigured, sendTelegram, esc } from "../services/telegram.js";
+import {
+  telegramConfigured,
+  sendTelegram,
+  getBotInfo,
+  esc,
+} from "../services/telegram.js";
 
 const r = Router();
 r.use(requireAuth);
 
 // Настроена ли интеграция — фронт покажет статус.
 r.get("/status", (req, res) => res.json({ configured: telegramConfigured() }));
+
+// Помощник подключения: проверка токена (getMe) и поиск chat_id общего чата
+// (getUpdates). Только офисные роли. Токен наружу не отдаётся.
+r.get(
+  "/info",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  asyncHandler(async (req, res) => {
+    res.json(await getBotInfo());
+  })
+);
 
 // Проверочное сообщение — только офисные роли.
 r.post(
