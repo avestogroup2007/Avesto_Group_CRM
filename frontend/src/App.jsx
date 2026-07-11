@@ -60,7 +60,7 @@ import {
 import Logo from "./Logo.jsx";
 import IikoPanel from "./IikoPanel.jsx";
 import IikoProduction from "./IikoProduction.jsx";
-import { apiGet, apiPost, apiPatch, apiDelete } from "./api.js";
+import { apiGet, apiPost, apiPatch, apiDelete, changePassword } from "./api.js";
 
 /* ============================================================================
    Avesto Group CRM System  (интерактивный прототип, MVP)
@@ -530,24 +530,29 @@ const COMPANIES = [
 ];
 // iikoDept — имя торгового предприятия (Department) в iikoServer,
 // нужно для фильтра реальных продаж по конкретному филиалу.
+// cash:true — филиал сдаёт ежедневный кассовый отчёт (есть касса/розница).
+// Цех и кейтеринг кассу не сдают (нет розничных чеков), поэтому без флага.
 const BRANCHES = [
   {
     id: 1,
     companyId: 1,
     name: "Avesto Cafe — Микрорайон",
     iikoDept: "Микрорайон",
+    cash: true,
   },
   {
     id: 2,
     companyId: 1,
     name: "Avesto Cafe — Узбекистанская",
     iikoDept: "Uzbekistanskaya",
+    cash: true,
   },
   {
     id: 3,
     companyId: 2,
     name: "Avesto Sweets — Аэропорт",
     iikoDept: "Aeroport",
+    cash: true,
   },
   {
     id: 4,
@@ -560,6 +565,7 @@ const BRANCHES = [
     companyId: 2,
     name: "Avesto Sweets — Наврузий Магазин",
     iikoDept: "Наврузи Магазин",
+    cash: true,
   },
   {
     id: 6,
@@ -5319,10 +5325,16 @@ function CashNumField({ label, value, disabled, onChange }) {
 
 function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
   const branches = s.branches || [];
+  // Кассовый отчёт сдают только филиалы с розничной кассой (cash:true) —
+  // цех и кейтеринг сюда не входят. Если флаги не заданы (старые данные) —
+  // берём все филиалы, чтобы не спрятать кассу целиком.
+  const cashBranches = branches.some((b) => b.cash)
+    ? branches.filter((b) => b.cash)
+    : branches;
   const isMgr = me.role === "manager";
   const isController = ["director", "finance", "sysadmin"].includes(me.role); // контролёр / аудитор — все филиалы, подтверждение
   const canEditForm = isMgr || isController;
-  const myBranch = me.branchId || (branches[0] && branches[0].id) || 1;
+  const myBranch = me.branchId || (cashBranches[0] && cashBranches[0].id) || 1;
   const fBranch = isMgr ? myBranch : branchScope || 0; // 0 = все (общий охват из шапки)
   const H24 = 24 * H;
   const deadlineTs = (dateStr) => {
@@ -6295,7 +6307,10 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
                 value={form.branchId}
                 disabled={isMgr}
                 onChange={(v) => setForm((f) => ({ ...f, branchId: +v }))}
-                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                options={cashBranches.map((b) => ({
+                  value: b.id,
+                  label: b.name,
+                }))}
               />
             </div>
           </div>
@@ -12926,8 +12941,135 @@ function MoreSheet({ open, onClose, items, view, setView }) {
     </div>
   );
 }
+// Модалка самостоятельной смены пароля (из профиля). Меняет пароль входа в CRM.
+function PasswordModal({ onClose }) {
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [conf, setConf] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const submit = async () => {
+    if (!cur || !next) return setErr("Заполните текущий и новый пароль");
+    if (next.length < 6) return setErr("Новый пароль — минимум 6 символов");
+    if (next !== conf)
+      return setErr("Новый пароль и подтверждение не совпадают");
+    setBusy(true);
+    setErr("");
+    try {
+      await changePassword(cur, next);
+      setDone(true);
+    } catch (e) {
+      setErr(e.message || "Не удалось сменить пароль");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const inp = {
+    border: `1px solid ${C.border}`,
+    borderRadius: 12,
+    padding: "10px 12px",
+    width: "100%",
+    fontSize: 14,
+  };
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,.4)" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="rounded-2xl bg-white p-5 w-full max-w-sm"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <h3 className="font-bold mb-1" style={{ color: C.ink, fontSize: 16 }}>
+          Смена пароля
+        </h3>
+        {done ? (
+          <>
+            <div
+              className="rounded-xl px-3 py-2 my-2"
+              style={{ background: "#DCFCE7", color: "#15803D", fontSize: 13 }}
+            >
+              Пароль изменён.
+            </div>
+            <button
+              onClick={onClose}
+              className="w-full rounded-xl px-4 py-2.5 font-bold text-white"
+              style={{ background: C.brandA }}
+            >
+              Готово
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 12.5, color: C.sub, marginBottom: 12 }}>
+              Меняется пароль для входа в CRM. У сотрудников iiko основной
+              пароль — из iiko; здесь меняется локальный (запасной) пароль CRM.
+            </p>
+            <div className="space-y-2">
+              <input
+                type="password"
+                placeholder="Текущий пароль"
+                value={cur}
+                onChange={(e) => setCur(e.target.value)}
+                style={inp}
+                autoComplete="current-password"
+              />
+              <input
+                type="password"
+                placeholder="Новый пароль (мин. 6 символов)"
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+                style={inp}
+                autoComplete="new-password"
+              />
+              <input
+                type="password"
+                placeholder="Повторите новый пароль"
+                value={conf}
+                onChange={(e) => setConf(e.target.value)}
+                style={inp}
+                autoComplete="new-password"
+              />
+            </div>
+            {err && (
+              <div style={{ color: C.bad, fontSize: 12.5, marginTop: 8 }}>
+                {err}
+              </div>
+            )}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-xl px-4 py-2.5 font-bold"
+                style={{
+                  border: `1px solid ${C.border}`,
+                  color: C.sub,
+                  background: "#fff",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={submit}
+                disabled={busy}
+                className="flex-1 rounded-xl px-4 py-2.5 font-bold text-white"
+                style={{ background: C.brandA, opacity: busy ? 0.7 : 1 }}
+              >
+                {busy ? "…" : "Сменить"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
   const [open, setOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
   return (
     <header
       className="topbar-h glass-chrome px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0"
@@ -13056,57 +13198,16 @@ function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
                 </div>
               </div>
             )}
-            <div
-              className="px-2 py-1.5"
-              style={{ fontSize: 12, color: C.faint, fontWeight: 700 }}
+            <button
+              onClick={() => {
+                setOpen(false);
+                setPwOpen(true);
+              }}
+              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2.5 font-semibold"
+              style={{ color: C.ink, fontSize: 13.5 }}
             >
-              {tr("Войти как (демо ролей):")}
-            </div>
-            <div className="max-h-80 overflow-y-auto">
-              {ORG.users
-                .filter((u) => u.active !== false)
-                .map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      dispatch({ type: "SET_USER", id: u.id });
-                      setOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
-                    style={{
-                      background: u.id === me.id ? C.line : "transparent",
-                    }}
-                  >
-                    <Avatar id={u.id} size={30} />
-                    <div className="flex-1 min-w-0">
-                      <div
-                        className="truncate"
-                        style={{
-                          fontSize: 13.5,
-                          fontWeight: 600,
-                          color: C.ink,
-                        }}
-                      >
-                        {u.name}
-                      </div>
-                      <div
-                        className="truncate"
-                        style={{ fontSize: 12, color: C.sub }}
-                      >
-                        {u.pos}
-                        {u.branchId ? ` · ${branchById(u.branchId)?.name}` : ""}
-                      </div>
-                    </div>
-                    {u.id === me.id && (
-                      <CheckCircle2
-                        size={16}
-                        color={C.brandA}
-                        className="shrink-0"
-                      />
-                    )}
-                  </button>
-                ))}
-            </div>
+              <Lock size={16} /> Сменить пароль
+            </button>
             {onLogout && (
               <button
                 onClick={() => {
@@ -13122,6 +13223,7 @@ function TopBar({ me, shift, dispatch, onToggleShift, authUser, onLogout }) {
           </div>
         )}
       </div>
+      {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
     </header>
   );
 }
