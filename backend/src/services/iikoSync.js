@@ -30,38 +30,56 @@ const OFFICE_ROLES = new Set([
 // Забирает сотрудников из iiko и upsert-ит их в таблицу User по iikoId.
 // Возвращает счётчики. Новым выдаём временный пароль (табельный номер) и флаг
 // смены пароля при первом входе.
+// Без N+1: существующие учётки читаются ОДНИМ findMany, обновления идут
+// параллельными пачками, новые создаются одним createMany (вместо ~2N
+// последовательных запросов на N сотрудников).
 export async function syncEmployeesToDb() {
   const { employees } = await listEmployees();
-  let created = 0;
-  let updated = 0;
-  let blocked = 0;
+  const valid = employees.filter((e) => e.iikoId);
+  const blocked = valid.filter((e) => e.deleted).length;
 
-  for (const e of employees) {
-    if (!e.iikoId) continue;
+  const existing = await db.user.findMany({
+    where: { iikoId: { in: valid.map((e) => e.iikoId) } },
+    select: { iikoId: true, login: true, active: true },
+  });
+  const byIiko = new Map(existing.map((u) => [u.iikoId, u]));
+
+  const updates = [];
+  const fresh = [];
+  for (const e of valid) {
     const dept = (e.departmentNames || e.departmentCodes || []).join(", ");
-    if (e.deleted) blocked++;
-
-    const existing = await db.user.findUnique({ where: { iikoId: e.iikoId } });
-    if (existing) {
-      await db.user.update({
+    const ex = byIiko.get(e.iikoId);
+    if (ex) {
+      updates.push({
         where: { iikoId: e.iikoId },
         data: {
           displayName: e.name,
-          login: e.login || existing.login,
+          login: e.login || ex.login,
           position: e.position,
           positionCode: e.positionCode || "",
           iikoDepartment: dept,
           iikoDeleted: e.deleted,
           // Уволенных в iiko блокируем; активность остальных не трогаем
           // (директор мог вручную деактивировать/активировать сотрудника).
-          active: e.deleted ? false : existing.active,
+          active: e.deleted ? false : ex.active,
           hireDate: e.hireDate || null,
           fireDate: e.fireDate || null,
           source: "iiko",
         },
       });
-      updated++;
     } else {
+      fresh.push({ e, dept });
+    }
+  }
+
+  // Обновления — параллельно, пачками по 20 (щадим пул соединений БД).
+  for (let i = 0; i < updates.length; i += 20) {
+    await Promise.all(updates.slice(i, i + 20).map((u) => db.user.update(u)));
+  }
+
+  // Новые — bcrypt-хэши параллельно, вставка одним createMany.
+  const rows = await Promise.all(
+    fresh.map(async ({ e, dept }) => {
       // Временный пароль = табельный номер (или логин). Обязательная смена.
       const tempPass = String(e.code || e.login || "avesto");
       const passwordHash = await bcrypt.hash(tempPass, 10);
@@ -69,30 +87,35 @@ export async function syncEmployeesToDb() {
       // Активны по умолчанию только управленческие/офисные роли. Линейный
       // персонал — неактивен (вход закрыт), доступ открывает администратор.
       const active = !e.deleted && OFFICE_ROLES.has(role);
-      await db.user.create({
-        data: {
-          name: `iiko-${e.iikoId}`, // внутренний уникальный ключ
-          login: e.login || null,
-          displayName: e.name,
-          passwordHash,
-          role,
-          position: e.position,
-          positionCode: e.positionCode || "",
-          iikoId: e.iikoId,
-          iikoDepartment: dept,
-          source: "iiko",
-          iikoDeleted: e.deleted,
-          active,
-          mustChangePassword: true,
-          hireDate: e.hireDate || null,
-          fireDate: e.fireDate || null,
-        },
-      });
-      created++;
-    }
+      return {
+        name: `iiko-${e.iikoId}`, // внутренний уникальный ключ
+        login: e.login || null,
+        displayName: e.name,
+        passwordHash,
+        role,
+        position: e.position,
+        positionCode: e.positionCode || "",
+        iikoId: e.iikoId,
+        iikoDepartment: dept,
+        source: "iiko",
+        iikoDeleted: e.deleted,
+        active,
+        mustChangePassword: true,
+        hireDate: e.hireDate || null,
+        fireDate: e.fireDate || null,
+      };
+    })
+  );
+  if (rows.length) {
+    await db.user.createMany({ data: rows, skipDuplicates: true });
   }
 
-  return { total: employees.length, created, updated, blocked };
+  return {
+    total: employees.length,
+    created: rows.length,
+    updated: updates.length,
+    blocked,
+  };
 }
 
 const ALLOWED_ROLES = [
