@@ -21,6 +21,16 @@ import {
   updateEmployeeAccess,
 } from "../services/iikoSync.js";
 import { sendTelegram, topicFor, esc } from "../services/telegram.js";
+import { cached } from "../services/cache.js";
+
+// TTL кэша отчёта: закрытые дни не меняются (6 часов), период с «сегодня»
+// может пополняться продажами (3 минуты). Сегодня — по Asia/Tashkent.
+function reportTtl(to) {
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Tashkent",
+  });
+  return String(to) < today ? 6 * 60 * 60 * 1000 : 3 * 60 * 1000;
+}
 
 const r = Router();
 r.use(requireAuth);
@@ -57,7 +67,13 @@ r.post(
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
     const departments = department ? [department] : undefined;
-    res.json(await salesReport({ from, to, departments }));
+    res.json(
+      await cached(
+        `olap:${from}:${to}:${department || "all"}`,
+        reportTtl(to),
+        () => salesReport({ from, to, departments })
+      )
+    );
   })
 );
 
@@ -71,7 +87,11 @@ r.post(
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
     res.json(
-      await pnlReport({ from, to, department: department || undefined })
+      await cached(
+        `pnl:${from}:${to}:${department || "all"}`,
+        reportTtl(to),
+        () => pnlReport({ from, to, department: department || undefined })
+      )
     );
   })
 );
@@ -86,12 +106,18 @@ r.post(
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
     res.json(
-      await riskyReport({
-        from,
-        to,
-        department: department || undefined,
-        discountPct: typeof discountPct === "number" ? discountPct : undefined,
-      })
+      await cached(
+        `risky:${from}:${to}:${department || "all"}:${discountPct ?? "def"}`,
+        reportTtl(to),
+        () =>
+          riskyReport({
+            from,
+            to,
+            department: department || undefined,
+            discountPct:
+              typeof discountPct === "number" ? discountPct : undefined,
+          })
+      )
     );
   })
 );

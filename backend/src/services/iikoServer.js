@@ -58,6 +58,36 @@ async function logout(key) {
   }
 }
 
+// ── Кэш токена сервисной сессии ─────────────────────────────────────────────
+// Раньше каждый вызов делал auth → запрос → logout (3 сетевых вызова вместо
+// одного). Теперь токен переиспользуется в пределах TTL: одна лицензия iiko
+// занята одной живой сессией, отчёты заметно быстрее. По истечении TTL или
+// при 401 сессия обновляется; устаревшие токены закрываются.
+const KEY_TTL_MS = 5 * 60 * 1000;
+let keyCache = { key: null, at: 0 };
+
+async function acquireKey() {
+  if (keyCache.key && Date.now() - keyCache.at < KEY_TTL_MS) {
+    return keyCache.key;
+  }
+  const old = keyCache.key;
+  keyCache = { key: await auth(), at: Date.now() };
+  if (old) logout(old); // освобождаем старую лицензию, не блокируя запрос
+  return keyCache.key;
+}
+
+// Вместо logout в finally: живой кэшированный токен не закрываем, чужой
+// (уже заменённый) — закрываем.
+function releaseKey(key) {
+  if (key && keyCache.key !== key) logout(key);
+}
+
+// iiko отклонил токен (протух раньше TTL) — сбросить кэш, следующий вызов
+// авторизуется заново.
+function invalidateKey(key) {
+  if (keyCache.key === key) keyCache = { key: null, at: 0 };
+}
+
 // Живая проверка логина/пароля сотрудника через iiko (SSO при входе в CRM).
 // true — iiko принял учётные данные (у сотрудника есть доступ в iikoOffice).
 // Сессию сразу закрываем. Недоступность сервера или неверные данные → false.
@@ -155,6 +185,8 @@ async function runOlap(
   });
   const text = await res.text();
   if (!res.ok) {
+    // Токен протух раньше TTL — сбрасываем кэш, следующий вызов re-auth.
+    if (res.status === 401) invalidateKey(key);
     throw new Error(`iiko olap → ${res.status} ${text}`.trim());
   }
   const json = text ? JSON.parse(text) : {};
@@ -353,7 +385,7 @@ async function fetchDepartmentMap(key) {
 // чтобы уточнить формат ответа, как делали с OLAP.
 export async function listEmployees() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
-  const key = await auth();
+  const key = await acquireKey();
   try {
     // Важно: НЕ просим application/json — этот эндпоинт при JSON отдаёт пустые
     // объекты ([{},{}...]). Реальные данные приходят в XML, который и разбираем.
@@ -383,7 +415,7 @@ export async function listEmployees() {
     if (!Object.keys(deptMap).length) result.deptRawFirst = deptRawFirst;
     return result;
   } finally {
-    await logout(key);
+    releaseKey(key);
   }
 }
 
@@ -499,7 +531,7 @@ async function fetchStores(key) {
 // Справочники для акта приготовления в одной сессии iiko (login → … → logout).
 export async function productionRefs() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
-  const key = await auth();
+  const key = await acquireKey();
   try {
     const p = await fetchProducts(key);
     const s = await fetchStores(key);
@@ -515,7 +547,7 @@ export async function productionRefs() {
     if (!s.stores.length) result.storesSample = s.sample;
     return result;
   } finally {
-    await logout(key);
+    releaseKey(key);
   }
 }
 
@@ -576,7 +608,7 @@ export async function createProduction({
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const xml = buildProductionXml({ date, storeId, items, number, comment });
   if (dryRun) return { dryRun: true, xml };
-  const key = await auth();
+  const key = await acquireKey();
   try {
     const res = await fetch(
       `${BASE}/resto/api/documents/import/productionDocument?key=${encodeURIComponent(
@@ -606,7 +638,7 @@ export async function createProduction({
       xml,
     };
   } finally {
-    await logout(key);
+    releaseKey(key);
   }
 }
 
@@ -619,7 +651,7 @@ export async function createProduction({
 // пустой, но выручка по дням (главное) не пострадает.
 export async function salesReport({ from, to, departments }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
-  const key = await auth();
+  const key = await acquireKey();
   try {
     const opts = { from, to, departments };
     const byDay = await runOlap(key, {
@@ -663,7 +695,7 @@ export async function salesReport({ from, to, departments }) {
     }).catch(() => []);
     return { byDay, byPay, byDish, byGroups, byHour, byStaff, byHourDish };
   } finally {
-    await logout(key);
+    releaseKey(key);
   }
 }
 
@@ -676,7 +708,7 @@ export async function salesReport({ from, to, departments }) {
 // Порог доли скидки для «флага» настраивается (по умолчанию 30 %).
 export async function riskyReport({ from, to, department, discountPct = 0.3 }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
-  const key = await auth();
+  const key = await acquireKey();
   const num = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
@@ -749,7 +781,7 @@ export async function riskyReport({ from, to, department, discountPct = 0.3 }) {
       diagnostics: { delRows: delRows.length, actRows: actRows.length },
     };
   } finally {
-    await logout(key);
+    releaseKey(key);
   }
 }
 
@@ -892,7 +924,7 @@ function buildPnlSection(accounts, type, turnover, sign) {
 // поэтому для сверки с iiko выбирайте конкретный филиал).
 export async function pnlReport({ from, to, department }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
-  const key = await auth();
+  const key = await acquireKey();
   try {
     // План счетов (структуру берёт iiko — переносимо на другую базу).
     const accRes = await fetch(
@@ -991,6 +1023,6 @@ export async function pnlReport({ from, to, department }) {
       },
     };
   } finally {
-    await logout(key);
+    releaseKey(key);
   }
 }
