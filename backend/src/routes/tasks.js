@@ -28,9 +28,16 @@ r.get(
       where = { OR: or };
     }
 
+    // Лимит выдачи: по умолчанию 500 свежих, ?limit=… до 2000 — защита
+    // сервера и браузера от выдачи всей истории разом.
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit, 10) || 500, 1),
+      2000
+    );
     const tasks = await db.task.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      take: limit,
     });
     res.json(tasks);
   })

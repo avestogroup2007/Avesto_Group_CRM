@@ -47,6 +47,26 @@ const authLimiter = rateLimit({
   message: { error: "Слишком много попыток входа, попробуйте позже" },
 });
 
+// Общий предохранитель на весь API: щедрый для обычной работы одного
+// пользователя, но останавливает флуд/скрейпинг. В тестах выключен, чтобы
+// интеграционные прогоны не упирались в лимит.
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300, // 300 запросов в минуту с одного IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Слишком много запросов, попробуйте позже" },
+});
+
+// ИИ-маршруты дергают платный Claude API — лимит жёстче остальных.
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Слишком много запросов к ИИ, попробуйте позже" },
+});
+
 // Проверка живости.
 app.get("/api/health", (req, res) => res.json({ ok: true, time: Date.now() }));
 
@@ -55,7 +75,13 @@ app.get("/api/health", (req, res) => res.json({ ok: true, time: Date.now() }));
 app.post("/api/telegram/webhook", telegramWebhook);
 
 // Маршруты.
+if (env.NODE_ENV !== "test") {
+  app.use("/api", apiLimiter);
+}
 app.use("/api/auth/login", authLimiter);
+// Смена пароля — та же защита от перебора, что и вход.
+app.use("/api/auth/change-password", authLimiter);
+app.use("/api/ai", aiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/iiko", iikoRoutes);
 app.use("/api/tasks", taskRoutes);
