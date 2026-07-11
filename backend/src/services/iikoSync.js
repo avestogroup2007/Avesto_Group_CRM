@@ -15,6 +15,18 @@ function crmRole(positionCode) {
   return ROLE_MAP[positionCode] || "staff";
 }
 
+// Роли, которым система нужна (управление/офис). Линейный персонал (staff —
+// официанты, охранники, повара, посудомойки и т.п.) CRM не нужен: их учётки
+// заводятся НЕАКТИВНЫМИ (вход закрыт). Доступ конкретному человеку при
+// необходимости открывает администратор (роль + активность в управлении кадрами).
+const OFFICE_ROLES = new Set([
+  "director",
+  "finance",
+  "manager",
+  "accountant",
+  "sysadmin",
+]);
+
 // Забирает сотрудников из iiko и upsert-ит их в таблицу User по iikoId.
 // Возвращает счётчики. Новым выдаём временный пароль (табельный номер) и флаг
 // смены пароля при первом входе.
@@ -53,20 +65,24 @@ export async function syncEmployeesToDb() {
       // Временный пароль = табельный номер (или логин). Обязательная смена.
       const tempPass = String(e.code || e.login || "avesto");
       const passwordHash = await bcrypt.hash(tempPass, 10);
+      const role = crmRole(e.positionCode);
+      // Активны по умолчанию только управленческие/офисные роли. Линейный
+      // персонал — неактивен (вход закрыт), доступ открывает администратор.
+      const active = !e.deleted && OFFICE_ROLES.has(role);
       await db.user.create({
         data: {
           name: `iiko-${e.iikoId}`, // внутренний уникальный ключ
           login: e.login || null,
           displayName: e.name,
           passwordHash,
-          role: crmRole(e.positionCode),
+          role,
           position: e.position,
           positionCode: e.positionCode || "",
           iikoId: e.iikoId,
           iikoDepartment: dept,
           source: "iiko",
           iikoDeleted: e.deleted,
-          active: !e.deleted,
+          active,
           mustChangePassword: true,
           hireDate: e.hireDate || null,
           fireDate: e.fireDate || null,
