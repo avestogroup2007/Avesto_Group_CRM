@@ -12209,6 +12209,30 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
       setTgInfoBusy(false);
     }
   };
+  const testTopics = async () => {
+    setTgBusy(true);
+    setTgMsg("");
+    try {
+      const r = await apiPost("/api/telegram/test-topics", {});
+      const sent = (r.results || []).filter((x) => x.ok).map((x) => x.label);
+      const skipped = (r.results || [])
+        .filter((x) => x.skipped)
+        .map((x) => x.label);
+      const failed = (r.results || [])
+        .filter((x) => !x.ok && !x.skipped)
+        .map((x) => x.label);
+      let m = sent.length
+        ? `Отправлено в темы: ${sent.join(", ")}.`
+        : "Ни одна тема не настроена.";
+      if (skipped.length) m += ` Не заданы (нет id): ${skipped.join(", ")}.`;
+      if (failed.length) m += ` Ошибка: ${failed.join(", ")}.`;
+      setTgMsg(m);
+    } catch (e) {
+      setTgMsg(e.message || "Не удалось отправить");
+    } finally {
+      setTgBusy(false);
+    }
+  };
   const copyText = (t) => {
     const s = String(t);
     // «Скопировано» показываем только при реальном успехе. Если Clipboard API
@@ -12332,18 +12356,34 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
               <b> TELEGRAM_BOT_TOKEN</b>, <b>TELEGRAM_CHAT_ID</b>.
             </p>
           </div>
-          <button
-            onClick={sendTest}
-            disabled={tgBusy || !tg?.configured}
-            className="rounded-lg px-3 py-2 font-bold text-white shrink-0"
-            style={{
-              background: tg?.configured ? C.brandA : C.border,
-              fontSize: 13,
-              opacity: tgBusy ? 0.7 : 1,
-            }}
-          >
-            {tgBusy ? "Отправка…" : "Тест-сообщение"}
-          </button>
+          <div className="flex flex-col gap-2 shrink-0">
+            <button
+              onClick={sendTest}
+              disabled={tgBusy || !tg?.configured}
+              className="rounded-lg px-3 py-2 font-bold text-white"
+              style={{
+                background: tg?.configured ? C.brandA : C.border,
+                fontSize: 13,
+                opacity: tgBusy ? 0.7 : 1,
+              }}
+            >
+              {tgBusy ? "Отправка…" : "Тест-сообщение"}
+            </button>
+            <button
+              onClick={testTopics}
+              disabled={tgBusy || !tg?.configured}
+              className="rounded-lg px-3 py-2 font-bold"
+              style={{
+                background: "#fff",
+                border: `1px solid ${tg?.configured ? C.brandA : C.border}`,
+                color: tg?.configured ? C.brandA : C.faint,
+                fontSize: 13,
+                opacity: tgBusy ? 0.7 : 1,
+              }}
+            >
+              Проверить темы
+            </button>
+          </div>
         </div>
         {tgMsg && (
           <div style={{ fontSize: 12.5, color: C.sub, marginTop: 8 }}>
