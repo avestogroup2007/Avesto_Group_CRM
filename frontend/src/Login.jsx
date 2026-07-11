@@ -173,9 +173,12 @@ export default function Login({ onSuccess }) {
             lineHeight: 1.5,
           }}
         >
-          Демо-учётки: <b>director</b>, <b>finance</b>, <b>manager</b>,{" "}
-          <b>accountant</b>, <b>sysadmin</b>, <b>staff</b> — пароль{" "}
-          <b>changeme123</b>.
+          Сотрудники входят своим <b>логином и паролем из iiko</b>. Если пароль
+          iiko не подошёл — используйте временный (табельный номер) и смените
+          его при входе.
+          <br />
+          Служебная учётка администратора: <b>sysadmin</b> — пароль{" "}
+          <b>changeme123</b> (сменить после первого входа).
         </div>
       </div>
     </div>

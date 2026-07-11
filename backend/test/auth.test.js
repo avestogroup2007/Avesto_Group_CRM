@@ -13,6 +13,10 @@ const TEST_PASSWORD = "ci_test_password_123";
 // Ручная (не из iiko) учётка — политика входа должна её блокировать.
 const MANUAL_LOGIN = "ci_test_manual";
 const MANUAL_PASSWORD = "ci_test_manual_123";
+// iiko-учётка с логином (SSO). В тестах iiko не настроен, поэтому живая
+// проверка недоступна и вход проходит по локальному (кэш/временному) паролю.
+const SSO_LOGIN = "ci_sso_login";
+const SSO_PASSWORD = "ci_sso_password_123";
 
 let server;
 let base;
@@ -47,6 +51,27 @@ before(async () => {
     },
   });
 
+  // iiko-сотрудник с логином (SSO). iiko в тестах не настроен → fallback на
+  // локальный пароль.
+  const ssoHash = await bcrypt.hash(SSO_PASSWORD, 10);
+  await db.user.upsert({
+    where: { name: SSO_LOGIN },
+    update: {
+      passwordHash: ssoHash,
+      active: true,
+      source: "iiko",
+      login: SSO_LOGIN,
+    },
+    create: {
+      name: SSO_LOGIN,
+      login: SSO_LOGIN,
+      passwordHash: ssoHash,
+      role: "manager",
+      position: "CI",
+      source: "iiko",
+    },
+  });
+
   server = app.listen(0);
   await new Promise((resolve) => server.once("listening", resolve));
   const { port } = server.address();
@@ -55,10 +80,10 @@ before(async () => {
 
 after(async () => {
   await db.auditLog.deleteMany({
-    where: { user: { name: { in: [TEST_LOGIN, MANUAL_LOGIN] } } },
+    where: { user: { name: { in: [TEST_LOGIN, MANUAL_LOGIN, SSO_LOGIN] } } },
   });
   await db.user.deleteMany({
-    where: { name: { in: [TEST_LOGIN, MANUAL_LOGIN] } },
+    where: { name: { in: [TEST_LOGIN, MANUAL_LOGIN, SSO_LOGIN] } },
   });
   await new Promise((resolve) => server.close(resolve));
   await db.$disconnect();
@@ -116,6 +141,25 @@ test("вход ручной (не из iiko) учётки → 403 (пароль 
     body: JSON.stringify({ login: MANUAL_LOGIN, password: MANUAL_PASSWORD }),
   });
   assert.equal(res.status, 403, "не-iiko учётку политика не пускает");
+});
+
+test("iiko-учётка с логином: SSO недоступен → вход по локальному паролю", async () => {
+  const ok = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: SSO_LOGIN, password: SSO_PASSWORD }),
+  });
+  assert.equal(
+    ok.status,
+    200,
+    "fallback на локальный пароль при недоступном iiko"
+  );
+  const bad = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: SSO_LOGIN, password: "wrong" }),
+  });
+  assert.equal(bad.status, 401, "неверный пароль → 401");
 });
 
 test("полный поток: login → me → logout → me 401", async () => {
