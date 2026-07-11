@@ -12324,9 +12324,11 @@ function AutomationView({ rules, setRules, log, setLog, now }) {
               <b style={{ color: C.ink }}>Помощник подключения.</b> 1) У{" "}
               <b>@BotFather</b> создайте бота, вставьте{" "}
               <b>TELEGRAM_BOT_TOKEN</b> в Render. 2) Добавьте бота в{" "}
-              <b>общий рабочий чат</b> и напишите там любое сообщение. 3)
-              Нажмите «Проверить бота», скопируйте id чата и вставьте в{" "}
-              <b>TELEGRAM_CHAT_ID</b> в Render → Deploy.
+              <b>общий рабочий чат</b> и <b>сделайте его администратором</b>{" "}
+              группы (иначе из-за privacy mode бот не видит обычные сообщения),
+              затем напишите в группе любое сообщение. 3) Нажмите «Проверить
+              бота», скопируйте id чата и вставьте в <b>TELEGRAM_CHAT_ID</b> в
+              Render → Deploy.
             </div>
             <button
               onClick={loadTgInfo}
