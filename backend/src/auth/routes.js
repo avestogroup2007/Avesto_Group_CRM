@@ -21,14 +21,23 @@ const LoginSchema = z.object({
 // Политика доступа: работать в программе могут только сотрудники из iiko
 // (source=iiko и не уволены). Исключение — одна защищённая учётка-администратор
 // (BOOTSTRAP_ADMIN_LOGIN): для первичной синхронизации и на случай, когда
-// iiko-сервер недоступен. Демо/ручные учётки войти не могут.
+// iiko-сервер недоступен.
+//
+// «Мягкий старт»: пока из iiko не синхронизирован НИ ОДИН сотрудник, правило не
+// применяется — существующие учётки работают как раньше. Иначе выкатка правила
+// закрыла бы вход всем ещё до первой синхронизации (включая владельца). Как
+// только появился хотя бы один сотрудник из iiko — правило действует строго.
 function isBootstrapAdmin(user) {
   const key = env.BOOTSTRAP_ADMIN_LOGIN;
   return user.name === key || user.login === key;
 }
-function loginAllowed(user) {
+async function loginAllowed(user) {
   if (isBootstrapAdmin(user)) return true;
-  return user.source === "iiko" && !user.iikoDeleted;
+  if (user.source === "iiko") return !user.iikoDeleted;
+  // До первой синхронизации кадров из iiko — не блокируем (защита от
+  // самоблокировки перед настройкой). После — только iiko.
+  const iikoCount = await db.user.count({ where: { source: "iiko" } });
+  return iikoCount === 0;
 }
 
 // Общие параметры cookie в одном месте — чтобы logout снимал ровно ту же cookie.
@@ -69,7 +78,7 @@ r.post(
 
     // Пароль верный, но учётка не из iiko (и не админ-исключение) — не пускаем.
     // Проверяем ПОСЛЕ пароля, чтобы нельзя было перебором вычислять учётки.
-    if (!loginAllowed(user)) {
+    if (!(await loginAllowed(user))) {
       return res.status(403).json({
         error:
           "Доступ разрешён только сотрудникам из iiko. Обратитесь к администратору.",
@@ -136,7 +145,7 @@ r.get(
         mustChangePassword: true,
       },
     });
-    if (!user || !user.active || !loginAllowed(user)) {
+    if (!user || !user.active || !(await loginAllowed(user))) {
       return res.status(401).json({ error: "Пользователь недоступен" });
     }
     // source/iikoDeleted/login — служебные, наружу не отдаём.

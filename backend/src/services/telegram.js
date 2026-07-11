@@ -45,6 +45,83 @@ export async function sendTelegram(text, chatId) {
   }
 }
 
+// Помощник подключения: проверяет токен (getMe) и находит чаты, где бот уже
+// побывал (getUpdates) — чтобы администратор увидел chat_id общего
+// операционного чата и вписал его в TELEGRAM_CHAT_ID. Возвращает только id,
+// тип и название чата — тексты сообщений и токен наружу не отдаём.
+export async function getBotInfo() {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    return { tokenSet: false, configured: false };
+  }
+  const result = {
+    tokenSet: true,
+    configured: telegramConfigured(),
+    currentChatId: env.TELEGRAM_CHAT_ID || "",
+    bot: null,
+    tokenValid: false,
+    chats: [],
+    hint: "",
+  };
+  try {
+    const meRes = await fetch(`${API}/bot${token}/getMe`);
+    const me = await meRes.json().catch(() => ({}));
+    if (me.ok && me.result) {
+      result.tokenValid = true;
+      result.bot = {
+        id: me.result.id,
+        username: me.result.username || "",
+        name: me.result.first_name || "",
+      };
+    } else {
+      result.hint = me.description || `getMe HTTP ${meRes.status}`;
+      return result;
+    }
+
+    const upRes = await fetch(
+      `${API}/bot${token}/getUpdates?limit=30&timeout=0`
+    );
+    const up = await upRes.json().catch(() => ({}));
+    if (up.ok && Array.isArray(up.result)) {
+      const seen = new Map();
+      for (const u of up.result) {
+        const m =
+          u.message ||
+          u.edited_message ||
+          u.channel_post ||
+          u.my_chat_member ||
+          u.chat_member;
+        const chat = m && m.chat;
+        if (chat && chat.id != null && !seen.has(chat.id)) {
+          const title =
+            chat.title ||
+            [chat.first_name, chat.last_name].filter(Boolean).join(" ") ||
+            (chat.username ? `@${chat.username}` : "") ||
+            "";
+          seen.set(chat.id, {
+            id: String(chat.id),
+            type: chat.type || "",
+            title,
+          });
+        }
+      }
+      result.chats = [...seen.values()];
+      if (!result.chats.length) {
+        result.hint =
+          "Бот пока не видел ни одного чата. Добавьте бота в общий рабочий чат и напишите там любое сообщение, затем обновите.";
+      }
+    } else {
+      // getUpdates не работает, если у бота установлен webhook (409).
+      result.hint =
+        up.description ||
+        "Не удалось получить обновления (возможно, у бота задан webhook).";
+    }
+  } catch (e) {
+    result.hint = e.message || "Ошибка связи с Telegram";
+  }
+  return result;
+}
+
 // Экранирование для HTML parse_mode.
 export function esc(s) {
   return String(s == null ? "" : s)
