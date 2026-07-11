@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { verifyIikoCredentials } from "../services/iikoServer.js";
 
 const r = Router();
 
@@ -67,11 +68,36 @@ r.post(
       },
     });
 
-    // Одинаковый ответ и текст для «нет пользователя» и «неверный пароль» —
-    // чтобы нельзя было по ответу перебирать существующие логины.
-    const ok = user
-      ? await bcrypt.compare(parsed.data.password, user.passwordHash)
-      : false;
+    // Проверка пароля. Сотрудники из iiko, у которых есть логин, входят по
+    // ЖИВОМУ паролю iiko (SSO): пароль проверяется напрямую через iiko. Если
+    // iiko отклонил или недоступен — пробуем локальный пароль (временный/кэш),
+    // чтобы вход работал у рядового персонала без доступа в iikoOffice и когда
+    // iiko прилёг. Админ-исключение и ручные учётки — только локальный bcrypt.
+    // Одинаковый 401 для «нет пользователя» и «неверный пароль» — против
+    // перебора существующих логинов.
+    let ok = false;
+    if (user) {
+      const password = parsed.data.password;
+      if (user.source === "iiko" && user.login) {
+        const iikoOk = await verifyIikoCredentials(user.login, password);
+        if (iikoOk) {
+          ok = true;
+          // Кэшируем пароль локально (bcrypt) — вход не сломается, если iiko
+          // окажется недоступен; пароль остаётся синхронным с iiko.
+          const passwordHash = await bcrypt.hash(password, 10);
+          await db.user
+            .update({
+              where: { id: user.id },
+              data: { passwordHash, mustChangePassword: false },
+            })
+            .catch(() => {});
+        } else {
+          ok = await bcrypt.compare(password, user.passwordHash);
+        }
+      } else {
+        ok = await bcrypt.compare(password, user.passwordHash);
+      }
+    }
     if (!user || !ok) {
       return res.status(401).json({ error: "Неверный логин или пароль" });
     }

@@ -58,6 +58,31 @@ async function logout(key) {
   }
 }
 
+// Живая проверка логина/пароля сотрудника через iiko (SSO при входе в CRM).
+// true — iiko принял учётные данные (у сотрудника есть доступ в iikoOffice).
+// Сессию сразу закрываем. Недоступность сервера или неверные данные → false.
+// Пароль никуда не сохраняется; SHA1 требует сам iiko.
+export async function verifyIikoCredentials(login, password) {
+  if (!env.IIKO_SERVER_URL || !login || !password) return false;
+  try {
+    const body =
+      `login=${encodeURIComponent(login)}` + `&pass=${sha1(password)}`;
+    const res = await fetch(`${BASE}/resto/api/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!res.ok) return false;
+    const key = (await res.text()).trim().replace(/^"|"$/g, "");
+    // Успех — вернулся токен (непустая строка без пробелов). Иначе — отказ.
+    if (!key || /\s/.test(key)) return false;
+    await logout(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Границы периода в формате iiko: from — начало дня, to — начало следующего
 // дня после последней даты (в OLAP верхняя граница не включается).
 function dayStart(ymd) {
