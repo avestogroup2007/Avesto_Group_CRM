@@ -6,90 +6,10 @@ import React, {
   lazy,
   Suspense,
 } from "react";
-import { createPortal } from "react-dom";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
-import {
-  Inbox,
-  PlusCircle,
-  BarChart3,
-  Building2,
-  Settings,
-  Archive,
-  Clock,
-  Paperclip,
-  MessageSquare,
-  Star,
-  X,
-  CheckCircle2,
-  RotateCcw,
-  Play,
-  Send,
-  Bot,
-  ChevronRight,
-  ChevronDown,
-  Filter,
-  Download,
-  Printer,
-  ShieldCheck,
-  AlertTriangle,
-  Users,
-  Power,
-  Sparkles,
-  Info,
-  Award,
-  Mic,
-  AlertCircle,
-  Camera,
-  ListChecks,
-  Server,
-  Lock,
-  Activity,
-  TrendingUp,
-  FileText,
-  Wallet,
-  Menu,
-  CalendarDays,
-  ArrowUp,
-  Banknote,
-  Trash2,
-  Pencil,
-  Check,
-  GripVertical,
-  Cake,
-} from "lucide-react";
-import Logo from "./Logo.jsx";
-import { apiGet, apiPost, apiPatch, apiDelete, changePassword } from "./api.js";
-import { FONT, C, PHASES } from "./lib/theme.js";
-import {
-  Avatar,
-  PhasePill,
-  MiniRail,
-  PhaseRail,
-  Badge,
-  BigBtn,
-  Meta,
-  Field,
-  Select,
-  Kpi,
-  Ring,
-  StatusBadge,
-  NiceSelect,
-  NiceDate,
-  CashNumField,
-  ScrollTopButton,
-  AdInput,
-  AdToggle,
-  AdCard,
-} from "./components/ui.jsx";
+import { Building2, Archive, X, Info } from "lucide-react";
+import { apiPost } from "./api.js";
+import { FONT, C } from "./lib/theme.js";
+import { NiceSelect, ScrollTopButton } from "./components/ui.jsx";
 import { usePersisted } from "./lib/hooks.js";
 import { detectAnomalies, visibleTasks, applyFilters } from "./lib/tasks.js";
 import {
@@ -103,48 +23,9 @@ import { init, reducer, store } from "./lib/store.js";
 import { NAV, navAllowed, VIEW_TITLE } from "./lib/nav.js";
 import { Sidebar, BottomNav, MoreSheet, TopBar } from "./components/layout.jsx";
 import Board, { TaskDetail, CreatePage } from "./pages/Tasks.jsx";
-import { LANG, syncLang, tr } from "./lib/i18n.js";
-import {
-  M,
-  H,
-  D,
-  TZ,
-  uid,
-  fmtDur,
-  fmtMoney,
-  fmtWork,
-  fmtWorkH,
-  fmtSum,
-  fmtDateTime,
-  initials,
-  avatarColor,
-  lightTone,
-  ymdNow,
-} from "./lib/format.js";
-import { CHECKLIST_DEFS, branchHours, hourSlots } from "./lib/checklists.js";
-import {
-  COMPANIES,
-  BRANCHES,
-  BRANCH_BUDGET,
-  USERS,
-  POSITIONS,
-  DEFAULT_SLA,
-  DEFAULT_SOPS,
-  DEPARTMENTS,
-  CAT_DEPT,
-  ROUTE_TEMPLATES,
-  assignByActor,
-  ORG,
-  syncOrg,
-  userById,
-  branchById,
-  companyOfBranch,
-  deptById,
-  deptForCategory,
-  budgetFor,
-  slaFor,
-  sopFor,
-} from "./lib/org.js";
+import { syncLang, tr } from "./lib/i18n.js";
+import { uid } from "./lib/format.js";
+import { syncOrg, userById, branchById } from "./lib/org.js";
 
 // Ленивая загрузка экранов: браузер получает код раздела при первом входе в
 // него, а не весь бандл сразу. Задачи (Board/TaskDetail) — стартовый экран,

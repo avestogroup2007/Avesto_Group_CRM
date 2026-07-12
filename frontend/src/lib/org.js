@@ -291,23 +291,6 @@ export const CAT_DEPT = {
   Прочее: "d4",
 };
 // Привязка демо-сотрудников к отделам
-export const USER_DEPT = {
-  u1: "d5",
-  u2: "d5",
-  u3: "d1",
-  u4: "d5",
-  u5: "d5",
-  u6: "d2",
-  u7: "d3",
-  u8: "d1",
-  u9: "d4",
-  u10: "d5",
-  u11: "d3",
-  u12: "d4",
-  u13: "d4",
-  u14: "d1",
-  u15: "d1",
-};
 
 // Шаблоны процессов (маршруты согласования) — упорядоченные шаги с ответственными.
 export const ROUTE_TEMPLATES = [
@@ -352,7 +335,6 @@ export const ROUTE_TEMPLATES = [
     ],
   },
 ];
-export const routeById = (id) => ORG.routes.find((r) => r.id === id);
 export function assignByActor(actor, branchId) {
   const cands = ORG.users.filter((u) => u.pos === actor && u.active !== false);
   return (
