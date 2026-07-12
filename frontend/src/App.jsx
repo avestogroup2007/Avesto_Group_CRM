@@ -76,6 +76,11 @@ export default function App({ authUser, onLogout }) {
     apiGet("/api/org")
       .then((config) => dispatch({ type: "ORG_CONFIG", config }))
       .catch(() => {});
+    // Флаги модулей: включены владельцем в Back Office — от них зависит
+    // видимость разделов клиента (например, «Чек-листы» в админке).
+    apiGet("/api/modules")
+      .then((m) => dispatch({ type: "MODULES", flags: m.flags || {} }))
+      .catch(() => {});
   }, []);
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState(null);
