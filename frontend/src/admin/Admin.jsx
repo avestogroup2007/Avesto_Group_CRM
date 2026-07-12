@@ -14,8 +14,9 @@ import {
   ListChecks,
   Lock,
   ShieldCheck,
+  Download,
 } from "lucide-react";
-import { apiGet, apiPost, apiPatch } from "../api.js";
+import { apiGet, apiPost, apiPatch, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
 import { tr } from "../lib/i18n.js";
 import { uid } from "../lib/format.js";
@@ -1097,6 +1098,38 @@ function AdminSops({ s, dispatch, notify }) {
   );
 }
 
+// Кнопка скачивания резервной копии: сервер сам собирает файл из БД —
+// не нужны ни доступ к панели Render, ни секреты GitHub.
+function BackupButton() {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const run = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      await apiDownload("/api/backup/export", "avesto-crm-backup.json");
+    } catch (e) {
+      setErr(e.message || "Не удалось скачать копию");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <button
+        onClick={run}
+        disabled={busy}
+        className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+        style={{ background: C.brandA, fontSize: 14, opacity: busy ? 0.6 : 1 }}
+      >
+        <Download size={16} />
+        {busy ? "Готовим файл…" : "Скачать резервную копию"}
+      </button>
+      {err && <p style={{ color: C.bad, fontSize: 13, marginTop: 8 }}>{err}</p>}
+    </div>
+  );
+}
+
 function AdminSystem({ s, dispatch, notify }) {
   const set = (k, v) => dispatch({ type: "SET_SETTING", key: k, value: v });
   const cfg = s.settings || {};
@@ -1123,6 +1156,12 @@ function AdminSystem({ s, dispatch, notify }) {
             onChange={(v) => set("ipRestrict", v)}
           />
         </div>
+      </AdCard>
+      <AdCard
+        title="Резервная копия базы"
+        desc="Сервер выгружает все таблицы (деньги, проводки, кассы, задачи, кадры, журнал) в один JSON-файл. Каждая выгрузка фиксируется в журнале безопасности. Храните файл в надёжном месте — это полная копия данных."
+      >
+        <BackupButton />
       </AdCard>
       <AdCard
         title="Демо-данные"

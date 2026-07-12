@@ -135,3 +135,23 @@ export async function apiDelete(path) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+// Скачивание файла с сервера с авторизацией (например, резервной копии):
+// обычная ссылка не подходит — нужен заголовок Authorization.
+export async function apiDownload(path, fallbackName) {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: authHeaders(),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = cd.match(/filename="([^"]+)"/);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (m && m[1]) || fallbackName || "download";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
