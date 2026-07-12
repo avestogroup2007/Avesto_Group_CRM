@@ -65,7 +65,7 @@ const CreateSchema = z.object({
   controllerId: z.string().min(1),
   category: z.string().default(""),
   priority: z.string().default("Обычный"),
-  amount: z.number().int().nullable().optional(),
+  amount: z.number().int().max(2_000_000_000).nullable().optional(),
   overBudget: z.boolean().optional(),
   slaDeadline: z.coerce.date(),
   extra: z.any().optional(),
@@ -83,6 +83,18 @@ r.post(
     const branch = await db.branch.findUnique({ where: { id: d.branchId } });
     if (!branch) {
       return res.status(400).json({ error: "Филиал не найден" });
+    }
+    // Исполнитель и контролёр должны существовать — иначе задача «повиснет»
+    // и не появится ни в чьём списке.
+    const people = await db.user.findMany({
+      where: { id: { in: [d.executorId, d.controllerId] } },
+      select: { id: true },
+    });
+    const found = new Set(people.map((u) => u.id));
+    if (!found.has(d.executorId) || !found.has(d.controllerId)) {
+      return res
+        .status(400)
+        .json({ error: "Исполнитель или контролёр не найден" });
     }
     const task = await db.$transaction(async (tx) => {
       const created = await tx.task.create({

@@ -12,8 +12,28 @@ import { asyncHandler } from "../util/asyncHandler.js";
 const r = Router();
 r.use(requireAuth);
 
-// Верхняя граница — защита от переполнения Int32 в БД (и от мусорного ввода).
-const int = z.coerce.number().int().min(0).max(2_000_000_000).default(0);
+// Верхняя граница — защита от мусорного ввода (в БД поля BigInt).
+const int = z.coerce.number().int().min(0).max(9e15).default(0);
+
+// BigInt из БД -> обычные числа в JSON (res.json не умеет BigInt).
+const MONEY_FIELDS = [
+  "fiscal",
+  "nonFiscal",
+  "humo",
+  "uzcard",
+  "click",
+  "payme",
+  "uzumTezkor",
+  "yandex",
+  "transfer",
+  "expenses",
+  "iiko",
+];
+function ser(r) {
+  const out = { ...r };
+  for (const k of MONEY_FIELDS) out[k] = Number(r[k] || 0);
+  return out;
+}
 const ReportSchema = z.object({
   branchId: z.string().min(1),
   branchName: z.string().default(""),
@@ -57,10 +77,17 @@ r.post(
         error: "Отчёт уже подтверждён офисом — изменения только через офис",
       });
     }
-    const saved = await db.cashReport.upsert({
-      where: { branchId_date: { branchId, date } },
-      create: { branchId, date, ...rest, userId: req.user.uid },
-      update: { ...rest, userId: req.user.uid },
+    const doUpsert = () =>
+      db.cashReport.upsert({
+        where: { branchId_date: { branchId, date } },
+        create: { branchId, date, ...rest, userId: req.user.uid },
+        update: { ...rest, userId: req.user.uid },
+      });
+    // Одновременная сдача двумя кассирами: гонка create даёт P2002 — один
+    // повтор превращает её в обычное обновление.
+    const saved = await doUpsert().catch((e) => {
+      if (e && e.code === "P2002") return doUpsert();
+      throw e;
     });
     // Правка существующего отчёта — след в журнале безопасности.
     if (existing) {
@@ -75,7 +102,7 @@ r.post(
         })
         .catch(() => {});
     }
-    res.json(saved);
+    res.json(ser(saved));
   })
 );
 
@@ -101,7 +128,7 @@ r.post(
       })
       .catch(() => null);
     if (!updated) return res.status(404).json({ error: "Отчёт не найден" });
-    res.json(updated);
+    res.json(ser(updated));
   })
 );
 
@@ -121,7 +148,7 @@ r.get(
       orderBy: [{ date: "desc" }, { branchId: "asc" }],
       take: 500,
     });
-    res.json({ items });
+    res.json({ items: items.map(ser) });
   })
 );
 

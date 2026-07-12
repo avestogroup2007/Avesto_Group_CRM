@@ -153,25 +153,33 @@ function pickAccounts(tx, rules) {
 
 // Формирует недостающие авто-проводки из согласованных движений денег.
 // Идемпотентно: refId = mtx-<id>. Ленивая — вызывается при чтении журнала/ОСВ.
+let autoPostPromise = null; // single-flight: параллельные чтения журнала
 async function ensureAutoPosted() {
+  if (autoPostPromise) return autoPostPromise;
+  autoPostPromise = doEnsureAutoPosted().finally(() => {
+    autoPostPromise = null;
+  });
+  return autoPostPromise;
+}
+
+async function doEnsureAutoPosted() {
   await ensureSeeded();
   const rules = await db.postingRule.findMany();
-  // Согласованные движения без проводки (по refId). Берём разумную пачку.
-  const [txs, existing] = await Promise.all([
-    db.moneyTx.findMany({
-      where: { approval: "approved" },
-      orderBy: { createdAt: "desc" },
-      take: 2000,
-    }),
-    db.posting.findMany({
-      where: { source: "money-tx" },
-      select: { refId: true },
-    }),
-  ]);
-  const have = new Set(existing.map((p) => p.refId));
+  // Согласованные движения, у которых ещё НЕТ авто-проводки: LEFT JOIN на
+  // уровне БД вместо выгрузки всех refId в память (не деградирует с ростом
+  // журнала). SQL статический — пользовательского ввода здесь нет.
+  const missing = await db.$queryRaw`
+    SELECT m.id FROM "MoneyTx" m
+    LEFT JOIN "Posting" p ON p."refId" = 'mtx-' || m.id AND p.source = 'money-tx'
+    WHERE m.approval = 'approved' AND p.id IS NULL
+    ORDER BY m."createdAt" DESC
+    LIMIT 500`;
+  if (!missing.length) return;
+  const txs = await db.moneyTx.findMany({
+    where: { id: { in: missing.map((r) => r.id) } },
+  });
   for (const tx of txs) {
     const refId = `mtx-${tx.id}`;
-    if (have.has(refId)) continue;
     const { debit, credit } = pickAccounts(tx, rules);
     await db.posting
       .create({
@@ -459,7 +467,20 @@ r.patch(
 r.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await db.posting.delete({ where: { id: req.params.id } }).catch(() => {});
+    const deleted = await db.posting
+      .delete({ where: { id: req.params.id } })
+      .catch(() => null);
+    if (!deleted) return res.status(404).json({ error: "Проводка не найдена" });
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "posting_delete",
+          detail: `Удалена проводка ${deleted.debit}/${deleted.credit} на ${deleted.amount} (${deleted.date})`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.json({ ok: true });
   })
 );

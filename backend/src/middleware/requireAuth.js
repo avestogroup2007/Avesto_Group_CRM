@@ -2,8 +2,14 @@
 // Токен принимается двумя способами:
 //  - httpOnly-cookie (same-origin, JS его не читает — безопаснее);
 //  - заголовок Authorization: Bearer <token> (кросс-домен github.io↔onrender).
+//
+// Помимо подписи токена проверяется ЖИВОЕ состояние учётки в БД (с кэшем на
+// минуту): заблокированный или уволенный сотрудник теряет доступ сразу, а не
+// через 12 часов, когда истечёт токен. Роль и филиал тоже берутся свежие —
+// понижение роли действует без перевыпуска токена.
 import jwt from "jsonwebtoken";
 import { env } from "../env.js";
+import { db } from "../db.js";
 
 function extractToken(req) {
   const auth = req.headers.authorization;
@@ -11,14 +17,54 @@ function extractToken(req) {
   return req.cookies?.token || null;
 }
 
-export function requireAuth(req, res, next) {
+// Кэш «uid → свежее состояние учётки» на 60 секунд: один SELECT в минуту на
+// активного пользователя вместо запроса на каждый вызов API.
+const FRESH_TTL_MS = 60 * 1000;
+const freshCache = new Map(); // uid -> { at, ok, role, branchId }
+
+// Сбросить кэш пользователя немедленно (после блокировки/смены роли в админке).
+export function invalidateUserAuthCache(uid) {
+  if (uid) freshCache.delete(uid);
+  else freshCache.clear();
+}
+
+async function freshState(uid) {
+  const hit = freshCache.get(uid);
+  if (hit && Date.now() - hit.at < FRESH_TTL_MS) return hit;
+  const user = await db.user
+    .findUnique({
+      where: { id: uid },
+      select: { active: true, iikoDeleted: true, role: true, branchId: true },
+    })
+    .catch(() => null);
+  const ok = Boolean(user && user.active && !user.iikoDeleted);
+  const state = {
+    at: Date.now(),
+    ok,
+    role: user ? user.role : null,
+    branchId: user ? user.branchId : null,
+  };
+  // Ограничиваем размер кэша (стихийная защита от роста на мусорных uid).
+  if (freshCache.size > 2000) freshCache.clear();
+  freshCache.set(uid, state);
+  return state;
+}
+
+export async function requireAuth(req, res, next) {
   const token = extractToken(req);
   if (!token) return res.status(401).json({ error: "Требуется вход" });
+  let payload;
   try {
     // В payload лежит только { uid, role, branchId } — ничего секретного.
-    req.user = jwt.verify(token, env.JWT_SECRET);
-    next();
+    payload = jwt.verify(token, env.JWT_SECRET);
   } catch {
-    res.status(401).json({ error: "Сессия истекла, войдите заново" });
+    return res.status(401).json({ error: "Сессия истекла, войдите заново" });
   }
+  const state = await freshState(payload.uid);
+  if (!state.ok) {
+    return res.status(401).json({ error: "Доступ закрыт. Войдите заново." });
+  }
+  // Роль/филиал — свежие из БД (важнее, чем 12-часовой снимок в токене).
+  req.user = { uid: payload.uid, role: state.role, branchId: state.branchId };
+  next();
 }
