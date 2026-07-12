@@ -42,6 +42,14 @@ async function loginAllowed(user) {
   return iikoCount === 0;
 }
 
+// Пароль сотрудника из iiko управляется В iiko (вход — живой SSO-проверкой):
+// менять его из CRM невозможно, локальный хэш — лишь кэш на случай, когда iiko
+// недоступен. Поэтому таким учёткам не навязываем «смену пароля при первом
+// входе» и не показываем локальную смену пароля.
+function passwordManagedByIiko(user) {
+  return user.source === "iiko" && Boolean(user.login);
+}
+
 // Общие параметры cookie в одном месте — чтобы logout снимал ровно ту же cookie.
 function cookieOptions() {
   return {
@@ -177,7 +185,10 @@ r.post(
       role: user.role,
       branchId: user.branchId,
       position: user.position,
-      mustChangePassword: user.mustChangePassword,
+      mustChangePassword: passwordManagedByIiko(user)
+        ? false
+        : user.mustChangePassword,
+      passwordManagedByIiko: passwordManagedByIiko(user),
     });
   })
 );
@@ -220,7 +231,10 @@ r.get(
       role: user.role,
       branchId: user.branchId,
       position: user.position,
-      mustChangePassword: user.mustChangePassword,
+      mustChangePassword: passwordManagedByIiko(user)
+        ? false
+        : user.mustChangePassword,
+      passwordManagedByIiko: passwordManagedByIiko(user),
     });
   })
 );
@@ -243,6 +257,12 @@ r.post(
     const user = await db.user.findUnique({ where: { id: req.user.uid } });
     if (!user || !user.active) {
       return res.status(401).json({ error: "Пользователь недоступен" });
+    }
+    if (passwordManagedByIiko(user)) {
+      return res.status(400).json({
+        error:
+          "Пароль этой учётной записи управляется в iiko — поменяйте его в iikoOffice, здесь он изменится сам при следующем входе.",
+      });
     }
     const ok = await bcrypt.compare(
       parsed.data.currentPassword,
