@@ -272,3 +272,38 @@ test("журнал безопасности: директору можно, staf
   });
   assert.equal(denied.status, 403);
 });
+
+test("резервная копия: директор скачивает JSON со всеми таблицами, staff — 403", async () => {
+  const dirRes = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: TEST_LOGIN, password: TEST_PASSWORD }),
+  });
+  const dir = await dirRes.json();
+  const res = await fetch(`${base}/api/backup/export`, {
+    headers: { Authorization: `Bearer ${dir.token}` },
+  });
+  assert.equal(res.status, 200);
+  assert.match(
+    res.headers.get("content-disposition") || "",
+    /avesto-crm-backup-\d{4}-\d{2}-\d{2}\.json/
+  );
+  const body = await res.json();
+  assert.equal(body.format, "avesto-crm-backup");
+  assert.ok(body.tables.users.length >= 1);
+  assert.ok(body.counts.users >= 1);
+  // Выгрузка зафиксирована в журнале безопасности.
+  const logged = await db.auditLog.count({ where: { event: "backup_export" } });
+  assert.ok(logged >= 1);
+
+  const ssoRes = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: SSO_LOGIN, password: SSO_PASSWORD }),
+  });
+  const sso = await ssoRes.json();
+  const denied = await fetch(`${base}/api/backup/export`, {
+    headers: { Authorization: `Bearer ${sso.token}` },
+  });
+  assert.equal(denied.status, 403);
+});
