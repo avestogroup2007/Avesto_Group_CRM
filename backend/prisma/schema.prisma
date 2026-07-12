@@ -26,7 +26,6 @@ model Branch {
   monthlyBudget Int          @default(0)
   users         User[]
   tasks         Task[]
-  cashReports   CashReport[]
 
   @@index([companyId])
 }
@@ -127,8 +126,8 @@ model Comment {
 
 model CashReport {
   id          String    @id @default(cuid())
-  branchId    String
-  branch      Branch    @relation(fields: [branchId], references: [id])
+  branchId    String // id филиала фронтенда (без FK — как в MoneyTx/чек-листах)
+  branchName  String    @default("") // название филиала (для отчётов/бота)
   date        String // YYYY-MM-DD
   userId      String
   status      String    @default("submitted") // submitted|confirmed
@@ -150,6 +149,7 @@ model CashReport {
 
   @@unique([branchId, date]) // один отчёт на филиал в день
   @@index([branchId])
+  @@index([date])
 }
 
 // Учёт и контроль денег компании (казначейство). Заменяет ручной Excel:

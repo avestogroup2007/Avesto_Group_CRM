@@ -46,6 +46,9 @@ services:
       # Разрешённый источник для CORS — домен фронтенда на GitHub Pages.
       - key: FRONTEND_URL
         value: https://avestogroup2007.github.io
+      # Полный адрес приложения — для кнопки «Открыть CRM» в Telegram-боте.
+      - key: PUBLIC_APP_URL
+        value: https://avestogroup2007.github.io/Avesto_Group_CRM/
       # iiko (Этап 3) — заполняется в панели Render, НЕ в этом файле и не в git.
       # - key: IIKO_API_LOGIN
       #   sync: false

@@ -79,6 +79,7 @@ test("mgmtMenuView: офисной роли — сводки, а не чек-л�
     "mgr|risky",
     "mgr|money",
     "mgr|tasks",
+    "mgr|brlist",
     "mgr|own",
   ]);
 });
@@ -93,6 +94,29 @@ test("salesPeriod: сегодня/вчера/неделя дают коррек�
   const w = salesPeriod("w");
   assert.equal(w.to, t.to);
   assert.ok(w.from < w.to);
+});
+
+test("филиалы: список, карточка и сводки филиала", async () => {
+  const { branchListView, branchCardView, branchCashView, branchMoneyView } =
+    _internals;
+  const list = branchListView();
+  assert.match(list.text, /Филиалы/);
+  const branchBtns = list.keyboard.flat().filter((b) => b.callback_data);
+  assert.ok(branchBtns.some((b) => b.callback_data === "mgr|br|1"));
+
+  const card = branchCardView(4);
+  assert.match(card.text, /Наврузий цех/);
+  assert.match(card.text, /07:00–16:00/);
+  const actions = card.keyboard.flat().map((b) => b.callback_data);
+  assert.ok(actions.includes("mgr|brsales|4"));
+  assert.ok(actions.includes("mgr|brcash|4"));
+
+  const cash = await branchCashView(1);
+  assert.match(cash.text, /Касса/);
+  assert.match(cash.text, /Отчёт ещё не сдан|подтверждён|ждёт/);
+
+  const moneyV = await branchMoneyView(1);
+  assert.match(moneyV.text, /Деньги|Не удалось/);
 });
 
 test("mgmtMoneyView и mgmtTasksView: отвечают сводкой с кнопкой возврата", async () => {

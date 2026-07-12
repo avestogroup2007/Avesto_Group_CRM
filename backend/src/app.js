@@ -14,6 +14,7 @@ import iikoRoutes from "./routes/iiko.js";
 import taskRoutes from "./routes/tasks.js";
 import moneyRoutes from "./routes/money.js";
 import postingRoutes from "./routes/postings.js";
+import cashRoutes from "./routes/cash.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
@@ -89,9 +90,7 @@ app.use("/api/money", moneyRoutes);
 app.use("/api/postings", postingRoutes);
 app.use("/api/telegram", telegramRoutes);
 app.use("/api/ai", aiRoutes);
-
-// Здесь позже подключим:
-// app.use("/api/cash", cashRoutes);
+app.use("/api/cash", cashRoutes);
 
 // Обработка 404 и ошибок — всегда последними.
 app.use(notFound);
