@@ -58,3 +58,27 @@ test("шаблоны: sanitary/open/close заданы и непусты", () =>
   // В санитарном есть пункты с обязательным фото
   assert.ok(CHECKLIST_DEFS.sanitary.items.some((i) => i.needPhoto));
 });
+
+test("mgmtMenuView: офисной роли — сводки, а не чек-листы уборщицы", () => {
+  const { mgmtMenuView, OFFICE_ROLES } = _internals;
+  assert.equal(OFFICE_ROLES.has("director"), true);
+  assert.equal(OFFICE_ROLES.has("staff"), false);
+  const { text, keyboard } = mgmtMenuView({
+    displayName: "Директор Тест",
+    role: "director",
+  });
+  assert.match(text, /Директор Тест/);
+  assert.match(text, /Руководство/);
+  const actions = keyboard.flat().map((b) => b.callback_data);
+  assert.deepEqual(actions, ["mgr|checks", "mgr|sales", "mgr|own"]);
+});
+
+test("mgmtChecksView: сводка содержит все филиалы и кнопку возврата", async () => {
+  const { mgmtChecksView } = _internals;
+  const { text, keyboard } = await mgmtChecksView();
+  assert.match(text, /Чек-листы за \d{4}-\d{2}-\d{2}/);
+  assert.match(text, /Микрорайон/);
+  assert.match(text, /Кейтеринг/);
+  const actions = keyboard.flat().map((b) => b.callback_data);
+  assert.ok(actions.includes("mgr|menu"));
+});
