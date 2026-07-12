@@ -31,6 +31,7 @@ import {
   AdCard,
 } from "../components/ui.jsx";
 import { AdminRoutes } from "../pages/Routes.jsx";
+import AdminChecklists from "./AdminChecklists.jsx";
 
 // Предпросмотр списка сотрудников из iiko (шаг 1: только чтение). iiko —
 // источник правды по кадрам; на следующем шаге отсюда будем импортировать
@@ -1517,6 +1518,10 @@ function AdminAudit() {
 
 export function AdminPanel({ s, dispatch, notify }) {
   const [tab, setTab] = useState("staff");
+  // Вкладка «Чек-листы» видна клиенту только если владелец включил модуль
+  // в Back Office (флаги приходят с сервера в s.modules).
+  const mods = s.modules || {};
+  const checklistsOn = mods.employeeChecklists || mods.cleaningChecklists;
   const tabs = [
     ["staff", "Сотрудники", Users],
     ["positions", "Должности", Award],
@@ -1525,6 +1530,7 @@ export function AdminPanel({ s, dispatch, notify }) {
     ["routes", "Маршруты", Send],
     ["sla", "SLA-нормативы", Clock],
     ["sops", "Регламенты", ListChecks],
+    ...(checklistsOn ? [["checklists", "Чек-листы", ListChecks]] : []),
     ["system", "Система", Settings],
     ["audit", "Журнал безопасности", ShieldCheck],
   ];
@@ -1571,6 +1577,9 @@ export function AdminPanel({ s, dispatch, notify }) {
       {tab === "sla" && <AdminSla s={s} dispatch={dispatch} />}
       {tab === "sops" && (
         <AdminSops s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "checklists" && checklistsOn && (
+        <AdminChecklists notify={notify} />
       )}
       {tab === "audit" && <AdminAudit />}
       {tab === "system" && (

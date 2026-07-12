@@ -397,3 +397,33 @@ model FeatureRequest {
 
   @@index([status])
 }
+
+// ── Модульность продукта (управляется из Back Office владельцем) ────────────
+// Флаги функций, которые владелец системы включает под потребность клиента.
+// Одна строка (id=1), JSON. Пусто = модуль выключен (безопасный дефолт для
+// новых установок; у Avesto включается по месту).
+model ModuleConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+// Шаблон чек-листа, настраиваемый клиентом в админке (когда модуль включён).
+// kind: role — чек-лист по должности; cleaning — почасовая уборка.
+model ChecklistTemplate {
+  id           String   @id @default(cuid())
+  kind         String // role | cleaning
+  position     String   @default("") // для role: должность (произвольная строка)
+  title        String
+  items        Json // [{ text, needPhoto }]
+  scheduleType String   @default("daily") // daily | shift | hourly
+  fromHour     Int? // для hourly — начало окна
+  toHour       Int? // для hourly — конец окна
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([kind])
+  @@index([active])
+}

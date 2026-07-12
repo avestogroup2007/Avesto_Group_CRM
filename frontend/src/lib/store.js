@@ -197,6 +197,8 @@ export function reducer(s, a) {
       };
     case "SET_CATDEPT":
       return { ...s, catDept: { ...s.catDept, [a.category]: a.departmentId } };
+    case "MODULES":
+      return { ...s, modules: a.flags || {} };
     case "ORG_CONFIG": {
       // Конфигурация организации с сервера — источник правды для филиалов,
       // юрлиц и бренда. Мержим по id, чтобы не потерять локальные поля

@@ -3,7 +3,7 @@
 // в клиентских установках таких ролей нет, раздел им недоступен.
 import { useState, useEffect } from "react";
 import { Briefcase, PlusCircle, Trash2 } from "lucide-react";
-import { apiGet, apiPost, apiPatch, apiDelete } from "../api.js";
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from "../api.js";
 import { C } from "../lib/theme.js";
 import { Field, Badge, AdCard } from "../components/ui.jsx";
 
@@ -450,6 +450,72 @@ function FeaturesTab({ me, notify }) {
   );
 }
 
+function ModulesTab({ notify }) {
+  const [flags, setFlags] = useState({});
+  const [catalog, setCatalog] = useState({});
+  const [busy, setBusy] = useState(false);
+  const load = () =>
+    apiGet("/api/modules")
+      .then((m) => {
+        setFlags(m.flags || {});
+        setCatalog(m.catalog || {});
+      })
+      .catch(() => {});
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const toggle = async (key) => {
+    const next = { ...flags, [key]: !flags[key] };
+    setBusy(true);
+    try {
+      const saved = await apiPut("/api/modules", next);
+      setFlags(saved);
+      notify("Модули обновлены");
+    } catch (e) {
+      notify(e.message || "Не удалось сохранить");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <AdCard
+      title="Модули системы"
+      desc="Включайте функции под потребность клиента. Клиент увидит раздел и сможет настроить его содержимое в своей админке; выключенный модуль ему недоступен."
+    >
+      <div className="space-y-2">
+        {Object.entries(catalog).map(([key, info]) => (
+          <div
+            key={key}
+            className="flex items-start justify-between gap-3 rounded-xl px-4 py-3"
+            style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+          >
+            <div className="min-w-0">
+              <div style={{ fontWeight: 700, color: C.ink, fontSize: 14 }}>
+                {info.label}
+              </div>
+              <div style={{ fontSize: 12.5, color: C.sub }}>{info.desc}</div>
+            </div>
+            <button
+              onClick={() => toggle(key)}
+              disabled={busy}
+              className="rounded-full px-3 py-1.5 font-bold shrink-0"
+              style={{
+                background: flags[key] ? "#E9F9EF" : C.line,
+                color: flags[key] ? "#16A34A" : C.sub,
+                border: `1px solid ${flags[key] ? "#16A34A" : C.border}`,
+                fontSize: 12.5,
+              }}
+            >
+              {flags[key] ? "Включён" : "Выключен"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </AdCard>
+  );
+}
+
 export function BackOfficeView({ me, notify }) {
   const [tab, setTab] = useState("clients");
   const tabBtn = (key, label) => (
@@ -485,13 +551,12 @@ export function BackOfficeView({ me, notify }) {
       </div>
       <div className="flex flex-wrap gap-2">
         {tabBtn("clients", "Клиенты и продажи")}
+        {tabBtn("modules", "Модули")}
         {tabBtn("features", "Развитие продукта")}
       </div>
-      {tab === "clients" ? (
-        <ClientsTab me={me} notify={notify} />
-      ) : (
-        <FeaturesTab me={me} notify={notify} />
-      )}
+      {tab === "clients" && <ClientsTab me={me} notify={notify} />}
+      {tab === "modules" && <ModulesTab notify={notify} />}
+      {tab === "features" && <FeaturesTab me={me} notify={notify} />}
     </div>
   );
 }
