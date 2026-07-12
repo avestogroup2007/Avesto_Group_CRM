@@ -296,14 +296,20 @@ export function Ring({ value, label, color, size = 132 }) {
 }
 
 export function StatusBadge({ ok }) {
-  return ok ? (
-    <Badge color={C.ok} bg="#E9F9EF">
-      Работает в прототипе
-    </Badge>
-  ) : (
-    <Badge color={C.brandA} bg="#EFF4FF">
-      Бэкенд · дорожная карта
-    </Badge>
+  // Короткие подписи и запрет переноса — на телефоне длинная плашка ломала
+  // строки «Карты возможностей» на 2–3 строки.
+  return (
+    <span style={{ whiteSpace: "nowrap" }}>
+      {ok ? (
+        <Badge color={C.ok} bg="#E9F9EF">
+          Работает
+        </Badge>
+      ) : (
+        <Badge color={C.brandA} bg="#EFF4FF">
+          В планах
+        </Badge>
+      )}
+    </span>
   );
 }
 

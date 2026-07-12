@@ -16,10 +16,17 @@ export function AboutView() {
     ["ИИ-ревизор: аномалии и инциденты", true],
     ["Контроль бюджетов филиалов", true],
     ["Дашборд директора и личная аналитика", true],
-    ["Telegram-бот (двусторонний обмен)", false],
+    ["Бэкенд: PostgreSQL, вход по логину/паролю, аудит", true],
+    ["Интеграция iiko: продажи, ОПиУ, кадры, акты", true],
+    ["Telegram-бот: чек-листы, сводки, филиалы, Mini App", true],
+    ["Касса: отчёты филиалов на сервере", true],
+    ["Конструктор тортов + ИИ-помощник (Claude)", true],
+    ["Безопасность: CSP, rate-limit, алерты о входах", true],
+    ["CI/CD: линт, тесты и сборка на каждый PR", true],
+    ["Автодокументы конструктора (акты, перемещения)", false],
     ["Распознавание речи (Whisper) и гео-метки фото", false],
-    ["Zero Trust: RLS, шифрование AES-256, водяные знаки", false],
-    ["DevOps: Sentry, CI/CD, ежечасные бэкапы, репликация", false],
+    ["Мониторинг ошибок (Sentry) и аптайм", false],
+    ["Ежедневные бэкапы БД (план Render)", false],
   ];
   return (
     <div className="space-y-5 max-w-3xl">
@@ -34,10 +41,10 @@ export function AboutView() {
           </h2>
         </div>
         <p style={{ fontSize: 14.5, lineHeight: 1.55, opacity: 0.95 }}>
-          Это рабочий интерактивный прототип (MVP) на основе вашего ТЗ. Логика,
-          интерфейс и ИИ-сценарии работают прямо здесь; данные сохраняются между
-          сессиями. Серверные модули ниже спроектированы в ТЗ и подключаются на
-          этапе бэкенда.
+          Рабочая система управления группой Avesto: заявки и маршруты
+          согласования, кассы и деньги, аналитика продаж из iiko, чек-листы смен
+          и Telegram-бот. Данные хранятся на сервере (PostgreSQL), вход — по
+          учётным записям сотрудников из iiko.
         </p>
       </div>
       <div
@@ -51,17 +58,17 @@ export function AboutView() {
           {rows.map(([label, ok], i) => (
             <div
               key={i}
-              className="flex items-center justify-between rounded-xl px-3 py-2.5"
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl px-3 py-2.5"
               style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
             >
               <span
-                className="flex items-center gap-2"
-                style={{ fontSize: 14, color: C.ink }}
+                className="flex items-center gap-2 min-w-0"
+                style={{ fontSize: 14, color: C.ink, flex: "1 1 180px" }}
               >
                 {ok ? (
-                  <CheckCircle2 size={16} color={C.ok} />
+                  <CheckCircle2 size={16} color={C.ok} className="shrink-0" />
                 ) : (
-                  <Server size={16} color={C.brandA} />
+                  <Server size={16} color={C.brandA} className="shrink-0" />
                 )}{" "}
                 {label}
               </span>
@@ -81,11 +88,11 @@ export function AboutView() {
           </h3>
         </div>
         <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.55 }}>
-          Спринт 1 — БД (PostgreSQL) + смены. Спринт 2 — движок 5 фаз +
-          Telegram-бот. Спринт 3 — ИИ (голос, ревизор аномалий, бюджеты). Спринт
-          4 — кабина директора, личная аналитика, безопасность (RLS, шифрование,
-          водяные знаки) и DevOps. Архитектура модульная: дизайн, функции и роли
-          расширяются без переписывания ядра.
+          Ближайшие шаги дорожной карты: автоматическое формирование актов
+          приготовления и внутренних перемещений из конструктора тортов (по
+          правилам складов и групп iiko), расширение ИИ-помощника на акты и
+          аналитику, мониторинг ошибок и ежедневные бэкапы базы. Архитектура
+          модульная: функции и роли расширяются без переписывания ядра.
         </p>
       </div>
     </div>
