@@ -61,8 +61,10 @@ const OFFICE_ROLES = new Set([
   "accountant",
   "sysadmin",
   "manager",
+  "owner",
 ]);
 const ROLE_LABEL = {
+  owner: "Владелец системы",
   director: "Руководство",
   finance: "Финансист",
   manager: "Управляющий",
