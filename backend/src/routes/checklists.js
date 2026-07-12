@@ -1,19 +1,33 @@
-// Чек-листы смены, сданные через веб-приложение. Пишутся в ту же таблицу,
-// что и чек-листы Telegram-бота (ShiftChecklistRun, via="app") — сводки в
-// боте («Чек-листы сегодня», карточка филиала) видят сдачи из обоих каналов.
+// Чек-листы, сдаваемые через веб-приложение. Пишутся в ту же таблицу, что и
+// чек-листы Telegram-бота (ShiftChecklistRun, via="app") — сводки в боте видят
+// сдачи из обоих каналов. Два вида:
+//   • легаси-обходы смены (sanitary|open|close) — состав пунктов «прибит» в коде;
+//   • по шаблонам из админки (role|cleaning) — состав задаёт клиент, включение
+//     модуля контролирует владелец в Back Office. Отчёт для руководства.
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
+import { refreshModules, moduleEnabled } from "../services/modules.js";
 
 const r = Router();
 r.use(requireAuth);
 
+// Какой модуль включает сдачу шаблонного чек-листа данного вида.
+const MODULE_FOR = {
+  role: "employeeChecklists",
+  cleaning: "cleaningChecklists",
+};
+
 const RunSchema = z.object({
   branchId: z.string().min(1).max(20),
-  kind: z.enum(["sanitary", "open", "close"]),
+  kind: z.enum(["sanitary", "open", "close", "role", "cleaning"]),
+  // Для шаблонных чек-листов — id шаблона (сервер берёт заголовок/должность из
+  // БД, клиенту не доверяем). Для легаси-обходов не передаётся.
+  templateId: z.string().max(40).nullable().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   slot: z
     .string()
@@ -31,7 +45,7 @@ const RunSchema = z.object({
       })
     )
     .min(1)
-    .max(30),
+    .max(40),
 });
 
 // Сдача чек-листа из веб-приложения. Каждая сдача — новая запись (как у бота):
@@ -50,6 +64,33 @@ r.post(
     if (!orgBranchById(d.branchId)) {
       return res.status(400).json({ error: "Неизвестный филиал" });
     }
+
+    // Для шаблонных видов проверяем шаблон и модуль на сервере: заголовок и
+    // должность берём из БД, чтобы отчёт не зависел от того, что прислал клиент.
+    let title = null;
+    let position = null;
+    let templateId = null;
+    if (d.kind === "role" || d.kind === "cleaning") {
+      await refreshModules().catch(() => {});
+      if (!moduleEnabled(MODULE_FOR[d.kind])) {
+        return res
+          .status(403)
+          .json({ error: "Модуль чек-листов выключен владельцем системы" });
+      }
+      if (!d.templateId) {
+        return res.status(400).json({ error: "Не указан шаблон чек-листа" });
+      }
+      const tpl = await db.checklistTemplate
+        .findUnique({ where: { id: d.templateId } })
+        .catch(() => null);
+      if (!tpl || !tpl.active || tpl.kind !== d.kind) {
+        return res.status(400).json({ error: "Шаблон не найден или отключён" });
+      }
+      title = tpl.title;
+      position = tpl.position || null;
+      templateId = tpl.id;
+    }
+
     const done = d.items.filter((it) => it.done).length;
     const pct = Math.round((done / d.items.length) * 100);
     const run = await db.shiftChecklistRun.create({
@@ -62,9 +103,68 @@ r.post(
         pct,
         userId: req.user.uid,
         via: "app",
+        templateId,
+        title,
+        position,
       },
     });
     res.status(201).json({ id: run.id, pct: run.pct });
+  })
+);
+
+// Отчёт по чек-листам за период (для руководства). Показывает сдачи по дням,
+// филиалам и шаблонам с процентом выполнения. Доступ — управленческие роли.
+const ReportSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  branchId: z.string().min(1).max(20).optional(),
+});
+
+r.get(
+  "/report",
+  requireRole("director", "manager", "finance", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const parsed = ReportSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Неверный период" });
+    }
+    const { from, to, branchId } = parsed.data;
+    if (from > to) {
+      return res.status(400).json({ error: "Начало периода позже конца" });
+    }
+    const where = { date: { gte: from, lte: to } };
+    if (branchId) where.branchId = branchId;
+    const runs = await db.shiftChecklistRun.findMany({
+      where,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      take: 3000,
+      select: {
+        id: true,
+        branchId: true,
+        kind: true,
+        date: true,
+        slot: true,
+        pct: true,
+        title: true,
+        position: true,
+        templateId: true,
+        via: true,
+        createdAt: true,
+      },
+    });
+    // Свод: всего сдач, средний процент, разбивка по видам.
+    const byKind = {};
+    let pctSum = 0;
+    for (const run of runs) {
+      byKind[run.kind] = (byKind[run.kind] || 0) + 1;
+      pctSum += run.pct;
+    }
+    const summary = {
+      total: runs.length,
+      avgPct: runs.length ? Math.round(pctSum / runs.length) : 0,
+      byKind,
+    };
+    res.json({ runs, summary, from, to });
   })
 );
 

@@ -1,9 +1,16 @@
 // Экран «Чек-листы смены»: почасовой санитарный обход с фотоотчётом,
 // открытие и закрытие смены.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Camera, ListChecks, Check } from "lucide-react";
-import { apiPost } from "../api.js";
+import {
+  X,
+  Camera,
+  ListChecks,
+  Check,
+  ClipboardList,
+  Clock,
+} from "lucide-react";
+import { apiGet, apiPost } from "../api.js";
 import { C } from "../lib/theme.js";
 import { TZ, ymdNow } from "../lib/format.js";
 import { BRANCHES, branchById } from "../lib/org.js";
@@ -38,8 +45,63 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
   );
   const runFor = (kind, slot) =>
     runs.find((r) => r.kind === kind && (r.slot || null) === (slot || null));
+  // Сдача конкретного шаблона (по templateId), учитывая слот для почасовых.
+  const runForTemplate = (templateId, slot) =>
+    runs.find(
+      (r) => r.templateId === templateId && (r.slot || null) === (slot || null),
+    );
 
   const [open, setOpen] = useState(null);
+
+  // Шаблоны чек-листов из админки + флаги модулей (владелец включает в Back
+  // Office). Пусто/выключено — секции шаблонов просто не показываются.
+  const [templates, setTemplates] = useState([]);
+  const [mods, setMods] = useState({
+    employeeChecklists: false,
+    cleaningChecklists: false,
+  });
+  useEffect(() => {
+    apiGet("/api/checklist-templates")
+      .then((res) => {
+        setTemplates(Array.isArray(res.items) ? res.items : []);
+        setMods(res.modules || {});
+      })
+      .catch(() => {});
+  }, []);
+  // Мои чек-листы по должности: активные role-шаблоны, чья должность совпадает
+  // с должностью сотрудника (пустая должность в шаблоне = для всех).
+  const myPos = String(me.pos || "")
+    .trim()
+    .toLowerCase();
+  const roleTemplates = mods.employeeChecklists
+    ? templates.filter(
+        (t) =>
+          t.kind === "role" &&
+          t.active &&
+          (!t.position || t.position.trim().toLowerCase() === myPos),
+      )
+    : [];
+  const cleaningTemplates = mods.cleaningChecklists
+    ? templates.filter((t) => t.kind === "cleaning" && t.active)
+    : [];
+
+  // Отчёт по чек-листам за период — для руководства. Роли совпадают с сервером
+  // (/api/checklists/report). Период: сегодня или последние 7 дней.
+  const isMgr = ["director", "manager", "finance", "sysadmin"].includes(
+    me.role,
+  );
+  const [report, setReport] = useState(null);
+  const [reportDays, setReportDays] = useState(1);
+  useEffect(() => {
+    if (!isMgr) return;
+    const to = ymdNow();
+    const d = new Date();
+    d.setDate(d.getDate() - (reportDays - 1));
+    const from = d.toLocaleDateString("en-CA", { timeZone: TZ });
+    apiGet(`/api/checklists/report?from=${from}&to=${to}`)
+      .then((res) => setReport(res))
+      .catch(() => setReport(null));
+  }, [isMgr, reportDays]);
 
   const tgNotify = (text) =>
     apiPost("/api/telegram/notify", {
@@ -47,19 +109,39 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
       kind: "checklist",
     }).catch(() => {});
 
-  const startRun = (kind, slot) => {
-    const existing = runFor(kind, slot);
-    const def = CHECKLIST_DEFS[kind];
-    const items = def.items.map((it, i) => {
+  // Собирает черновик из состава пунктов (легаси-обход или шаблон), подставляя
+  // отметки предыдущей сдачи, если она была.
+  const buildDraft = (kind, slot, label, defItems, existing, templateId) => {
+    const items = defItems.map((it, i) => {
       const prev = existing && existing.items && existing.items[i];
       return {
         text: it.text,
-        needPhoto: it.needPhoto,
+        needPhoto: !!it.needPhoto,
         done: prev ? !!prev.done : false,
         photo: prev ? prev.photo || null : null,
       };
     });
-    setOpen({ kind, slot: slot || null, items });
+    setOpen({
+      kind,
+      templateId: templateId || null,
+      slot: slot || null,
+      label,
+      items,
+    });
+  };
+  const startRun = (kind, slot) => {
+    const def = CHECKLIST_DEFS[kind];
+    buildDraft(kind, slot, def.label, def.items, runFor(kind, slot), null);
+  };
+  const startTemplateRun = (tpl, slot) => {
+    buildDraft(
+      tpl.kind,
+      slot,
+      tpl.title,
+      tpl.items || [],
+      runForTemplate(tpl.id, slot),
+      tpl.id,
+    );
   };
 
   const toggle = (i) =>
@@ -106,6 +188,7 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
       type: "SAVE_CHECKLIST",
       run: {
         kind: open.kind,
+        templateId: open.templateId || null,
         branchId,
         date,
         slot: open.slot || null,
@@ -125,6 +208,7 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
     apiPost("/api/checklists/run", {
       branchId: String(branchId),
       kind: open.kind,
+      templateId: open.templateId || null,
       date,
       slot: open.slot || null,
       items: open.items.map((it) => ({
@@ -134,8 +218,7 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
         hasPhoto: !!it.photo,
       })),
     }).catch(() => {});
-    const def = CHECKLIST_DEFS[open.kind];
-    const label = def.label + (open.slot ? ` ${open.slot}` : "");
+    const label = open.label + (open.slot ? ` ${open.slot}` : "");
     const bName = (branchById(branchId) || {}).name || "—";
     tgNotify(
       `🧾 ${label}\n${bName} · ${date}${me.pos ? " · " + me.pos : ""}\n` +
@@ -198,8 +281,111 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
     );
   };
 
-  const activeDef = open ? CHECKLIST_DEFS[open.kind] : null;
   const openDoneN = open ? open.items.filter((it) => it.done).length : 0;
+
+  // Часы для почасового шаблона: окно fromHour..toHour шаблона, иначе — окно
+  // филиала. Для daily/shift слотов нет (одна сдача за день).
+  const tplSlots = (tpl) => {
+    if (tpl.scheduleType !== "hourly") return [null];
+    const from = Number.isFinite(tpl.fromHour) ? tpl.fromHour : hours.from;
+    const to = Number.isFinite(tpl.toHour) ? tpl.toHour : hours.to;
+    const out = [];
+    for (let h = from; h <= to; h++)
+      out.push(`${String(h).padStart(2, "0")}:00`);
+    return out;
+  };
+  // Карточка шаблонного чек-листа: одна кнопка (daily/shift) или сетка часов.
+  const templateCard = (tpl) => {
+    const slotsFor = tplSlots(tpl);
+    const hourly = tpl.scheduleType === "hourly";
+    return (
+      <div
+        key={tpl.id}
+        className="rounded-xl p-3"
+        style={{ border: `1px solid ${C.border}`, background: "#fff" }}
+      >
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="font-bold" style={{ color: C.ink, fontSize: 14 }}>
+            {tpl.title}
+          </span>
+          {tpl.position ? (
+            <span
+              className="rounded-full px-2 py-0.5"
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                background: "#EEF2FF",
+                color: "#4338CA",
+              }}
+            >
+              {tpl.position}
+            </span>
+          ) : null}
+        </div>
+        {hourly ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-2">
+            {slotsFor.map((sl) => {
+              const rr = runForTemplate(tpl.id, sl);
+              return (
+                <button
+                  key={sl}
+                  onClick={() => startTemplateRun(tpl, sl)}
+                  className="rounded-lg p-2 text-left"
+                  style={{ border: `1px solid ${C.line}`, background: "#fff" }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className="font-bold"
+                      style={{ color: C.ink, fontSize: 13 }}
+                    >
+                      {sl}
+                    </span>
+                    <span
+                      className="rounded-full px-1.5 py-0.5"
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        background: rr ? "#DCFCE7" : "#F1F5F9",
+                        color: rr ? "#15803D" : "#64748B",
+                      }}
+                    >
+                      {rr ? `${rr.pct}%` : "—"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          (() => {
+            const rr = runForTemplate(tpl.id, null);
+            return (
+              <button
+                onClick={() => startTemplateRun(tpl, null)}
+                className="rounded-lg px-3 py-2 w-full text-left flex items-center justify-between mt-1"
+                style={{ border: `1px solid ${C.line}`, background: "#fff" }}
+              >
+                <span style={{ color: C.sub, fontSize: 12.5 }}>
+                  {(tpl.items || []).length} пунктов · нажмите, чтобы заполнить
+                </span>
+                <span
+                  className="rounded-full px-2 py-0.5"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    background: rr ? "#DCFCE7" : "#F1F5F9",
+                    color: rr ? "#15803D" : "#64748B",
+                  }}
+                >
+                  {rr ? `${rr.pct}%` : "Не начато"}
+                </span>
+              </button>
+            );
+          })()
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -254,6 +440,66 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
           />
         </div>
       </div>
+
+      {/* Отчёт по чек-листам (руководство): сдачи за период по видам */}
+      {isMgr && report && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h3
+              className="font-bold flex items-center gap-2"
+              style={{ color: C.ink, fontSize: 15 }}
+            >
+              <ClipboardList size={17} style={{ color: C.brandA }} />
+              Отчёт по чек-листам
+            </h3>
+            <div className="flex gap-1">
+              {[
+                [1, "Сегодня"],
+                [7, "7 дней"],
+              ].map(([d, lbl]) => (
+                <button
+                  key={d}
+                  onClick={() => setReportDays(d)}
+                  className="rounded-lg px-2.5 py-1 font-semibold"
+                  style={{
+                    fontSize: 12,
+                    border: `1px solid ${reportDays === d ? C.brandA : C.border}`,
+                    color: reportDays === d ? C.brandA : C.sub,
+                    background: reportDays === d ? "#F5F3FF" : "#fff",
+                  }}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <Kpi
+              label="Сдач за период"
+              value={String(report.summary.total)}
+              tone={C.brandB}
+            />
+            <Kpi
+              label="Средний %"
+              value={`${report.summary.avgPct}%`}
+              tone={report.summary.avgPct >= 80 ? C.ok : C.brandA}
+            />
+            <Kpi
+              label="Видов"
+              value={String(Object.keys(report.summary.byKind).length)}
+              tone={C.faint}
+            />
+          </div>
+          {report.summary.total === 0 && (
+            <div style={{ color: C.sub, fontSize: 12.5, marginTop: 8 }}>
+              За выбранный период сдач нет.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Разовые за смену */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -316,6 +562,51 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
         </div>
       </div>
 
+      {/* Чек-листы по должности (шаблоны из админки, модуль включает владелец) */}
+      {roleTemplates.length > 0 && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3
+            className="font-bold mb-1 flex items-center gap-2"
+            style={{ color: C.ink, fontSize: 15 }}
+          >
+            <ClipboardList size={17} style={{ color: C.brandA }} />
+            Чек-листы по должности
+          </h3>
+          <p style={{ color: C.sub, fontSize: 12.5, marginBottom: 10 }}>
+            Задачи для вашей должности{me.pos ? ` (${me.pos})` : ""}.
+            Настраивает администратор.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {roleTemplates.map((t) => templateCard(t))}
+          </div>
+        </div>
+      )}
+
+      {/* Чек-листы уборки (шаблоны из админки, обычно почасовые) */}
+      {cleaningTemplates.length > 0 && (
+        <div
+          className="rounded-2xl bg-white p-4 sm:p-5"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <h3
+            className="font-bold mb-1 flex items-center gap-2"
+            style={{ color: C.ink, fontSize: 15 }}
+          >
+            <Clock size={17} style={{ color: C.brandA }} />
+            Чек-листы уборки
+          </h3>
+          <p style={{ color: C.sub, fontSize: 12.5, marginBottom: 10 }}>
+            Уборка по расписанию. Настраивает администратор.
+          </p>
+          <div className="space-y-3">
+            {cleaningTemplates.map((t) => templateCard(t))}
+          </div>
+        </div>
+      )}
+
       {/* Модальное окно заполнения */}
       {open &&
         createPortal(
@@ -334,7 +625,7 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
                   className="font-bold"
                   style={{ color: C.ink, fontSize: 16 }}
                 >
-                  {activeDef.label}
+                  {open.label}
                   {open.slot ? ` · ${open.slot}` : ""}
                 </h3>
                 <button onClick={() => setOpen(null)}>

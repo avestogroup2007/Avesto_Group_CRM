@@ -306,10 +306,13 @@ export function reducer(s, a) {
         ],
       };
     case "SAVE_CHECKLIST": {
-      // upsert по (kind, branchId, date, slot) — повторная сдача обновляет запись.
+      // upsert по (kind, templateId, branchId, date, slot) — повторная сдача
+      // обновляет запись. templateId учитывается, чтобы разные шаблоны одного
+      // вида (role/cleaning) не перезаписывали друг друга.
       const run = a.run;
       const same = (r) =>
         r.kind === run.kind &&
+        (r.templateId || null) === (run.templateId || null) &&
         r.branchId === run.branchId &&
         r.date === run.date &&
         (r.slot || null) === (run.slot || null);
