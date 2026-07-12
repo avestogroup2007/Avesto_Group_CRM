@@ -90,6 +90,43 @@ function ClientsTab({ me, notify }) {
       notify(e.message || "Удаление — только владельцу");
     }
   };
+  const [checking, setChecking] = useState(null);
+  // Проверка работоспособности установки клиента: только чтение /api/health —
+  // управлять чужой системой из Back Office нельзя by design.
+  const check = async (id) => {
+    setChecking(id);
+    try {
+      const r2 = await apiPost(`/api/vendor/clients/${id}/check`, {});
+      notify(
+        r2.ok
+          ? `Работает ✅ (${r2.latencyMs} мс)`
+          : "Не отвечает ❌ — проверьте установку",
+      );
+    } catch (e) {
+      notify(e.message || "Не удалось проверить");
+    } finally {
+      setChecking(null);
+      load();
+    }
+  };
+  const healthDot = (c) => {
+    if (!c.lastCheckAt) return null;
+    const ok = c.lastCheckOk;
+    const mins = Math.round((Date.now() - new Date(c.lastCheckAt)) / 60000);
+    return (
+      <span
+        title={`Проверено ${mins} мин назад${c.lastLatencyMs ? ` · ${c.lastLatencyMs} мс` : ""}`}
+        style={{
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: ok ? "#16A34A" : "#DC2626",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {ok ? "🟢 работает" : "🔴 не отвечает"}
+      </span>
+    );
+  };
 
   const s = data.summary;
   return (
@@ -229,6 +266,23 @@ function ClientsTab({ me, notify }) {
                 <span style={{ fontSize: 13, color: C.ink, fontWeight: 700 }}>
                   {c.monthlyFee ? money(c.monthlyFee) : ""}
                 </span>
+                {healthDot(c)}
+                {c.deployUrl && (
+                  <button
+                    onClick={() => check(c.id)}
+                    disabled={checking === c.id}
+                    className="rounded-lg px-2.5 py-1.5 font-bold"
+                    style={{
+                      border: `1px solid ${C.border}`,
+                      background: "#fff",
+                      color: C.sub,
+                      fontSize: 12.5,
+                      opacity: checking === c.id ? 0.6 : 1,
+                    }}
+                  >
+                    {checking === c.id ? "Проверяем…" : "Проверить"}
+                  </button>
+                )}
                 <select
                   value={c.status}
                   onChange={(e) => setStatus(c.id, e.target.value)}

@@ -1,8 +1,101 @@
 // Экран «О системе».
-import { CheckCircle2, Server, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle2, Server, Lock, Send } from "lucide-react";
+import { apiGet, apiPost } from "../api.js";
 import Logo from "../Logo.jsx";
 import { C } from "../lib/theme.js";
 import { StatusBadge } from "../components/ui.jsx";
+
+// Предложение улучшения: уходит владельцу системы (в Back Office, на доску
+// развития), если в окружении установки настроен канал обратной связи.
+function SuggestCard() {
+  const [available, setAvailable] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    apiGet("/api/feedback/status")
+      .then((d) => setAvailable(!!d.configured))
+      .catch(() => {});
+  }, []);
+  if (!available) return null;
+  const send = async () => {
+    if (title.trim().length < 3) {
+      setMsg("Опишите предложение (минимум 3 символа)");
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      await apiPost("/api/feedback", {
+        title: title.trim(),
+        description: description.trim(),
+      });
+      setTitle("");
+      setDescription("");
+      setMsg("Спасибо! Предложение отправлено разработчикам ✅");
+    } catch (e) {
+      setMsg(e.message || "Не удалось отправить, попробуйте позже");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const inp = {
+    border: `1px solid ${C.border}`,
+    borderRadius: 10,
+    padding: "9px 12px",
+    fontSize: 14,
+    width: "100%",
+    color: C.ink,
+    background: "#fff",
+  };
+  return (
+    <div
+      className="rounded-2xl bg-white p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Send size={17} color={C.brandA} />
+        <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+          Предложить улучшение
+        </h3>
+      </div>
+      <p style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>
+        Чего не хватает или что неудобно? Предложение уйдёт напрямую команде
+        разработки системы.
+      </p>
+      <div className="space-y-2">
+        <input
+          style={inp}
+          value={title}
+          placeholder="Коротко: что улучшить"
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <textarea
+          style={{ ...inp, resize: "none" }}
+          rows={3}
+          value={description}
+          placeholder="Подробности (необязательно)"
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <button
+          onClick={send}
+          disabled={busy}
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+          style={{
+            background: C.brandA,
+            fontSize: 14,
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          <Send size={15} /> {busy ? "Отправляем…" : "Отправить"}
+        </button>
+        {msg && <p style={{ fontSize: 13, color: C.sub }}>{msg}</p>}
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------ о системе ---------------------------------- */
 export function AboutView() {
@@ -78,6 +171,7 @@ export function AboutView() {
           ))}
         </div>
       </div>
+      <SuggestCard />
       <div
         className="rounded-2xl bg-white p-5"
         style={{ border: `1px solid ${C.border}` }}

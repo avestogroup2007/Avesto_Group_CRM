@@ -137,3 +137,97 @@ test("back office: доска развития; owner проходит и биз
   });
   assert.equal(moneyDenied.status, 403);
 });
+
+test("мониторинг: проверка установки клиента (только чтение health)", async () => {
+  // Тестовая установка живёт на 127.0.0.1 — открываем SSRF-рубильник.
+  process.env.ALLOW_PRIVATE_HEALTH_CHECK = "1";
+  // Клиент с адресом нашей же тестовой установки — health должен ответить.
+  const c = await fetch(`${base}/api/vendor/clients`, {
+    method: "POST",
+    headers: auth(ownerToken),
+    body: JSON.stringify({ name: "Тест-установка", deployUrl: base }),
+  });
+  const client = await c.json();
+  const check = await fetch(`${base}/api/vendor/clients/${client.id}/check`, {
+    method: "POST",
+    headers: auth(ownerToken),
+  });
+  assert.equal(check.status, 200);
+  const r1 = await check.json();
+  assert.equal(r1.ok, true);
+  assert.ok(r1.latencyMs >= 0);
+  // Результат сохранён в реестре.
+  const list = await (
+    await fetch(`${base}/api/vendor/clients`, { headers: auth(ownerToken) })
+  ).json();
+  const saved = list.items.find((x) => x.id === client.id);
+  assert.equal(saved.lastCheckOk, true);
+
+  // Без адреса — понятная 400.
+  const c2 = await (
+    await fetch(`${base}/api/vendor/clients`, {
+      method: "POST",
+      headers: auth(ownerToken),
+      body: JSON.stringify({ name: "Без адреса" }),
+    })
+  ).json();
+  const bad = await fetch(`${base}/api/vendor/clients/${c2.id}/check`, {
+    method: "POST",
+    headers: auth(ownerToken),
+  });
+  assert.equal(bad.status, 400);
+  delete process.env.ALLOW_PRIVATE_HEALTH_CHECK;
+});
+
+test("обратная связь: клиентская установка доставляет предложение в Back Office", async () => {
+  // Канал не настроен — intake закрыт (404), feedback честно говорит 503.
+  delete process.env.VENDOR_INTAKE_SECRET;
+  delete process.env.VENDOR_FEEDBACK_URL;
+  const closed = await fetch(`${base}/api/vendor/intake`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "тест" }),
+  });
+  assert.equal(closed.status, 404);
+  const notConfigured = await fetch(`${base}/api/feedback`, {
+    method: "POST",
+    headers: auth(directorToken),
+    body: JSON.stringify({ title: "Хочу отчёт" }),
+  });
+  assert.equal(notConfigured.status, 503);
+
+  // Включаем канал: наша установка играет обе роли (клиент шлёт сама себе).
+  process.env.VENDOR_INTAKE_SECRET = "test-intake-secret";
+  process.env.VENDOR_FEEDBACK_URL = base;
+
+  // Неверный токен — 401.
+  const wrong = await fetch(`${base}/api/vendor/intake`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Intake-Token": "nope" },
+    body: JSON.stringify({ title: "взлом" }),
+  });
+  assert.equal(wrong.status, 401);
+
+  // Сотрудник клиента отправляет предложение — оно появляется на доске
+  // развития с названием бренда клиента.
+  const sent = await fetch(`${base}/api/feedback`, {
+    method: "POST",
+    headers: auth(directorToken),
+    body: JSON.stringify({
+      title: "Нужен отчёт по себестоимости блюд",
+      description: "Хочу видеть маржу",
+    }),
+  });
+  assert.equal(sent.status, 201);
+  const features = await (
+    await fetch(`${base}/api/vendor/features`, { headers: auth(ownerToken) })
+  ).json();
+  const found = features.items.find(
+    (f) => f.title === "Нужен отчёт по себестоимости блюд"
+  );
+  assert.ok(found, "предложение должно попасть на доску развития");
+  assert.equal(found.clientName, "Avesto Group");
+
+  delete process.env.VENDOR_INTAKE_SECRET;
+  delete process.env.VENDOR_FEEDBACK_URL;
+});

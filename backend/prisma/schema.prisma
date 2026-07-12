@@ -373,6 +373,11 @@ model VendorClient {
   monthlyFee BigInt   @default(0) // ежемесячная плата, сум
   deployUrl  String   @default("") // адрес установки клиента
   notes      String   @default("")
+  // Мониторинг работоспособности установки клиента (только чтение /api/health;
+  // никакого управления чужой системой из Back Office нет by design).
+  lastCheckAt   DateTime?
+  lastCheckOk   Boolean?
+  lastLatencyMs Int?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
