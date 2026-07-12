@@ -42,6 +42,7 @@ const ArchiveView = lazy(() => import("./pages/Archive.jsx"));
 const AboutView = lazy(() => import("./pages/About.jsx"));
 const AutomationView = lazy(() => import("./pages/Automation.jsx"));
 const AdminPanel = lazy(() => import("./admin/Admin.jsx"));
+const BackOfficeView = lazy(() => import("./pages/BackOffice.jsx"));
 const CakeConstructor = lazy(() => import("./CakeConstructor.jsx"));
 const IikoProduction = lazy(() => import("./IikoProduction.jsx"));
 
@@ -643,6 +644,10 @@ export default function App({ authUser, onLogout }) {
                 )}
               {s.view === "org" && <OrgStructure />}
               {s.view === "about" && <AboutView />}
+              {s.view === "backoffice" &&
+                ["owner", "vendor"].includes(me.role) && (
+                  <BackOfficeView me={me} notify={notify} />
+                )}
               {s.view === "automation" &&
                 (me.role === "director" || me.role === "sysadmin") && (
                   <AutomationView

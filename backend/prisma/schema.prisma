@@ -358,3 +358,37 @@ model OrgConfig {
   updatedAt   DateTime @updatedAt
   updatedById String?
 }
+
+// ── Back Office владельца системы ───────────────────────────────────────────
+// Реестр клиентов, покупающих систему (путь «под ключ»: у каждого клиента —
+// своя установка). Ведётся владельцем (owner) и его командой продаж (vendor);
+// бизнес-ролям клиента (director и т.д.) этот раздел недоступен.
+model VendorClient {
+  id         String   @id @default(cuid())
+  name       String // название компании клиента
+  contact    String   @default("") // контактное лицо
+  phone      String   @default("")
+  status     String   @default("lead") // lead|demo|active|paused|churned
+  tariff     String   @default("") // название тарифа/пакета
+  monthlyFee BigInt   @default(0) // ежемесячная плата, сум
+  deployUrl  String   @default("") // адрес установки клиента
+  notes      String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status])
+}
+
+// Доска развития продукта: идеи и запросы функций (в т.ч. от клиентов).
+model FeatureRequest {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  clientName  String   @default("") // от какого клиента пришло (свободный текст)
+  status      String   @default("idea") // idea|planned|in_progress|done
+  priority    String   @default("normal") // low|normal|high
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}

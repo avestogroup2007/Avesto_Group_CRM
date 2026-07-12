@@ -132,6 +132,10 @@ const ALLOWED_ROLES = [
   "accountant",
   "sysadmin",
   "staff",
+  // Роли владельца системы: owner — полный доступ + Back Office,
+  // vendor — сотрудник продаж владельца (видит только Back Office).
+  "owner",
+  "vendor",
 ];
 
 // Поля учётной записи сотрудника, отдаваемые на экран управления кадрами.

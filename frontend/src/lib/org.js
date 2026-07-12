@@ -387,6 +387,8 @@ export const sopFor = (cat) =>
 
 // Роли CRM для выпадающих списков (профиль, кадры, доступы).
 export const ROLE_OPTS = [
+  ["owner", "Владелец системы"],
+  ["vendor", "Команда продаж (Back Office)"],
   ["director", "Руководство"],
   ["finance", "Финансист"],
   ["manager", "Управляющий"],

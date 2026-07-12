@@ -17,6 +17,7 @@ import {
   Banknote,
   Check,
   Cake,
+  Briefcase,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -81,14 +82,30 @@ export const NAV = [
     roles: ["director", "sysadmin"],
   },
   { key: "org", label: "Оргструктура", icon: Building2, roles: "all" },
+  {
+    key: "backoffice",
+    label: "Back Office",
+    icon: Briefcase,
+    roles: ["owner", "vendor"],
+  },
   { key: "about", label: "О системе", icon: Info, roles: "all" },
   { key: "admin", label: "Админ-панель", icon: Settings, roles: ["sysadmin"] },
 ];
 
-export const navAllowed = (item, role) =>
-  item.roles === "all" || item.roles.includes(role);
+export const navAllowed = (item, role) => {
+  // Владелец системы видит все разделы; команда продаж — только Back Office
+  // и «О системе».
+  if (role === "owner") return true;
+  if (role === "vendor")
+    return item.key === "backoffice" || item.key === "about";
+  return (
+    item.roles === "all" ||
+    (Array.isArray(item.roles) && item.roles.includes(role))
+  );
+};
 
 export const VIEW_TITLE = {
+  backoffice: "Back Office · управление продуктом",
   inbox: "Входящие задачи",
   create: "Создать заявку",
   me: "Мои достижения",
