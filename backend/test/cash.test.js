@@ -125,3 +125,36 @@ test("касса: директор подтверждает отчёт, касс
   });
   assert.equal(denied.status, 403);
 });
+
+test("чек-лист из веба пишется на сервер (via=app), мусор — 400", async () => {
+  const res = await fetch(`${base}/api/checklists/run`, {
+    method: "POST",
+    headers: auth(cashierToken),
+    body: JSON.stringify({
+      branchId: BRANCH,
+      kind: "sanitary",
+      date: DATE,
+      slot: "09:00",
+      items: [
+        { text: "Унитаз очищен", done: true, needPhoto: true, hasPhoto: true },
+        { text: "Пол вымыт", done: false, needPhoto: false, hasPhoto: false },
+      ],
+    }),
+  });
+  assert.equal(res.status, 201);
+  const body = await res.json();
+  assert.equal(body.pct, 50);
+  const row = await db.shiftChecklistRun.findUnique({
+    where: { id: body.id },
+  });
+  assert.equal(row.via, "app");
+  assert.equal(row.branchId, BRANCH);
+  await db.shiftChecklistRun.delete({ where: { id: body.id } });
+
+  const bad = await fetch(`${base}/api/checklists/run`, {
+    method: "POST",
+    headers: auth(cashierToken),
+    body: JSON.stringify({ branchId: BRANCH, kind: "wrong", date: DATE }),
+  });
+  assert.equal(bad.status, 400);
+});

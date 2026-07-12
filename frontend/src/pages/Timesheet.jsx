@@ -73,6 +73,18 @@ function TimesheetView({ s, me, now, branchScope }) {
 
   return (
     <div className="space-y-5 max-w-4xl">
+      <div
+        className="rounded-xl px-4 py-3"
+        style={{
+          background: "#FFF7E8",
+          border: "1px solid #F1DFC0",
+          color: "#8A6A2F",
+          fontSize: 13,
+        }}
+      >
+        ⚠️ Данные этого раздела пока хранятся локально в этом браузере и не
+        видны с других устройств. Перенос на сервер — в дорожной карте.
+      </div>
       {/* моё время */}
       <div
         className="rounded-2xl p-5 text-white"

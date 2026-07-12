@@ -1,6 +1,6 @@
 // Админ-панель: кадры (включая доступы из iiko и привязку Telegram),
 // должности, филиалы, SLA, SOP, подразделения и системные настройки.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   PlusCircle,
   Building2,
@@ -13,6 +13,7 @@ import {
   Award,
   ListChecks,
   Lock,
+  ShieldCheck,
 } from "lucide-react";
 import { apiGet, apiPost, apiPatch } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -1142,6 +1143,154 @@ function AdminSystem({ s, dispatch, notify }) {
   );
 }
 
+// Журнал безопасности: входы (в т.ч. неудачные), правки касс и денег,
+// удаления проводок — всё, что сервер пишет в AuditLog. Видно только
+// директору и сисадмину.
+const AUDIT_LABEL = {
+  login: "Вход",
+  login_failed: "Неудачный вход",
+  cash_report_update: "Касса: правка отчёта",
+  money_tx_update: "Деньги: правка согласованного",
+  money_tx_delete: "Деньги: удаление",
+  posting_delete: "Проводка: удаление",
+  branch_income_update: "Инкассация: правка",
+  iiko_production_act: "Акт приготовления (iiko)",
+  export_csv: "Экспорт CSV",
+  print: "Печать",
+  blocked_copy: "Попытка копирования",
+  delete_cash_report: "Касса: удаление отчёта",
+};
+function AdminAudit() {
+  const [items, setItems] = useState([]);
+  const [event, setEvent] = useState("");
+  const [q, setQ] = useState("");
+  const [st, setSt] = useState("idle");
+  const load = async () => {
+    setSt("loading");
+    try {
+      const params = new URLSearchParams();
+      if (event) params.set("event", event);
+      if (q.trim()) params.set("q", q.trim());
+      const data = await apiGet(`/api/audit?${params.toString()}`);
+      setItems(data.items || []);
+      setSt("ok");
+    } catch {
+      setSt("error");
+    }
+  };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const fmtAt = (v) =>
+    new Date(v).toLocaleString("ru-RU", {
+      timeZone: "Asia/Tashkent",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  const inp = {
+    border: `1px solid ${C.border}`,
+    borderRadius: 10,
+    padding: "8px 11px",
+    fontSize: 13.5,
+    background: "#fff",
+    color: C.ink,
+  };
+  return (
+    <AdCard
+      title="Журнал безопасности"
+      desc="Сервер фиксирует входы (включая неудачные попытки), правки кассовых отчётов, изменения и удаления согласованных денег и проводок. Журнал неизменяемый — записи только добавляются."
+    >
+      <div className="flex flex-wrap gap-2 mb-3">
+        <select
+          value={event}
+          onChange={(e) => setEvent(e.target.value)}
+          style={{ ...inp, minWidth: 190 }}
+        >
+          <option value="">Все события</option>
+          {Object.entries(AUDIT_LABEL).map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Поиск: сотрудник, IP, детали…"
+          style={{ ...inp, minWidth: 220 }}
+        />
+        <button
+          onClick={load}
+          className="rounded-xl px-4 py-2 font-bold text-white"
+          style={{ background: C.brandA, fontSize: 13.5 }}
+        >
+          {st === "loading" ? "Загрузка…" : "Показать"}
+        </button>
+      </div>
+      {st === "error" && (
+        <p style={{ color: "#B23", fontSize: 13 }}>
+          Не удалось загрузить журнал.
+        </p>
+      )}
+      {st === "ok" && items.length === 0 && (
+        <p style={{ color: C.sub, fontSize: 13 }}>Записей не найдено.</p>
+      )}
+      {items.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full" style={{ fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ color: C.faint, textAlign: "left" }}>
+                <th className="pb-2 pr-2 font-semibold">Когда</th>
+                <th className="pb-2 pr-2 font-semibold">Кто</th>
+                <th className="pb-2 pr-2 font-semibold">Событие</th>
+                <th className="pb-2 pr-2 font-semibold">Детали</th>
+                <th className="pb-2 font-semibold">IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r2) => (
+                <tr key={r2.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <td
+                    className="py-1.5 pr-2"
+                    style={{ whiteSpace: "nowrap", color: C.sub }}
+                  >
+                    {fmtAt(r2.at)}
+                  </td>
+                  <td
+                    className="py-1.5 pr-2"
+                    style={{ color: C.ink, fontWeight: 600 }}
+                  >
+                    {r2.userName}
+                  </td>
+                  <td className="py-1.5 pr-2" style={{ whiteSpace: "nowrap" }}>
+                    <span
+                      style={{
+                        color: r2.event === "login_failed" ? C.bad : C.ink,
+                        fontWeight: r2.event === "login_failed" ? 700 : 500,
+                      }}
+                    >
+                      {AUDIT_LABEL[r2.event] || r2.event}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-2" style={{ color: C.sub }}>
+                    {r2.detail}
+                  </td>
+                  <td className="py-1.5" style={{ color: C.faint }}>
+                    {r2.ip}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </AdCard>
+  );
+}
+
 export function AdminPanel({ s, dispatch, notify }) {
   const [tab, setTab] = useState("staff");
   const tabs = [
@@ -1153,6 +1302,7 @@ export function AdminPanel({ s, dispatch, notify }) {
     ["sla", "SLA-нормативы", Clock],
     ["sops", "Регламенты", ListChecks],
     ["system", "Система", Settings],
+    ["audit", "Журнал безопасности", ShieldCheck],
   ];
   return (
     <div className="space-y-5">
@@ -1198,6 +1348,7 @@ export function AdminPanel({ s, dispatch, notify }) {
       {tab === "sops" && (
         <AdminSops s={s} dispatch={dispatch} notify={notify} />
       )}
+      {tab === "audit" && <AdminAudit />}
       {tab === "system" && (
         <AdminSystem s={s} dispatch={dispatch} notify={notify} />
       )}
