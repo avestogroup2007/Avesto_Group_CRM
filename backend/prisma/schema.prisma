@@ -427,3 +427,13 @@ model ChecklistTemplate {
   @@index([kind])
   @@index([active])
 }
+
+// Настройка доступа по ролям (управляется сисадмином клиента в админке):
+// какие разделы/отчёты видит каждая роль. Оверрайды поверх дефолтов навигации;
+// пусто = поведение по умолчанию. Одна строка (id=1), JSON.
+model AccessConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}

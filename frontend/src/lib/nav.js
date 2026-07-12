@@ -92,9 +92,17 @@ export const NAV = [
   { key: "admin", label: "Админ-панель", icon: Settings, roles: ["sysadmin"] },
 ];
 
-export const navAllowed = (item, role) => {
-  // Владелец системы видит все разделы; команда продаж — только Back Office
-  // и «О системе».
+// Оверрайды доступа по ролям (настраиваются сисадмином в админке, живут на
+// сервере): { role: { sectionKey: bool } }. Обновляются из App через
+// setAccessOverrides — navAllowed сохраняет прежнюю сигнатуру для всех мест
+// вызова (Sidebar/BottomNav/MoreSheet/переключатель экранов).
+let ACCESS_OVERRIDES = {};
+export function setAccessOverrides(o) {
+  ACCESS_OVERRIDES = o && typeof o === "object" ? o : {};
+}
+
+// Доступ по умолчанию — по ролям в определении пункта.
+function defaultAllowed(item, role) {
   if (role === "owner") return true;
   if (role === "vendor")
     return item.key === "backoffice" || item.key === "about";
@@ -102,6 +110,17 @@ export const navAllowed = (item, role) => {
     item.roles === "all" ||
     (Array.isArray(item.roles) && item.roles.includes(role))
   );
+}
+
+export const navAllowed = (item, role) => {
+  // Back Office и «О системе» — вне настройки клиента (служебные разделы
+  // владельца/системы, их нельзя отобрать/выдать через клиентскую админку).
+  if (item.key === "backoffice") return defaultAllowed(item, role);
+  const roleOv = ACCESS_OVERRIDES[role];
+  if (roleOv && Object.prototype.hasOwnProperty.call(roleOv, item.key)) {
+    return Boolean(roleOv[item.key]);
+  }
+  return defaultAllowed(item, role);
 };
 
 export const VIEW_TITLE = {

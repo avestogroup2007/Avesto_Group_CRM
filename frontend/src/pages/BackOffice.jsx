@@ -450,6 +450,63 @@ function FeaturesTab({ me, notify }) {
   );
 }
 
+function SelfTestTab() {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const d = await apiGet("/api/selftest");
+      setData(d);
+    } catch {
+      setData({ error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  useEffect(() => {
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dot = (st) =>
+    st === "ok" ? "🟢" : st === "warn" ? "🟡" : "🔴";
+  return (
+    <AdCard
+      title="Самопроверка системы"
+      desc="Проверка подсистем этой установки: база, интеграции, модули, каналы. Запускайте после настройки и перед сдачей клиенту."
+    >
+      <button
+        onClick={run}
+        disabled={busy}
+        className="rounded-xl px-4 py-2.5 font-bold text-white mb-3"
+        style={{ background: C.brandA, fontSize: 14, opacity: busy ? 0.6 : 1 }}
+      >
+        {busy ? "Проверяем…" : "Запустить проверку"}
+      </button>
+      {data && data.summary && (
+        <p style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>
+          🟢 {data.summary.ok} · 🟡 {data.summary.warn} · 🔴 {data.summary.fail}
+        </p>
+      )}
+      <div className="space-y-2">
+        {data &&
+          (data.checks || []).map((c) => (
+            <div
+              key={c.key}
+              className="flex items-center justify-between gap-3 rounded-xl px-4 py-2.5"
+              style={{ background: "#FBFCFE", border: `1px solid ${C.border}` }}
+            >
+              <span style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}>
+                {dot(c.status)} {c.label}
+              </span>
+              <span style={{ fontSize: 12.5, color: C.sub }}>{c.detail}</span>
+            </div>
+          ))}
+      </div>
+    </AdCard>
+  );
+}
+
 function ModulesTab({ notify }) {
   const [flags, setFlags] = useState({});
   const [catalog, setCatalog] = useState({});
@@ -552,10 +609,12 @@ export function BackOfficeView({ me, notify }) {
       <div className="flex flex-wrap gap-2">
         {tabBtn("clients", "Клиенты и продажи")}
         {tabBtn("modules", "Модули")}
+        {tabBtn("selftest", "Самопроверка")}
         {tabBtn("features", "Развитие продукта")}
       </div>
       {tab === "clients" && <ClientsTab me={me} notify={notify} />}
       {tab === "modules" && <ModulesTab notify={notify} />}
+      {tab === "selftest" && <SelfTestTab />}
       {tab === "features" && <FeaturesTab me={me} notify={notify} />}
     </div>
   );
