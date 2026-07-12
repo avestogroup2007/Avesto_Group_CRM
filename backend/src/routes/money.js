@@ -110,7 +110,16 @@ function daysInMonth(m) {
 // Заводит недостающие ежемесячные движения по активным шаблонам. Идемпотентно:
 // на каждый месяц свой refId (recur-<id>-<YYYYMM>), повторный вызов не дублирует.
 // Вызывается лениво при чтении модуля денег. Ошибки не пробрасываем.
+let recurringPromise = null; // single-flight: параллельные запросы не дублируют проход
 async function ensureRecurringPosted() {
+  if (recurringPromise) return recurringPromise;
+  recurringPromise = doEnsureRecurringPosted().finally(() => {
+    recurringPromise = null;
+  });
+  return recurringPromise;
+}
+
+async function doEnsureRecurringPosted() {
   const today = ymdNow();
   const curMonth = today.slice(0, 7);
   const curDay = +today.slice(8, 10);
@@ -663,6 +672,22 @@ r.patch(
       data.rate = rate;
       data.amountUzs = BigInt(toUzs(amount, rate));
     }
+    // Существенная правка согласованного движения (сумма/направление/дата)
+    // не-апрувером возвращает его на согласование: иначе workflow обходится.
+    const APPROVERS = new Set(["director", "finance"]);
+    const material =
+      data.amountUzs !== undefined ||
+      data.direction !== undefined ||
+      data.date !== undefined;
+    if (
+      existing.approval === "approved" &&
+      material &&
+      !APPROVERS.has(req.user.role)
+    ) {
+      data.approval = "pending";
+      data.approvedById = null;
+      data.approvedAt = null;
+    }
     // Правка и снос старой авто-проводки — в одной транзакции: журнал Дт/Кт
     // пересоздаст её из новых данных при следующем чтении (ensureAutoPosted).
     const [updated] = await db.$transaction([
@@ -726,11 +751,14 @@ const BranchIncomeSchema = z.object({
 r.post(
   "/branch-income",
   asyncHandler(async (req, res) => {
+    // refId приходит от клиента: перезапись существующей записи (upsert)
+    // фиксируется в журнале безопасности ниже по коду.
     const parsed = BranchIncomeSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "Неверный формат прихода" });
     }
     const d = parsed.data;
+    const prior = await db.moneyTx.findUnique({ where: { refId: d.refId } });
     // upsert по refId — повторный вызов не создаст дубль.
     const tx = await db.moneyTx.upsert({
       where: { refId: d.refId },
@@ -759,6 +787,20 @@ r.post(
         createdById: req.user.uid,
       },
     });
+    // Перезапись существующей инкассации (например, изменение суммы по тому
+    // же refId) — след в журнале безопасности.
+    if (prior && prior.amountUzs !== tx.amountUzs) {
+      await db.auditLog
+        .create({
+          data: {
+            userId: req.user.uid,
+            event: "branch_income_update",
+            detail: `Инкассация ${d.refId}: сумма ${prior.amountUzs} → ${tx.amountUzs}`,
+            ip: req.ip,
+          },
+        })
+        .catch(() => {});
+    }
     res.status(201).json(ser(tx));
   })
 );

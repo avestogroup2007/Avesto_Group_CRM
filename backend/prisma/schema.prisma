@@ -133,17 +133,19 @@ model CashReport {
   date        String // YYYY-MM-DD
   userId      String
   status      String    @default("submitted") // submitted|confirmed
-  fiscal      Int       @default(0)
-  nonFiscal   Int       @default(0)
-  humo        Int       @default(0)
-  uzcard      Int       @default(0)
-  click       Int       @default(0)
-  payme       Int       @default(0)
-  uzumTezkor  Int       @default(0)
-  yandex      Int       @default(0)
-  transfer    Int       @default(0)
-  expenses    Int       @default(0)
-  iiko        Int       @default(0)
+  // Деньги — BigInt, как в MoneyTx: Int32 (до ~2,1 млрд сум) для дневной
+  // выручки в UZS даёт слишком маленький запас.
+  fiscal      BigInt    @default(0)
+  nonFiscal   BigInt    @default(0)
+  humo        BigInt    @default(0)
+  uzcard      BigInt    @default(0)
+  click       BigInt    @default(0)
+  payme       BigInt    @default(0)
+  uzumTezkor  BigInt    @default(0)
+  yandex      BigInt    @default(0)
+  transfer    BigInt    @default(0)
+  expenses    BigInt    @default(0)
+  iiko        BigInt    @default(0)
   comment     String?
   createdAt   DateTime  @default(now())
   confirmedAt DateTime?

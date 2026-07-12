@@ -266,7 +266,13 @@ async function authStep(chatId, from, session, msg) {
   if (session.step === "password") {
     const password = text;
     // Пароль в чате не храним — удаляем сообщение (в личке бот это может).
-    await deleteMsg(chatId, msg.message_id);
+    const del = await deleteMsg(chatId, msg.message_id).catch(() => null);
+    if (!del || del.ok === false) {
+      await sendMsg(
+        chatId,
+        "⚠️ Не удалось удалить сообщение с паролем — удалите его вручную."
+      );
+    }
     // Защита от перебора: 5 неудач подряд — блок на 15 минут. Веб-вход
     // прикрыт rate-limit'ом, бот должен быть прикрыт не хуже.
     const fails = Number(session.fails || 0);

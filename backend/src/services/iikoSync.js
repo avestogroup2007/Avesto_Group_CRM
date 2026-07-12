@@ -3,6 +3,7 @@
 import bcrypt from "bcrypt";
 import { db } from "../db.js";
 import { listEmployees } from "./iikoServer.js";
+import { invalidateUserAuthCache } from "../middleware/requireAuth.js";
 
 // Роль iiko (код) -> роль CRM. Ставится только при СОЗДАНИИ; при обновлении
 // роль не трогаем, чтобы не затирать ручные настройки директора/админа.
@@ -110,6 +111,10 @@ export async function syncEmployeesToDb() {
     await db.user.createMany({ data: rows, skipDuplicates: true });
   }
 
+  // Уволенные блокируются в БД — кэш авторизации сбрасываем целиком, чтобы
+  // доступ закрылся сразу.
+  invalidateUserAuthCache();
+
   return {
     total: employees.length,
     created: rows.length,
@@ -171,11 +176,14 @@ export async function updateEmployeeAccess(
     data.checklistBranch = b || null;
   }
   try {
-    return await db.user.update({
+    const updated = await db.user.update({
       where: { id },
       data,
       select: EMP_SELECT,
     });
+    // Блокировка/смена роли действует сразу, не дожидаясь минутного кэша.
+    invalidateUserAuthCache(id);
+    return updated;
   } catch (e) {
     // Уникальность telegramId: один Telegram — один сотрудник.
     if (e.code === "P2002")

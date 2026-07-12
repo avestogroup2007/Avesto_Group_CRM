@@ -2,6 +2,7 @@
 // клиенту не отдаётся. /status — настроена ли интеграция; /test — отправить
 // проверочное сообщение; /notify — переслать уведомление (из автоматизации
 // на фронте) в чат. Доступ — офисные роли.
+import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
@@ -155,8 +156,13 @@ r.post(
 export async function telegramWebhook(req, res) {
   const secret = env.TELEGRAM_WEBHOOK_SECRET;
   if (!secret) return res.status(404).end(); // бот не включён
-  const got = req.get("x-telegram-bot-api-secret-token");
-  if (got !== secret) return res.status(401).end();
+  const got = req.get("x-telegram-bot-api-secret-token") || "";
+  // Сравнение постоянного времени — против timing-атаки на секрет.
+  const a = Buffer.from(got);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).end();
+  }
   res.json({ ok: true }); // отвечаем сразу
   try {
     await handleUpdate(req.body || {});
