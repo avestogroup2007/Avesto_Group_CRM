@@ -233,7 +233,14 @@ function branchPickView() {
 
 // Начать самостоятельный вход (запросить логин).
 async function beginAuth(chatId, from) {
-  await setSession(from.id, { flow: "auth", step: "login" });
+  // Счётчик неудач и блок переживают перезапуск диалога (/start).
+  const prev = (await getSession(from.id)) || {};
+  await setSession(from.id, {
+    flow: "auth",
+    step: "login",
+    fails: Number(prev.fails || 0),
+    blockedUntil: Number(prev.blockedUntil || 0),
+  });
   await sendMsg(chatId, "🔐 <b>Вход</b>\nВведите ваш логин (как в CRM/iiko):");
 }
 
@@ -246,7 +253,13 @@ async function authStep(chatId, from, session, msg) {
       await sendMsg(chatId, "Введите логин (как в CRM/iiko):");
       return;
     }
-    await setSession(from.id, { flow: "auth", step: "password", login: text });
+    await setSession(from.id, {
+      flow: "auth",
+      step: "password",
+      login: text,
+      fails: Number(session.fails || 0),
+      blockedUntil: Number(session.blockedUntil || 0),
+    });
     await sendMsg(chatId, "Введите пароль:");
     return;
   }
@@ -254,9 +267,44 @@ async function authStep(chatId, from, session, msg) {
     const password = text;
     // Пароль в чате не храним — удаляем сообщение (в личке бот это может).
     await deleteMsg(chatId, msg.message_id);
+    // Защита от перебора: 5 неудач подряд — блок на 15 минут. Веб-вход
+    // прикрыт rate-limit'ом, бот должен быть прикрыт не хуже.
+    const fails = Number(session.fails || 0);
+    const blockedUntil = Number(session.blockedUntil || 0);
+    if (blockedUntil > Date.now()) {
+      const min = Math.ceil((blockedUntil - Date.now()) / 60000);
+      await sendMsg(
+        chatId,
+        `⛔ Слишком много неудачных попыток. Попробуйте через ${min} мин.`
+      );
+      return;
+    }
     const user = await botAuthenticate(session.login, password);
     if (!user) {
-      await clearSession(from.id);
+      const nextFails = fails + 1;
+      if (nextFails >= 5) {
+        await setSession(from.id, {
+          flow: "auth",
+          step: "login",
+          fails: nextFails,
+          blockedUntil: Date.now() + 15 * 60 * 1000,
+        });
+        log.warn(
+          { telegramId: String(from.id), login: session.login },
+          "бот: блок после 5 неудачных попыток входа"
+        );
+        await sendMsg(
+          chatId,
+          "⛔ 5 неудачных попыток — вход через бота заблокирован на 15 минут."
+        );
+        return;
+      }
+      await setSession(from.id, {
+        flow: "auth",
+        step: "login",
+        fails: nextFails,
+        blockedUntil: 0,
+      });
       await sendMsg(
         chatId,
         "❌ Неверный логин или пароль. Отправьте /start, чтобы попробовать снова."
@@ -1017,8 +1065,12 @@ async function onCallback(cbq) {
   }
 
   if (cmd === "setbr") {
-    // Выбор филиала после привязки.
+    // Выбор филиала после привязки — только из списка филиалов.
     const bid = parts[1];
+    if (!BRANCHES.some((b) => String(b.id) === String(bid))) {
+      await answerCb(cbq.id, "Неизвестный филиал");
+      return;
+    }
     const updated = await db.user
       .update({ where: { id: user.id }, data: { checklistBranch: bid } })
       .catch(() => null);

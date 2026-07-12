@@ -12,7 +12,8 @@ import { asyncHandler } from "../util/asyncHandler.js";
 const r = Router();
 r.use(requireAuth);
 
-const int = z.coerce.number().int().min(0).default(0);
+// Верхняя граница — защита от переполнения Int32 в БД (и от мусорного ввода).
+const int = z.coerce.number().int().min(0).max(2_000_000_000).default(0);
 const ReportSchema = z.object({
   branchId: z.string().min(1),
   branchName: z.string().default(""),
@@ -41,11 +42,39 @@ r.post(
       return res.status(400).json({ error: "Неверный формат отчёта" });
     }
     const { branchId, date, ...rest } = parsed.data;
+    // Подтверждённый офисом отчёт линейный персонал переписать не может —
+    // иначе цифры можно менять задним числом, а подтверждение останется.
+    const existing = await db.cashReport
+      .findUnique({ where: { branchId_date: { branchId, date } } })
+      .catch(() => null);
+    const OFFICE = new Set(["director", "finance", "accountant", "sysadmin"]);
+    if (
+      existing &&
+      existing.status === "confirmed" &&
+      !OFFICE.has(req.user.role)
+    ) {
+      return res.status(409).json({
+        error: "Отчёт уже подтверждён офисом — изменения только через офис",
+      });
+    }
     const saved = await db.cashReport.upsert({
       where: { branchId_date: { branchId, date } },
       create: { branchId, date, ...rest, userId: req.user.uid },
       update: { ...rest, userId: req.user.uid },
     });
+    // Правка существующего отчёта — след в журнале безопасности.
+    if (existing) {
+      await db.auditLog
+        .create({
+          data: {
+            userId: req.user.uid,
+            event: "cash_report_update",
+            detail: `Касса ${branchId} за ${date}: отчёт перезаписан (был статус ${existing.status})`,
+            ip: req.ip,
+          },
+        })
+        .catch(() => {});
+    }
     res.json(saved);
   })
 );

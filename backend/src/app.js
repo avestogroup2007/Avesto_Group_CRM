@@ -92,7 +92,17 @@ app.get("/api/health", async (req, res) => {
 });
 
 // Публичный вебхук Telegram-бота — ДО защищённого роутера /api/telegram,
-// т.к. Telegram вызывает его без токена авторизации (защита — секрет в заголовке).
+// т.к. Telegram вызывает его без токена авторизации (защита — секрет в
+// заголовке). Свой rate-limit: вебхук стоит до общего apiLimiter.
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+if (env.NODE_ENV !== "test") {
+  app.use("/api/telegram/webhook", webhookLimiter);
+}
 app.post("/api/telegram/webhook", telegramWebhook);
 
 // Маршруты.

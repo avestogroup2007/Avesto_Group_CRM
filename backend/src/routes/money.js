@@ -196,22 +196,27 @@ r.get(
         { category: { contains: s, mode: "insensitive" } },
       ];
     }
-    const items = await db.moneyTx.findMany({
-      where,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: 1000,
-    });
-    // В итоги идут только согласованные — заявки на согласовании (pending) и
-    // отклонённые (rejected) баланс не искажают. В списке показываем всё.
-    let income = 0;
-    let expense = 0;
-    let pending = 0;
-    for (const t of items) {
-      if (t.approval === "pending") pending += 1;
-      if (t.approval !== "approved") continue;
-      if (t.direction === "income") income += n(t.amountUzs);
-      else expense += n(t.amountUzs);
-    }
+    // Итоги считаются агрегатами по ВСЕМУ фильтру (не по выданной странице):
+    // при >1000 движений за период суммы на экране должны оставаться верными.
+    // В итоги идут только согласованные — pending/rejected баланс не искажают.
+    const [items, incAgg, expAgg, pending] = await Promise.all([
+      db.moneyTx.findMany({
+        where,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 1000,
+      }),
+      db.moneyTx.aggregate({
+        _sum: { amountUzs: true },
+        where: { ...where, approval: "approved", direction: "income" },
+      }),
+      db.moneyTx.aggregate({
+        _sum: { amountUzs: true },
+        where: { ...where, approval: "approved", direction: "expense" },
+      }),
+      db.moneyTx.count({ where: { ...where, approval: "pending" } }),
+    ]);
+    const income = n(incAgg._sum.amountUzs);
+    const expense = n(expAgg._sum.amountUzs);
     res.json({
       items: items.map(ser),
       totals: { income, expense, net: income - expense, pending },
@@ -470,14 +475,14 @@ r.delete(
 const CreateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   direction: z.enum(["income", "expense"]),
-  category: z.string().min(1),
+  category: z.string().min(1).max(200),
   ddsArticle: z.string().default(""),
   paymentType: z.string().default("Наличные"),
   legalEntity: z.string().default(""),
   account: z.string().default(""),
-  counterparty: z.string().default(""),
-  comment: z.string().default(""),
-  amount: z.number().positive(),
+  counterparty: z.string().max(300).default(""),
+  comment: z.string().max(1000).default(""),
+  amount: z.number().positive().max(9e15),
   currency: z.enum(["UZS", "RUB", "USD", "EUR"]).default("UZS"),
   rate: z.number().positive().default(1),
   branchId: z.string().nullable().optional(),
@@ -658,10 +663,25 @@ r.patch(
       data.rate = rate;
       data.amountUzs = BigInt(toUzs(amount, rate));
     }
-    const updated = await db.moneyTx.update({
-      where: { id: req.params.id },
-      data,
-    });
+    // Правка и снос старой авто-проводки — в одной транзакции: журнал Дт/Кт
+    // пересоздаст её из новых данных при следующем чтении (ensureAutoPosted).
+    const [updated] = await db.$transaction([
+      db.moneyTx.update({ where: { id: req.params.id }, data }),
+      db.posting.deleteMany({ where: { refId: `mtx-${req.params.id}` } }),
+    ]);
+    // Правка согласованного движения — след в журнале безопасности.
+    if (existing.approval === "approved") {
+      await db.auditLog
+        .create({
+          data: {
+            userId: req.user.uid,
+            event: "money_tx_update",
+            detail: `Изменено согласованное движение ${req.params.id}: ${Object.keys(data).join(", ")}`,
+            ip: req.ip,
+          },
+        })
+        .catch(() => {});
+    }
     res.json(ser(updated));
   })
 );
@@ -670,7 +690,25 @@ r.patch(
 r.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await db.moneyTx.delete({ where: { id: req.params.id } }).catch(() => {});
+    const id = req.params.id;
+    const existing = await db.moneyTx.findUnique({ where: { id } });
+    if (!existing) return res.json({ ok: true });
+    // Движение и его авто-проводка удаляются вместе — иначе журнал Дт/Кт
+    // навсегда разойдётся с деньгами.
+    await db.$transaction([
+      db.posting.deleteMany({ where: { refId: `mtx-${id}` } }),
+      db.moneyTx.delete({ where: { id } }),
+    ]);
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "money_tx_delete",
+          detail: `Удалено движение ${existing.direction} ${existing.amountUzs} сум (${existing.category}) за ${existing.date}`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.json({ ok: true });
   })
 );
@@ -680,9 +718,9 @@ const BranchIncomeSchema = z.object({
   refId: z.string().min(1),
   branchId: z.string().nullable().optional(),
   branchName: z.string().default(""),
-  amount: z.number().positive(),
+  amount: z.number().positive().max(9e15),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  comment: z.string().default(""),
+  comment: z.string().max(1000).default(""),
 });
 
 r.post(
@@ -729,14 +767,14 @@ r.post(
 const RecurringSchema = z.object({
   name: z.string().min(1),
   direction: z.enum(["income", "expense"]).default("expense"),
-  category: z.string().min(1),
+  category: z.string().min(1).max(200),
   ddsArticle: z.string().default(""),
   paymentType: z.string().default("Наличные"),
   legalEntity: z.string().default(""),
   account: z.string().default(""),
-  counterparty: z.string().default(""),
-  comment: z.string().default(""),
-  amount: z.number().positive(),
+  counterparty: z.string().max(300).default(""),
+  comment: z.string().max(1000).default(""),
+  amount: z.number().positive().max(9e15),
   currency: z.enum(["UZS", "RUB", "USD", "EUR"]).default("UZS"),
   rate: z.number().positive().default(1),
   branchId: z.string().nullable().optional(),

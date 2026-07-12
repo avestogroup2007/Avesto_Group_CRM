@@ -67,6 +67,7 @@ model User {
 
   @@index([branchId])
   @@index([role])
+  @@index([login])
 }
 
 model Task {
@@ -96,6 +97,7 @@ model Task {
   @@index([executorId])
   @@index([controllerId])
   @@index([createdById])
+  @@index([slaDeadline])
 }
 
 // Неизменяемый журнал — записи только добавляются, никогда не меняются/удаляются
@@ -299,6 +301,7 @@ model Posting {
   @@index([credit])
   @@index([debit, date])
   @@index([credit, date])
+  @@index([source])
 }
 
 // Журнал безопасности — кто что выгружал, кто пытался копировать
@@ -333,6 +336,7 @@ model ShiftChecklistRun {
 
   @@index([branchId, date])
   @@index([kind, date])
+  @@index([date])
 }
 
 // Состояние диалога бота с пользователем (черновик заполняемого чек-листа).

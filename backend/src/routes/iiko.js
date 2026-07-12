@@ -35,6 +35,9 @@ function reportTtl(to) {
 
 const r = Router();
 r.use(requireAuth);
+// Финансовые отчёты (OLAP/ОПиУ/подозрительные) и кадровые данные — только
+// офисным ролям и управляющим: линейному персоналу выручка компании и список
+// сотрудников с контактами не положены.
 
 // Превращает «iiko не настроен» в 503, остальное — 502 с реальной причиной.
 function handleIiko(fn) {
@@ -62,6 +65,7 @@ r.get("/status", (req, res) => res.json({ configured: iikoConfigured() }));
 // Возвращает { byDay, byPay, byDish } для вкладок аналитики.
 r.post(
   "/olap",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
     const { from, to, department } = req.body || {};
     if (!from || !to) {
@@ -82,6 +86,7 @@ r.post(
 // Структура берётся из плана счетов iiko (по типам счетов) — динамически.
 r.post(
   "/pnl",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
     const { from, to, department } = req.body || {};
     if (!from || !to) {
@@ -101,6 +106,7 @@ r.post(
 // скидки в разрезе сотрудников. Тело: { from, to, department?, discountPct? }.
 r.post(
   "/risky",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
     const { from, to, department, discountPct } = req.body || {};
     if (!from || !to) {
@@ -128,6 +134,7 @@ r.post(
 // подразделения и признак «уволен» — источник правды по кадрам это iiko.
 r.get(
   "/employees",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
     res.json(await listEmployees());
   })
