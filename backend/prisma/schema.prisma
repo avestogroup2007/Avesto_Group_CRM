@@ -19,11 +19,11 @@ model Company {
 }
 
 model Branch {
-  id            String       @id @default(cuid())
+  id            String  @id @default(cuid())
   name          String
   companyId     String
-  company       Company      @relation(fields: [companyId], references: [id])
-  monthlyBudget Int          @default(0)
+  company       Company @relation(fields: [companyId], references: [id])
+  monthlyBudget Int     @default(0)
   users         User[]
   tasks         Task[]
 
@@ -325,20 +325,27 @@ model AuditLog {
 // Сданный через бота (или приложение) чек-лист смены. Хранит отметки и
 // ссылки на фото (file_id Telegram) для санитарного обхода и открытия/закрытия.
 model ShiftChecklistRun {
-  id        String   @id @default(cuid())
-  branchId  String? // филиал (id из конфигурации, строкой)
-  kind      String // sanitary | open | close
-  date      String // YYYY-MM-DD (Asia/Tashkent)
-  slot      String? // "09:00" для почасового обхода, null для разовых
-  items     Json // [{ text, needPhoto, done, photoFileId }]
-  pct       Int      @default(0)
-  userId    String? // кто сдал (User.id), если известен
-  via       String   @default("bot") // bot | app
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  branchId   String? // филиал (id из конфигурации, строкой)
+  kind       String // sanitary | open | close | role | cleaning
+  date       String // YYYY-MM-DD (Asia/Tashkent)
+  slot       String? // "09:00" для почасового обхода, null для разовых
+  items      Json // [{ text, needPhoto, done, photoFileId }]
+  pct        Int      @default(0)
+  userId     String? // кто сдал (User.id), если известен
+  via        String   @default("bot") // bot | app
+  // Для чек-листов по настраиваемым шаблонам (kind role|cleaning): ссылка на
+  // шаблон и его заголовок/должность на момент сдачи — чтобы отчёт не зависел
+  // от последующего редактирования/удаления шаблона.
+  templateId String?
+  title      String?
+  position   String?
+  createdAt  DateTime @default(now())
 
   @@index([branchId, date])
   @@index([kind, date])
   @@index([date])
+  @@index([templateId, date])
 }
 
 // Состояние диалога бота с пользователем (черновик заполняемого чек-листа).
@@ -364,22 +371,22 @@ model OrgConfig {
 // своя установка). Ведётся владельцем (owner) и его командой продаж (vendor);
 // бизнес-ролям клиента (director и т.д.) этот раздел недоступен.
 model VendorClient {
-  id         String   @id @default(cuid())
-  name       String // название компании клиента
-  contact    String   @default("") // контактное лицо
-  phone      String   @default("")
-  status     String   @default("lead") // lead|demo|active|paused|churned
-  tariff     String   @default("") // название тарифа/пакета
-  monthlyFee BigInt   @default(0) // ежемесячная плата, сум
-  deployUrl  String   @default("") // адрес установки клиента
-  notes      String   @default("")
+  id            String    @id @default(cuid())
+  name          String // название компании клиента
+  contact       String    @default("") // контактное лицо
+  phone         String    @default("")
+  status        String    @default("lead") // lead|demo|active|paused|churned
+  tariff        String    @default("") // название тарифа/пакета
+  monthlyFee    BigInt    @default(0) // ежемесячная плата, сум
+  deployUrl     String    @default("") // адрес установки клиента
+  notes         String    @default("")
   // Мониторинг работоспособности установки клиента (только чтение /api/health;
   // никакого управления чужой системой из Back Office нет by design).
   lastCheckAt   DateTime?
   lastCheckOk   Boolean?
   lastLatencyMs Int?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([status])
 }
