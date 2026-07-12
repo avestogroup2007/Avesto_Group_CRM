@@ -21,13 +21,23 @@ import { cached } from "./cache.js";
 const API = "https://api.telegram.org";
 
 // ── Конфигурация филиалов (зеркало фронтенда) ───────────────────────────────
+// iikoDept — имя торгового предприятия (Department) в iikoServer: нужно для
+// фильтра выручки по конкретному филиалу (зеркало frontend/src/lib/org.js).
 const BRANCHES = [
-  { id: 1, name: "Avesto Cafe — Микрорайон" },
-  { id: 2, name: "Avesto Cafe — Узбекистанская" },
-  { id: 3, name: "Avesto Sweets — Аэропорт" },
-  { id: 4, name: "Avesto Sweets — Наврузий цех" },
-  { id: 5, name: "Avesto Sweets — Наврузий Магазин" },
-  { id: 6, name: "ICG — Кейтеринг (основной)" },
+  { id: 1, name: "Avesto Cafe — Микрорайон", iikoDept: "Микрорайон" },
+  { id: 2, name: "Avesto Cafe — Узбекистанская", iikoDept: "Uzbekistanskaya" },
+  { id: 3, name: "Avesto Sweets — Аэропорт", iikoDept: "Aeroport" },
+  { id: 4, name: "Avesto Sweets — Наврузий цех", iikoDept: "Navruzi Цех" },
+  {
+    id: 5,
+    name: "Avesto Sweets — Наврузий Магазин",
+    iikoDept: "Наврузи Магазин",
+  },
+  {
+    id: 6,
+    name: "ICG — Кейтеринг (основной)",
+    iikoDept: "Кейтеринг (основной)",
+  },
 ];
 const PROD_BRANCH_IDS = new Set([4, 6]);
 const branchName = (id) =>
@@ -363,6 +373,11 @@ async function menuView(user) {
       callback_data: "pick|close|-",
     },
   ]);
+  if (env.PUBLIC_APP_URL) {
+    rows.push([
+      { text: "\u{1F310} Открыть CRM", web_app: { url: env.PUBLIC_APP_URL } },
+    ]);
+  }
   return { text, keyboard: rows };
 }
 
@@ -387,9 +402,228 @@ function mgmtMenuView(user) {
       { text: "\u{1F4B5} Деньги", callback_data: "mgr|money" },
       { text: "\u{1F5C2} Задачи", callback_data: "mgr|tasks" },
     ],
-    [{ text: "\u{1F4DD} Мои чек-листы", callback_data: "mgr|own" }],
+    [
+      { text: "\u{1F3E2} Филиалы", callback_data: "mgr|brlist" },
+      { text: "\u{1F4DD} Мои чек-листы", callback_data: "mgr|own" },
+    ],
+  ];
+  if (env.PUBLIC_APP_URL) {
+    keyboard.push([
+      {
+        text: "\u{1F310} Открыть CRM",
+        web_app: { url: env.PUBLIC_APP_URL },
+      },
+    ]);
+  }
+  return { text, keyboard };
+}
+
+// Список филиалов для раздела «Филиалы».
+function branchListView() {
+  const rows = [];
+  for (let i = 0; i < BRANCHES.length; i += 2) {
+    rows.push(
+      BRANCHES.slice(i, i + 2).map((b) => ({
+        text: b.name,
+        callback_data: `mgr|br|${b.id}`,
+      }))
+    );
+  }
+  rows.push([{ text: "\u2039 Меню", callback_data: "mgr|menu" }]);
+  return { text: "\u{1F3E2} <b>Филиалы</b>\nВыберите филиал:", keyboard: rows };
+}
+
+// Карточка филиала: что смотреть по нему.
+function branchCardView(bid) {
+  const b = BRANCHES.find((x) => x.id === Number(bid));
+  if (!b) return branchListView();
+  const { from, to } = branchHours(b.id);
+  const text =
+    `\u{1F3E2} <b>${esc(b.name)}</b>\n` +
+    `Окно обхода: ${String(from).padStart(2, "0")}:00–${String(to).padStart(2, "0")}:00`;
+  const keyboard = [
+    [
+      { text: "\u{1F4B0} Выручка", callback_data: `mgr|brsales|${b.id}` },
+      { text: "\u{1F4CB} Чек-листы", callback_data: `mgr|brchecks|${b.id}` },
+    ],
+    [
+      { text: "\u{1F9FE} Касса", callback_data: `mgr|brcash|${b.id}` },
+      { text: "\u{1F4B5} Деньги", callback_data: `mgr|brmoney|${b.id}` },
+    ],
+    [
+      { text: "\u2039 Филиалы", callback_data: "mgr|brlist" },
+      { text: "\u2039 Меню", callback_data: "mgr|menu" },
+    ],
   ];
   return { text, keyboard };
+}
+
+// Ряд «назад к филиалу + обновить» для экранов филиала.
+function branchBack(bid, refresh) {
+  return [
+    [
+      { text: "\u2039 Филиал", callback_data: `mgr|br|${bid}` },
+      { text: "\u{1F504} Обновить", callback_data: refresh },
+    ],
+  ];
+}
+
+// Выручка филиала за сегодня (iiko, фильтр по Department).
+async function branchSalesView(bid) {
+  const b = BRANCHES.find((x) => x.id === Number(bid));
+  if (!b) return branchListView();
+  const date = ymdTashkent();
+  const back = branchBack(bid, `mgr|brsales|${bid}`);
+  if (!iikoConfigured()) {
+    return { text: "iiko не настроен — выручка недоступна.", keyboard: back };
+  }
+  try {
+    const rep = await cached(
+      `olap:${date}:${date}:${b.iikoDept}`,
+      3 * 60 * 1000,
+      () => salesReport({ from: date, to: date, departments: [b.iikoDept] })
+    );
+    let total = 0;
+    let checks = 0;
+    for (const r of rep.byDay || []) {
+      total += num(r["DishDiscountSumInt"]);
+      checks += num(r["UniqOrderId"]);
+    }
+    const avg = checks > 0 ? total / checks : 0;
+    const top = (rep.byDish || [])
+      .map((r) => ({
+        name: String(r["DishName"] || "—"),
+        sum: num(r["DishDiscountSumInt"]),
+      }))
+      .sort((a, z) => z.sum - a.sum)
+      .slice(0, 5);
+    const lines = top.map((d) => `• ${esc(d.name)}: ${money(d.sum)}`);
+    const text =
+      `\u{1F4B0} <b>${esc(b.name)} — ${date}</b>\n\n` +
+      `Выручка: <b>${money(total)}</b>\n` +
+      `Чеков: ${checks} · средний чек: ${money(avg)}` +
+      (lines.length ? `\n\n<b>Топ-5 блюд:</b>\n${lines.join("\n")}` : "");
+    return { text, keyboard: back };
+  } catch (e) {
+    return {
+      text: `Не удалось получить выручку: ${esc(e.message || "ошибка")}`,
+      keyboard: back,
+    };
+  }
+}
+
+// Чек-листы филиала за сегодня: почасовая картина + открытие/закрытие.
+async function branchChecksView(bid) {
+  const b = BRANCHES.find((x) => x.id === Number(bid));
+  if (!b) return branchListView();
+  const date = ymdTashkent();
+  const hNow = hourTashkent();
+  const runs = await db.shiftChecklistRun
+    .findMany({ where: { branchId: String(b.id), date } })
+    .catch(() => []);
+  const done = new Set(
+    runs.filter((r) => r.pct >= 100).map((r) => `${r.kind}|${r.slot || "-"}`)
+  );
+  const marks = hourSlots(b.id)
+    .map((sl) => {
+      const h = Number(sl.slice(0, 2));
+      const st = done.has(`sanitary|${sl}`)
+        ? "\u2705"
+        : h < hNow
+          ? "\u274C"
+          : h === hNow
+            ? "\u{1F535}"
+            : "\u25FB";
+      return `${st} ${sl}`;
+    })
+    .join("\n");
+  const open = done.has("open|-") ? "\u2705" : "—";
+  const close = done.has("close|-") ? "\u2705" : "—";
+  const text =
+    `\u{1F4CB} <b>${esc(b.name)} — ${date}</b>\n\n` +
+    `Открытие: ${open} · Закрытие: ${close}\n\n` +
+    `<b>Санитарный обход:</b>\n${marks}\n\n` +
+    `\u2705 сдан · \u274C пропущен · \u{1F535} текущий час`;
+  return { text, keyboard: branchBack(bid, `mgr|brchecks|${bid}`) };
+}
+
+// Касса филиала: отчёты за сегодня и вчера (данные CRM /api/cash).
+async function branchCashView(bid) {
+  const b = BRANCHES.find((x) => x.id === Number(bid));
+  if (!b) return branchListView();
+  const back = branchBack(bid, `mgr|brcash|${bid}`);
+  const days = [ymdTashkent(), ymdTashkentShift(1)];
+  const reports = await db.cashReport
+    .findMany({ where: { branchId: String(b.id), date: { in: days } } })
+    .catch(() => []);
+  const byDate = new Map(reports.map((r) => [r.date, r]));
+  const block = (d) => {
+    const r = byDate.get(d);
+    if (!r) return `<b>${d}</b>\nОтчёт ещё не сдан.`;
+    const cash = num(r.fiscal) + num(r.nonFiscal);
+    const cards =
+      num(r.humo) +
+      num(r.uzcard) +
+      num(r.click) +
+      num(r.payme) +
+      num(r.uzumTezkor) +
+      num(r.yandex);
+    const total = cash + cards + num(r.transfer);
+    const diff = total - num(r.expenses) - num(r.iiko);
+    return (
+      `<b>${d}</b> — ${r.status === "confirmed" ? "подтверждён \u2705" : "сдан, ждёт подтверждения \u23F3"}\n` +
+      `Наличные: <b>${money(cash)}</b> (фиск. ${money(r.fiscal)} + нефиск. ${money(r.nonFiscal)})\n` +
+      `Карты/эквайринг: <b>${money(cards)}</b> · перечисление: ${money(r.transfer)}\n` +
+      `Итого выручка: <b>${money(total)}</b>\n` +
+      `Расходы из кассы: ${money(r.expenses)} · по iiko: ${money(r.iiko)}\n` +
+      `Расхождение с iiko: <b>${money(diff)}</b>` +
+      (r.comment ? `\nКомментарий: ${esc(r.comment)}` : "")
+    );
+  };
+  const text =
+    `\u{1F9FE} <b>Касса — ${esc(b.name)}</b>\n\n` +
+    block(days[0]) +
+    "\n\n" +
+    block(days[1]);
+  return { text, keyboard: back };
+}
+
+// Деньги филиала (CRM): приход/расход за сегодня и за 7 дней, на согласовании.
+async function branchMoneyView(bid) {
+  const b = BRANCHES.find((x) => x.id === Number(bid));
+  if (!b) return branchListView();
+  const back = branchBack(bid, `mgr|brmoney|${bid}`);
+  const today = ymdTashkent();
+  const weekAgo = ymdTashkentShift(6);
+  try {
+    const sum = (where) =>
+      db.moneyTx
+        .aggregate({ _sum: { amountUzs: true }, where })
+        .then((r) => num(r._sum.amountUzs));
+    const base = { branchId: String(b.id), approval: "approved" };
+    const [incDay, expDay, incWeek, expWeek, pendCnt] = await Promise.all([
+      sum({ ...base, direction: "income", date: today }),
+      sum({ ...base, direction: "expense", date: today }),
+      sum({ ...base, direction: "income", date: { gte: weekAgo } }),
+      sum({ ...base, direction: "expense", date: { gte: weekAgo } }),
+      db.moneyTx.count({
+        where: { branchId: String(b.id), approval: "pending" },
+      }),
+    ]);
+    const text =
+      `\u{1F4B5} <b>Деньги — ${esc(b.name)}</b>\n\n` +
+      `Сегодня (${today}):\n` +
+      `  приход: <b>${money(incDay)}</b> · расход: <b>${money(expDay)}</b>\n\n` +
+      `7 дней (${weekAgo} — ${today}):\n` +
+      `  приход: <b>${money(incWeek)}</b> · расход: <b>${money(expWeek)}</b>\n\n` +
+      `На согласовании: <b>${pendCnt}</b>`;
+    return { text, keyboard: back };
+  } catch (e) {
+    return {
+      text: `Не удалось получить данные: ${esc(e.message || "ошибка")}`,
+      keyboard: back,
+    };
+  }
 }
 
 // Ряд «назад + обновить» для экранов сводок; refresh — колбэк текущего экрана.
@@ -748,6 +982,26 @@ async function onCallback(cbq) {
     } else if (action === "tasks") {
       const tv = await mgmtTasksView();
       await editMsg(chatId, msgId, tv.text, tv.keyboard);
+    } else if (action === "brlist") {
+      const bv = branchListView();
+      await editMsg(chatId, msgId, bv.text, bv.keyboard);
+    } else if (action === "br") {
+      const bv = branchCardView(param);
+      await editMsg(chatId, msgId, bv.text, bv.keyboard);
+    } else if (action === "brsales") {
+      await answerCb(cbq.id, "Загружаю…");
+      const bv = await branchSalesView(param);
+      await editMsg(chatId, msgId, bv.text, bv.keyboard);
+      return;
+    } else if (action === "brchecks") {
+      const bv = await branchChecksView(param);
+      await editMsg(chatId, msgId, bv.text, bv.keyboard);
+    } else if (action === "brcash") {
+      const bv = await branchCashView(param);
+      await editMsg(chatId, msgId, bv.text, bv.keyboard);
+    } else if (action === "brmoney") {
+      const bv = await branchMoneyView(param);
+      await editMsg(chatId, msgId, bv.text, bv.keyboard);
     } else if (action === "own") {
       // Руководителю тоже можно проходить чек-листы (например, управляющему).
       if (!user.checklistBranch) {
@@ -969,6 +1223,18 @@ export async function handleUpdate(update) {
 }
 
 // Регистрация/снятие вебхука (для админского эндпоинта).
+// Постоянная кнопка чата (рядом со скрепкой): открывает CRM как Mini App.
+export async function setMenuButton() {
+  if (!env.PUBLIC_APP_URL) return { ok: false, skipped: true };
+  return tg("setChatMenuButton", {
+    menu_button: {
+      type: "web_app",
+      text: "Открыть CRM",
+      web_app: { url: env.PUBLIC_APP_URL },
+    },
+  });
+}
+
 export async function setWebhook(url, secret) {
   return tg("setWebhook", {
     url,
@@ -1000,6 +1266,10 @@ export const _internals = {
   mgmtMoneyView,
   mgmtTasksView,
   salesPeriod,
+  branchListView,
+  branchCardView,
+  branchCashView,
+  branchMoneyView,
   OFFICE_ROLES,
   hourSlots,
   branchHours,

@@ -21,6 +21,7 @@ import {
   deleteWebhook,
   webhookInfo,
   botConfigured,
+  setMenuButton,
 } from "../services/telegramBot.js";
 import { env } from "../env.js";
 import { log } from "../logger.js";
@@ -187,7 +188,9 @@ r.post(
       return res
         .status(502)
         .json({ error: out.description || "setWebhook не удался" });
-    res.json({ ok: true, url });
+    // Заодно ставим кнопку чата «Открыть CRM» (Mini App) — best-effort.
+    const menu = await setMenuButton().catch(() => ({ ok: false }));
+    res.json({ ok: true, url, menuButton: !!menu.ok });
   })
 );
 r.get(

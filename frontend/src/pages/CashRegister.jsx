@@ -262,6 +262,24 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
       return;
     }
     dispatch({ type: "SAVE_CASH_REPORT", report: { ...form, userId: me.id } });
+    // Дублируем отчёт на сервер (/api/cash) — его видят офис и Telegram-бот.
+    apiPost("/api/cash/report", {
+      branchId: String(form.branchId),
+      branchName: branchById(form.branchId)?.name || "",
+      date: form.date,
+      fiscal: form.fiscal || 0,
+      nonFiscal: form.nonFiscal || 0,
+      humo: form.humo || 0,
+      uzcard: form.uzcard || 0,
+      click: form.click || 0,
+      payme: form.payme || 0,
+      uzumTezkor: form.uzumTezkor || 0,
+      yandex: form.yandex || 0,
+      transfer: form.transfer || 0,
+      expenses: form.expenses || 0,
+      iiko: form.iiko || 0,
+      comment: String(form.comment || "").slice(0, 1000),
+    }).catch(() => {});
     notify(tr("Отчёт сдан и ожидает подтверждения"));
     tgNotify(
       `Касса сдана: ${branchById(form.branchId)?.name || "—"}, ${form.date} — ` +
@@ -274,6 +292,12 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
     dispatch({ type: "CONFIRM_CASH_REPORT", id, userId: me.id });
     notify(tr("Отчёт подтверждён"));
     const rep = (s.cashReports || []).find((r) => r.id === id);
+    // Подтверждение — тоже на сервер (best-effort).
+    if (rep)
+      apiPost("/api/cash/report/confirm", {
+        branchId: String(rep.branchId),
+        date: rep.date,
+      }).catch(() => {});
     if (rep)
       tgNotify(
         `Отчёт по кассе подтверждён: ${branchById(rep.branchId)?.name || "—"}, ` +
