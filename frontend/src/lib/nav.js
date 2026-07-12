@@ -98,7 +98,7 @@ export const VIEW_TITLE = {
   cash: "Кассы филиалов",
   money: "Учёт и контроль денег",
   sales: "Аналитика продаж",
-  production: "Производство · Акт приготовления",
+  production: "Производство",
   checklists: "Чек-листы смены",
   cakes: "Конструктор тортов",
   reports: "Отчёты",

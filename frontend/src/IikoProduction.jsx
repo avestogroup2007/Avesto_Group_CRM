@@ -16,11 +16,9 @@ function today() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-// Панель «Акт приготовления» (iiko).
-// Этап 1 — чтение справочников (блюда с тех.картой + склады).
-// Этап 2 — форма создания акта: выбрать блюда → кол-во → склад → дата →
-// «Предпросмотр» (ничего не пишем) → «Провести в iiko» (реальная запись).
-export default function IikoProduction() {
+// Вкладка «Акт приготовления» (тестовая): подтверждение, что программа умеет
+// проводить акты в iiko. Понадобится для автодокументов конструктора.
+function ActTab() {
   const [state, setState] = useState({ kind: "idle" }); // idle|loading|ok|error
   const [q, setQ] = useState("");
 
@@ -556,6 +554,284 @@ export default function IikoProduction() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Отчёт производства ──────────────────────────────────────────────────────
+// Что и сколько произведено за период (по проведённым актам приготовления в
+// iiko), с разбивкой по отделам — папкам номенклатуры iiko.
+function ReportTab() {
+  const shift = (days) => {
+    const d = new Date(Date.now() - days * 86400000);
+    const p = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  const [from, setFrom] = useState(today());
+  const [to, setTo] = useState(today());
+  const [dept, setDept] = useState("all");
+  const [st, setSt] = useState({ kind: "idle" }); // idle|loading|ok|error
+
+  const run = async (f = from, t = to) => {
+    setSt({ kind: "loading" });
+    try {
+      const data = await apiPost("/api/iiko/production/report", {
+        from: f,
+        to: t,
+      });
+      setSt({ kind: "ok", data });
+      setDept("all");
+    } catch (e) {
+      setSt({ kind: "error", msg: e.message || "Ошибка запроса к iiko" });
+    }
+  };
+  const preset = (f, t) => {
+    setFrom(f);
+    setTo(t);
+    run(f, t);
+  };
+
+  const box = {
+    border: `1px solid ${BORDER}`,
+    borderRadius: 16,
+    background: "#fff",
+    padding: 18,
+  };
+  const th = {
+    fontSize: 11,
+    color: FAINT,
+    fontWeight: 700,
+    textAlign: "left",
+    padding: "6px 8px",
+    borderBottom: `1px solid ${BORDER}`,
+    whiteSpace: "nowrap",
+  };
+  const td = {
+    fontSize: 13,
+    color: INK,
+    padding: "6px 8px",
+    borderBottom: `1px solid ${LINE}`,
+  };
+  const inp = {
+    border: `1px solid ${BORDER}`,
+    borderRadius: 10,
+    padding: "8px 11px",
+    fontSize: 13.5,
+    background: "#fff",
+    color: INK,
+  };
+  const presetBtn = (label, f, t) => (
+    <button
+      key={label}
+      onClick={() => preset(f, t)}
+      className="rounded-xl px-3 py-2 font-bold"
+      style={{
+        border: `1px solid ${BORDER}`,
+        background: "#fff",
+        color: SUB,
+        fontSize: 13,
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  const data = st.kind === "ok" ? st.data : null;
+  const allItems = data ? data.items || [] : [];
+  const depts = data ? data.depts || [] : [];
+  const items =
+    dept === "all"
+      ? allItems
+      : allItems.filter((it) => String(it.deptId || "-") === dept);
+  const totalAmount = items.reduce((a, x) => a + (x.amount || 0), 0);
+  const fmtQty = (n) =>
+    Number(n || 0).toLocaleString("ru-RU", { maximumFractionDigits: 3 });
+
+  return (
+    <div className="space-y-4">
+      <div style={box}>
+        <h3 className="font-bold mb-1" style={{ color: INK, fontSize: 16 }}>
+          Отчёт производства
+        </h3>
+        <p style={{ fontSize: 13, color: SUB, marginBottom: 12 }}>
+          Что и сколько произведено за период — по проведённым актам
+          приготовления в iiko. Отдел — это папка товара в номенклатуре iiko.
+        </p>
+        <div className="flex flex-wrap items-end gap-2 mb-3">
+          {presetBtn("Сегодня", today(), today())}
+          {presetBtn("Вчера", shift(1), shift(1))}
+          {presetBtn("7 дней", shift(6), today())}
+          {presetBtn("30 дней", shift(29), today())}
+          <div>
+            <span
+              style={{
+                fontSize: 11.5,
+                color: FAINT,
+                fontWeight: 600,
+                display: "block",
+                marginBottom: 3,
+              }}
+            >
+              С даты
+            </span>
+            <input
+              type="date"
+              value={from}
+              max={to}
+              onChange={(e) => setFrom(e.target.value)}
+              style={inp}
+            />
+          </div>
+          <div>
+            <span
+              style={{
+                fontSize: 11.5,
+                color: FAINT,
+                fontWeight: 600,
+                display: "block",
+                marginBottom: 3,
+              }}
+            >
+              По дату
+            </span>
+            <input
+              type="date"
+              value={to}
+              min={from}
+              onChange={(e) => setTo(e.target.value)}
+              style={inp}
+            />
+          </div>
+          <button
+            onClick={() => run()}
+            disabled={st.kind === "loading"}
+            className="rounded-xl px-4 py-2 font-bold text-white"
+            style={{
+              background: BRAND,
+              fontSize: 13.5,
+              opacity: st.kind === "loading" ? 0.6 : 1,
+            }}
+          >
+            {st.kind === "loading" ? "Загрузка…" : "Сформировать"}
+          </button>
+        </div>
+
+        {st.kind === "error" && (
+          <p style={{ color: BAD, fontSize: 13 }}>{st.msg}</p>
+        )}
+
+        {data && (
+          <>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span style={{ fontSize: 13, color: SUB }}>
+                Актов за период: <b>{data.docCount}</b> · позиций:{" "}
+                <b>{items.length}</b> · количество:{" "}
+                <b>{fmtQty(totalAmount)}</b>
+              </span>
+              <select
+                value={dept}
+                onChange={(e) => setDept(e.target.value)}
+                style={{ ...inp, minWidth: 200 }}
+              >
+                <option value="all">Все отделы</option>
+                {depts.map((d) => (
+                  <option key={d.id || "-"} value={String(d.id || "-")}>
+                    {d.name} ({fmtQty(d.amount)})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {data.sample && (
+              <details style={{ marginBottom: 10 }}>
+                <summary style={{ fontSize: 12.5, color: SUB }}>
+                  Актов не найдено — образец ответа iiko (для отладки)
+                </summary>
+                <pre
+                  style={{
+                    fontSize: 11,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    background: "#FBFAF7",
+                    padding: 10,
+                    borderRadius: 10,
+                  }}
+                >
+                  {data.sample}
+                </pre>
+              </details>
+            )}
+            {items.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <th style={th}>Товар</th>
+                      <th style={th}>Отдел</th>
+                      <th style={th}>Папка</th>
+                      <th style={{ ...th, textAlign: "right" }}>Кол-во</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr key={it.productId}>
+                        <td style={{ ...td, fontWeight: 600 }}>{it.name}</td>
+                        <td style={{ ...td, color: SUB }}>{it.deptName}</td>
+                        <td style={{ ...td, color: SUB }}>
+                          {it.groupName || "—"}
+                        </td>
+                        <td
+                          style={{
+                            ...td,
+                            textAlign: "right",
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {fmtQty(it.amount)}
+                          {it.unit ? ` ${it.unit}` : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: SUB }}>
+                За выбранный период проведённых актов приготовления не найдено.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Раздел «Производство»: главный экран — отчёт производства; создание акта
+// вынесено во вторую (тестовую) вкладку.
+export default function IikoProduction() {
+  const [tab, setTab] = useState("report"); // report | act
+  const tabBtn = (key, label) => (
+    <button
+      onClick={() => setTab(key)}
+      className="rounded-xl px-4 py-2 font-bold"
+      style={{
+        border: `1px solid ${tab === key ? BRAND : BORDER}`,
+        background: tab === key ? BRAND : "#fff",
+        color: tab === key ? "#fff" : SUB,
+        fontSize: 13.5,
+      }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {tabBtn("report", "Отчёт производства")}
+        {tabBtn("act", "Акт приготовления (тест)")}
+      </div>
+      {tab === "report" ? <ReportTab /> : <ActTab />}
     </div>
   );
 }
