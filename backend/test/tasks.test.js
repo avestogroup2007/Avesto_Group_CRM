@@ -221,3 +221,84 @@ test("комментарий → 201 и запись в журнал", async () 
   const comments = await db.comment.count({ where: { taskId: task.id } });
   assert.equal(comments, 1);
 });
+
+test("IDOR: staff не читает чужую задачу по прямой ссылке", async () => {
+  // Задача, где staff не участвует и филиал чужой.
+  const other = await db.task.create({
+    data: {
+      title: "Чужая задача",
+      description: "секрет",
+      branchId,
+      departmentId: "d1",
+      executorId: ctrlId,
+      controllerId: ctrlId,
+      createdById: ctrlId,
+      category: "Прочее",
+      priority: "Обычный",
+      slaDeadline: new Date(Date.now() + 3600_000),
+    },
+  });
+  // exec (staff) привязан к этому же филиалу в before(), поэтому создадим
+  // пользователя без филиала.
+  const passwordHash = await bcrypt.hash(PASS, 10);
+  await db.user.upsert({
+    where: { name: "tasks_outsider" },
+    update: {
+      passwordHash,
+      role: "staff",
+      active: true,
+      branchId: null,
+      source: "iiko",
+    },
+    create: {
+      name: "tasks_outsider",
+      passwordHash,
+      role: "staff",
+      source: "iiko",
+    },
+  });
+  const outsiderToken = await login("tasks_outsider");
+  const res = await fetch(`${base}/api/tasks/${other.id}`, {
+    headers: auth(outsiderToken),
+  });
+  assert.equal(res.status, 403);
+  // Комментарий тоже запрещён.
+  const c = await fetch(`${base}/api/tasks/${other.id}/comment`, {
+    method: "POST",
+    headers: auth(outsiderToken),
+    body: JSON.stringify({ text: "не должно пройти" }),
+  });
+  assert.equal(c.status, 403);
+  await db.taskHistory.deleteMany({ where: { taskId: other.id } });
+  await db.task.delete({ where: { id: other.id } });
+});
+
+test("создание задачи с несуществующим филиалом — 400, не 500", async () => {
+  const res = await fetch(`${base}/api/tasks`, {
+    method: "POST",
+    headers: auth(ctrlToken),
+    body: JSON.stringify({
+      title: "x",
+      branchId: "no-such-branch",
+      executorId: execId,
+      controllerId: ctrlId,
+      slaDeadline: new Date(Date.now() + 3600_000).toISOString(),
+    }),
+  });
+  assert.equal(res.status, 400);
+});
+
+test("невалидный JSON — 400, слишком большое тело — 413", async () => {
+  const bad = await fetch(`${base}/api/tasks`, {
+    method: "POST",
+    headers: auth(ctrlToken),
+    body: "{не json",
+  });
+  assert.equal(bad.status, 400);
+  const big = await fetch(`${base}/api/tasks`, {
+    method: "POST",
+    headers: auth(ctrlToken),
+    body: JSON.stringify({ title: "x".repeat(3 * 1024 * 1024) }),
+  });
+  assert.equal(big.status, 413);
+});

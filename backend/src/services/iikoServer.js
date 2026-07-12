@@ -66,14 +66,27 @@ async function logout(key) {
 const KEY_TTL_MS = 5 * 60 * 1000;
 let keyCache = { key: null, at: 0 };
 
+let keyPromise = null; // single-flight: параллельные запросы ждут одну auth()
+
 async function acquireKey() {
   if (keyCache.key && Date.now() - keyCache.at < KEY_TTL_MS) {
     return keyCache.key;
   }
-  const old = keyCache.key;
-  keyCache = { key: await auth(), at: Date.now() };
-  if (old) logout(old); // освобождаем старую лицензию, не блокируя запрос
-  return keyCache.key;
+  // Без single-flight два параллельных запроса делали бы два auth(), и второй
+  // разлогинивал бы токен, которым ещё пользуется первый (лицензия iiko одна).
+  if (!keyPromise) {
+    const old = keyCache.key;
+    keyPromise = auth()
+      .then((key) => {
+        keyCache = { key, at: Date.now() };
+        if (old) logout(old); // освобождаем старую лицензию, не блокируя запрос
+        return key;
+      })
+      .finally(() => {
+        keyPromise = null;
+      });
+  }
+  return keyPromise;
 }
 
 // Вместо logout в finally: живой кэшированный токен не закрываем, чужой

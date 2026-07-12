@@ -43,6 +43,18 @@ r.get(
   })
 );
 
+// Право видеть задачу: офисные роли — все; остальные — участники задачи или
+// задачи своего филиала (та же логика, что в списке).
+function canSeeTask(t, user) {
+  if (["director", "finance", "sysadmin"].includes(user.role)) return true;
+  return (
+    t.executorId === user.uid ||
+    t.controllerId === user.uid ||
+    t.createdById === user.uid ||
+    (user.branchId && t.branchId === user.branchId)
+  );
+}
+
 // ── Создание задачи ─────────────────────────────────────────────────────────
 const CreateSchema = z.object({
   title: z.string().min(1),
@@ -67,6 +79,11 @@ r.post(
       return res.status(400).json({ error: "Неверный формат задачи" });
     }
     const d = parsed.data;
+    // Несуществующий филиал — понятная 400, а не 500 от нарушения FK.
+    const branch = await db.branch.findUnique({ where: { id: d.branchId } });
+    if (!branch) {
+      return res.status(400).json({ error: "Филиал не найден" });
+    }
     const task = await db.$transaction(async (tx) => {
       const created = await tx.task.create({
         data: {
@@ -112,6 +129,10 @@ r.get(
       },
     });
     if (!task) return res.status(404).json({ error: "Задача не найдена" });
+    // Чужую задачу по прямой ссылке читать нельзя (та же логика, что список).
+    if (!canSeeTask(task, req.user)) {
+      return res.status(403).json({ error: "Нет доступа к этой задаче" });
+    }
     res.json(task);
   })
 );
@@ -179,6 +200,9 @@ r.post(
     }
     const task = await db.task.findUnique({ where: { id: req.params.id } });
     if (!task) return res.status(404).json({ error: "Задача не найдена" });
+    if (!canSeeTask(task, req.user)) {
+      return res.status(403).json({ error: "Нет доступа к этой задаче" });
+    }
 
     const [comment] = await db.$transaction([
       db.comment.create({

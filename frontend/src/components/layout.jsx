@@ -373,7 +373,7 @@ export function TopBar({
   const [pwOpen, setPwOpen] = useState(false);
   return (
     <header
-      className="topbar-h glass-chrome px-4 md:px-6 py-2 flex flex-wrap items-center gap-3 sticky top-0"
+      className="topbar-h glass-chrome px-3 md:px-6 py-2 flex flex-wrap items-center gap-2 sm:gap-3 sticky top-0"
       style={{
         minHeight: 65,
         borderBottom: `1px solid ${C.glassBorder}`,
@@ -383,7 +383,7 @@ export function TopBar({
     >
       <button
         onClick={onToggleShift}
-        className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 font-bold transition"
+        className="inline-flex items-center gap-2 rounded-xl px-2.5 sm:px-3.5 py-2.5 font-bold transition"
         style={{
           ...(shift.open
             ? {
@@ -456,7 +456,7 @@ export function TopBar({
             </div>
             <div style={{ fontSize: 12, color: C.sub }}>{me.pos}</div>
           </div>
-          <Users size={16} color={C.faint} />
+          <Users size={16} color={C.faint} className="hidden sm:block" />
         </button>
         {open && (
           <div

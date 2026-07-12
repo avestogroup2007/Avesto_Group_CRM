@@ -7,6 +7,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
+import { log } from "../logger.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
@@ -193,7 +194,13 @@ async function ensureAutoPosted() {
           createdById: tx.createdById || null,
         },
       })
-      .catch(() => {}); // гонка/дубль по refId — пропускаем
+      .catch((e) => {
+        // Пропускаем ТОЛЬКО гонку/дубль по refId — прочие ошибки должны быть
+        // видны, иначе проводка молча не появится никогда.
+        if (e && e.code !== "P2002") {
+          log.warn({ err: e.message, refId }, "авто-проводка не создана");
+        }
+      });
   }
 }
 
@@ -352,13 +359,18 @@ r.get(
       const like = { contains: s, mode: "insensitive" };
       where.AND = [{ OR: [{ description: like }, { number: like }] }];
     }
-    const items = await db.posting.findMany({
-      where,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      take: 2000,
-    });
-    const total = items.reduce((s, p) => s + n(p.amount), 0);
-    res.json({ items: items.map(serP), total, count: items.length });
+    // Итог — агрегатом по всему фильтру, а не по выданной странице (take).
+    const [items, agg, count] = await Promise.all([
+      db.posting.findMany({
+        where,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        take: 2000,
+      }),
+      db.posting.aggregate({ _sum: { amount: true }, where }),
+      db.posting.count({ where }),
+    ]);
+    const total = n(agg._sum.amount);
+    res.json({ items: items.map(serP), total, count });
   })
 );
 
@@ -424,14 +436,13 @@ r.patch(
       if (d[k] !== undefined) data[k] = d[k];
     if (d.branchId !== undefined) data.branchId = d.branchId || null;
     if (d.amount !== undefined) data.amount = BigInt(Math.round(d.amount));
-    if (
-      (data.debit || data.credit) &&
-      (data.debit ?? "") === (data.credit ?? "")
-    ) {
-      // защита от равенства при частичном апдейте
+    // Дт ≠ Кт всегда сравнивается по ИТОГОВЫМ значениям: частичный PATCH
+    // одного поля (debit="9010" при credit="9010") тоже должен быть отклонён.
+    if (data.debit !== undefined || data.credit !== undefined) {
       const cur = await db.posting.findUnique({ where: { id: req.params.id } });
-      const nd = data.debit ?? cur?.debit;
-      const nc = data.credit ?? cur?.credit;
+      if (!cur) return res.status(404).json({ error: "Проводка не найдена" });
+      const nd = data.debit ?? cur.debit;
+      const nc = data.credit ?? cur.credit;
       if (nd === nc)
         return res
           .status(400)
