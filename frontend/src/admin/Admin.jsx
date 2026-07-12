@@ -32,6 +32,7 @@ import {
 } from "../components/ui.jsx";
 import { AdminRoutes } from "../pages/Routes.jsx";
 import AdminChecklists from "./AdminChecklists.jsx";
+import AdminAccess from "./AdminAccess.jsx";
 
 // Предпросмотр списка сотрудников из iiko (шаг 1: только чтение). iiko —
 // источник правды по кадрам; на следующем шаге отсюда будем импортировать
@@ -1527,6 +1528,7 @@ export function AdminPanel({ s, dispatch, notify }) {
     ["positions", "Должности", Award],
     ["branches", "Филиалы и бюджеты", Building2],
     ["departments", "Отделы и доступ", Lock],
+    ["access", "Доступ по ролям", ShieldCheck],
     ["routes", "Маршруты", Send],
     ["sla", "SLA-нормативы", Clock],
     ["sops", "Регламенты", ListChecks],
@@ -1581,6 +1583,7 @@ export function AdminPanel({ s, dispatch, notify }) {
       {tab === "checklists" && checklistsOn && (
         <AdminChecklists notify={notify} />
       )}
+      {tab === "access" && <AdminAccess notify={notify} />}
       {tab === "audit" && <AdminAudit />}
       {tab === "system" && (
         <AdminSystem s={s} dispatch={dispatch} notify={notify} />

@@ -20,7 +20,7 @@ import {
   makeFollowupTask,
 } from "./lib/automation.js";
 import { init, reducer, store } from "./lib/store.js";
-import { NAV, navAllowed, VIEW_TITLE } from "./lib/nav.js";
+import { NAV, navAllowed, VIEW_TITLE, setAccessOverrides } from "./lib/nav.js";
 import { Sidebar, BottomNav, MoreSheet, TopBar } from "./components/layout.jsx";
 import Board, { TaskDetail, CreatePage } from "./pages/Tasks.jsx";
 import { syncLang, tr } from "./lib/i18n.js";
@@ -80,6 +80,14 @@ export default function App({ authUser, onLogout }) {
     // видимость разделов клиента (например, «Чек-листы» в админке).
     apiGet("/api/modules")
       .then((m) => dispatch({ type: "MODULES", flags: m.flags || {} }))
+      .catch(() => {});
+    // Настройка доступа по ролям (сисадмин задаёт в админке) — применяем к
+    // навигации и сохраняем в store для экрана настройки.
+    apiGet("/api/access")
+      .then((a) => {
+        setAccessOverrides(a.overrides || {});
+        dispatch({ type: "ACCESS_CONFIG", access: a || { overrides: {} } });
+      })
       .catch(() => {});
   }, []);
   const [now, setNow] = useState(Date.now());
