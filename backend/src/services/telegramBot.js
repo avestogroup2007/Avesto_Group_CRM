@@ -17,8 +17,46 @@ import {
   riskyReport,
 } from "./iikoServer.js";
 import { cached } from "./cache.js";
+import { refreshModules, moduleEnabled } from "./modules.js";
 
 const API = "https://api.telegram.org";
+
+// Активные шаблоны чек-листов для линейного сотрудника (когда владелец включил
+// модули). role — по должности сотрудника (пустая должность в шаблоне = для
+// всех); cleaning — уборка (обычно почасовая). Возвращает [] при выключенном
+// модуле, чтобы кнопки шаблонов просто не показывались.
+async function loadStaffTemplates(user) {
+  await refreshModules().catch(() => {});
+  const wantRole = moduleEnabled("employeeChecklists");
+  const wantClean = moduleEnabled("cleaningChecklists");
+  if (!wantRole && !wantClean) return { role: [], cleaning: [] };
+  const rows = await db.checklistTemplate
+    .findMany({ where: { active: true }, orderBy: { createdAt: "asc" } })
+    .catch(() => []);
+  const pos = String(user.position || "")
+    .trim()
+    .toLowerCase();
+  const role = wantRole
+    ? rows.filter(
+        (t) =>
+          t.kind === "role" &&
+          (!t.position || t.position.trim().toLowerCase() === pos)
+      )
+    : [];
+  const cleaning = wantClean ? rows.filter((t) => t.kind === "cleaning") : [];
+  return { role, cleaning };
+}
+
+// Часы почасового шаблона: окно fromHour..toHour, иначе окно филиала.
+function templateSlots(tpl, branchId) {
+  if (tpl.scheduleType !== "hourly") return [null];
+  const win = branchHours(branchId);
+  const from = Number.isFinite(tpl.fromHour) ? tpl.fromHour : win.from;
+  const to = Number.isFinite(tpl.toHour) ? tpl.toHour : win.to;
+  const out = [];
+  for (let h = from; h <= to; h++) out.push(`${String(h).padStart(2, "0")}:00`);
+  return out;
+}
 
 // ── Конфигурация филиалов (зеркало фронтенда) ───────────────────────────────
 // Филиалы и рабочие окна берутся из конфигурации организации (БД, кэш 60 с):
@@ -347,10 +385,12 @@ async function authStep(chatId, from, session, msg) {
 
 // ── Рендер ──────────────────────────────────────────────────────────────────
 function checklistView(state) {
-  const def = CHECKLIST_DEFS[state.kind];
+  // label хранится в state (для шаблонов из админки); для легаси-обходов
+  // берём из CHECKLIST_DEFS как запасной вариант.
+  const label = state.label || CHECKLIST_DEFS[state.kind]?.label || "Чек-лист";
   const doneN = state.items.filter((it) => it.done).length;
   const title =
-    def.label + (state.slot ? ` · ${state.slot}` : "") + ` — ${state.date}`;
+    label + (state.slot ? ` · ${state.slot}` : "") + ` — ${state.date}`;
   const text =
     `🧾 <b>${esc(title)}</b>\n${esc(branchName(state.branchId))}\n` +
     `Отмечено ${doneN}/${state.items.length}` +
@@ -381,6 +421,13 @@ async function menuView(user) {
     .catch(() => []);
   const doneKey = new Set(
     runs.filter((r) => r.pct >= 100).map((r) => `${r.kind}|${r.slot || "-"}`)
+  );
+  // Готовность шаблонных чек-листов — по templateId (несколько шаблонов делят
+  // один kind, поэтому ключ по id, а не по kind).
+  const doneTpl = new Set(
+    runs
+      .filter((r) => r.pct >= 100 && r.templateId)
+      .map((r) => `${r.templateId}|${r.slot || "-"}`)
   );
   const slots = hourSlots(branchId);
   const text =
@@ -413,6 +460,31 @@ async function menuView(user) {
       callback_data: "pick|close|-",
     },
   ]);
+  // Чек-листы по шаблонам из админки (если владелец включил модули).
+  const tpls = await loadStaffTemplates(user);
+  for (const t of tpls.role) {
+    rows.push([
+      {
+        text: `${doneTpl.has(`${t.id}|-`) ? "✅ " : "📋 "}${t.title}`,
+        callback_data: `ptpl|${t.id}|-`,
+      },
+    ]);
+  }
+  for (const t of tpls.cleaning) {
+    // Почасовой — свой подменю со слотами; разовый — сразу открыть.
+    if (t.scheduleType === "hourly") {
+      rows.push([
+        { text: `🧹 ${t.title} (по часам)`, callback_data: `tplhrs|${t.id}` },
+      ]);
+    } else {
+      rows.push([
+        {
+          text: `${doneTpl.has(`${t.id}|-`) ? "✅ " : "🧹 "}${t.title}`,
+          callback_data: `ptpl|${t.id}|-`,
+        },
+      ]);
+    }
+  }
   if (env.PUBLIC_APP_URL) {
     rows.push([
       { text: "\u{1F310} Открыть CRM", web_app: { url: env.PUBLIC_APP_URL } },
@@ -972,6 +1044,109 @@ async function openChecklist(chatId, msgId, from, user, kind, slotRaw) {
     branchId: user.checklistBranch,
     items: base,
     awaitingPhoto: null,
+    date,
+    label: CHECKLIST_DEFS[kind]?.label || "Чек-лист",
+    chatId,
+    msgId,
+  };
+  await setSession(from.id, state);
+  const view = checklistView(state);
+  await editMsg(chatId, msgId, view.text, view.keyboard);
+}
+
+// Подменю часов для почасового уборочного шаблона.
+async function templateHoursView(user, tpl) {
+  const branchId = user.checklistBranch;
+  const date = ymdTashkent();
+  const hNow = hourTashkent();
+  const runs = await db.shiftChecklistRun
+    .findMany({
+      where: { branchId: String(branchId), date, templateId: tpl.id },
+    })
+    .catch(() => []);
+  const done = new Set(
+    runs.filter((r) => r.pct >= 100).map((r) => r.slot || "-")
+  );
+  const slots = templateSlots(tpl, branchId);
+  const btns = slots.map((sl) => {
+    const isDone = done.has(sl || "-");
+    const h = Number(String(sl).slice(0, 2));
+    const mark = isDone ? "✅" : h < hNow ? "⏰" : h === hNow ? "🔵" : "";
+    return {
+      text: `${mark}${sl}`.trim(),
+      callback_data: `ptpl|${tpl.id}|${sl}`,
+    };
+  });
+  const rows = [];
+  for (let i = 0; i < btns.length; i += 3) rows.push(btns.slice(i, i + 3));
+  rows.push([{ text: "⬅️ Назад", callback_data: "backmenu" }]);
+  return {
+    text: `🧹 <b>${esc(tpl.title)}</b>\n${esc(branchName(branchId))} · ${date}\nВыберите час:`,
+    keyboard: rows,
+  };
+}
+
+// Открыть шаблонный чек-лист (role/cleaning) из админки. Состав пунктов и
+// заголовок берём из шаблона; модуль проверяем заранее (при показе кнопок).
+async function openTemplateChecklist(
+  chatId,
+  msgId,
+  from,
+  user,
+  tplId,
+  slotRaw
+) {
+  const slot = slotRaw === "-" ? null : slotRaw;
+  const tpl = await db.checklistTemplate
+    .findUnique({ where: { id: tplId } })
+    .catch(() => null);
+  if (!tpl || !tpl.active) {
+    await editMsg(chatId, msgId, "Чек-лист больше недоступен. /start", null);
+    return;
+  }
+  // Гейтинг модуля на всякий случай (кнопка могла устареть).
+  await refreshModules().catch(() => {});
+  const mod = tpl.kind === "role" ? "employeeChecklists" : "cleaningChecklists";
+  if (!moduleEnabled(mod)) {
+    await editMsg(chatId, msgId, "Модуль чек-листов выключен. /start", null);
+    return;
+  }
+  const date = ymdTashkent();
+  const prev = await db.shiftChecklistRun
+    .findFirst({
+      where: {
+        branchId: String(user.checklistBranch),
+        templateId: tpl.id,
+        date,
+        slot: slot || null,
+      },
+      orderBy: { createdAt: "desc" },
+    })
+    .catch(() => null);
+  const base = (tpl.items || []).map((it) => ({
+    text: it.text,
+    needPhoto: !!it.needPhoto,
+    done: false,
+    photoFileId: null,
+  }));
+  if (prev && Array.isArray(prev.items)) {
+    prev.items.forEach((p, i) => {
+      if (base[i]) {
+        base[i].done = !!p.done;
+        base[i].photoFileId = p.photoFileId || null;
+      }
+    });
+  }
+  const state = {
+    kind: tpl.kind,
+    templateId: tpl.id,
+    position: tpl.position || null,
+    slot,
+    branchId: user.checklistBranch,
+    items: base,
+    awaitingPhoto: null,
+    date,
+    label: tpl.title,
     chatId,
     msgId,
   };
@@ -1078,6 +1253,35 @@ async function onCallback(cbq) {
     await answerCb(cbq.id);
     return;
   }
+  // Открыть шаблонный чек-лист из админки: ptpl|<templateId>|<slot|->.
+  if (cmd === "ptpl") {
+    await openTemplateChecklist(chatId, msgId, from, user, parts[1], parts[2]);
+    await answerCb(cbq.id);
+    return;
+  }
+  // Подменю часов почасового уборочного шаблона: tplhrs|<templateId>.
+  if (cmd === "tplhrs") {
+    const tpl = await db.checklistTemplate
+      .findUnique({ where: { id: parts[1] } })
+      .catch(() => null);
+    if (!tpl || !tpl.active) {
+      await answerCb(cbq.id, "Чек-лист недоступен");
+      return;
+    }
+    const hv = await templateHoursView(user, tpl);
+    await editMsg(chatId, msgId, hv.text, hv.keyboard);
+    await answerCb(cbq.id);
+    return;
+  }
+  // Назад в меню сотрудника (из подменю часов).
+  if (cmd === "backmenu") {
+    const view = OFFICE_ROLES.has(user.role)
+      ? mgmtMenuView(user)
+      : await menuView(user);
+    await editMsg(chatId, msgId, view.text, view.keyboard);
+    await answerCb(cbq.id);
+    return;
+  }
   const state = await getSession(from.id);
   if (!state) {
     await answerCb(cbq.id, "Сессия истекла, отправьте /start.");
@@ -1178,13 +1382,18 @@ async function submitChecklist(chatId, msgId, from, user, state) {
         pct,
         userId: user.id,
         via: "bot",
+        // Для шаблонных чек-листов сохраняем ссылку и заголовок — для отчёта.
+        templateId: state.templateId || null,
+        title: state.templateId ? state.label : null,
+        position: state.position || null,
       },
     })
     .catch((e) => log.warn({ err: e.message }, "checklist run create"));
   await clearSession(from.id);
 
-  const def = CHECKLIST_DEFS[state.kind];
-  const label = def.label + (state.slot ? ` · ${state.slot}` : "");
+  const baseLabel =
+    state.label || CHECKLIST_DEFS[state.kind]?.label || "Чек-лист";
+  const label = baseLabel + (state.slot ? ` · ${state.slot}` : "");
   const summary =
     `🧾 <b>${esc(label)}</b>\n${esc(branchName(state.branchId))} · ${date}\n` +
     `Сотрудник: ${esc(user.displayName || user.login || "—")}\n` +
@@ -1323,4 +1532,8 @@ export const _internals = {
   hourSlots,
   branchHours,
   CHECKLIST_DEFS,
+  loadStaffTemplates,
+  templateSlots,
+  templateHoursView,
+  menuView,
 };
