@@ -1320,6 +1320,5 @@ export const _internals = {
   OFFICE_ROLES,
   hourSlots,
   branchHours,
-  branchName,
   CHECKLIST_DEFS,
 };
