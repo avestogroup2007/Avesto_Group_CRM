@@ -14,6 +14,7 @@ import {
   verifyIikoCredentials,
   iikoConfigured,
   salesReport,
+  riskyReport,
 } from "./iikoServer.js";
 import { cached } from "./cache.js";
 
@@ -76,6 +77,11 @@ const ymdTashkent = () => {
   // en-CA даёт YYYY-MM-DD
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
 };
+// Дата N дней назад по Ташкенту (для «вчера», «7 дней»).
+const ymdTashkentShift = (daysBack) =>
+  new Date(Date.now() - daysBack * 86400000).toLocaleDateString("en-CA", {
+    timeZone: "Asia/Tashkent",
+  });
 const hourTashkent = () =>
   Number(
     new Date().toLocaleString("en-GB", {
@@ -363,29 +369,51 @@ async function menuView(user) {
 // ── Управленческое меню (руководство/офис) ──────────────────────────────────
 function mgmtMenuView(user) {
   const text =
-    `👋 <b>${esc(user.displayName || user.login || "Сотрудник")}</b>\n` +
+    `\u{1F44B} <b>${esc(user.displayName || user.login || "Сотрудник")}</b>\n` +
     `Роль: ${esc(ROLE_LABEL[user.role] || user.role)}\n\n` +
     `Что показать?`;
   const keyboard = [
-    [{ text: "📋 Чек-листы сегодня", callback_data: "mgr|checks" }],
-    [{ text: "💰 Выручка сегодня", callback_data: "mgr|sales" }],
-    [{ text: "📝 Мои чек-листы", callback_data: "mgr|own" }],
+    [
+      { text: "\u{1F4CB} Чек-листы сегодня", callback_data: "mgr|checks|t" },
+      { text: "\u{1F4CB} Вчера", callback_data: "mgr|checks|y" },
+    ],
+    [
+      { text: "\u{1F4B0} Выручка сегодня", callback_data: "mgr|sales|t" },
+      { text: "\u{1F4B0} Вчера", callback_data: "mgr|sales|y" },
+      { text: "\u{1F4B0} 7 дней", callback_data: "mgr|sales|w" },
+    ],
+    [{ text: "\u{1F6A8} Подозрительные операции", callback_data: "mgr|risky" }],
+    [
+      { text: "\u{1F4B5} Деньги", callback_data: "mgr|money" },
+      { text: "\u{1F5C2} Задачи", callback_data: "mgr|tasks" },
+    ],
+    [{ text: "\u{1F4DD} Мои чек-листы", callback_data: "mgr|own" }],
   ];
   return { text, keyboard };
 }
 
-const MGMT_BACK = [
-  [
-    { text: "‹ Меню", callback_data: "mgr|menu" },
-    { text: "🔄 Обновить", callback_data: "mgr|checks" },
-  ],
-];
+// Ряд «назад + обновить» для экранов сводок; refresh — колбэк текущего экрана.
+function mgmtBack(refresh) {
+  return [
+    [
+      { text: "\u2039 Меню", callback_data: "mgr|menu" },
+      { text: "\u{1F504} Обновить", callback_data: refresh },
+    ],
+  ];
+}
 
-// Сводка чек-листов по всем филиалам за сегодня: сколько часов санитарного
-// обхода сдано к текущему часу, сданы ли открытие/закрытие смены.
-async function mgmtChecksView() {
-  const date = ymdTashkent();
-  const hNow = hourTashkent();
+const num = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const money = (n) => Math.round(num(n)).toLocaleString("ru-RU") + " сум";
+
+// Сводка чек-листов по всем филиалам за день: сколько часов санитарного
+// обхода сдано (за сегодня — к текущему часу), сданы ли открытие/закрытие.
+async function mgmtChecksView(day = "t") {
+  const isToday = day !== "y";
+  const date = isToday ? ymdTashkent() : ymdTashkentShift(1);
+  const hNow = isToday ? hourTashkent() : 24; // за вчера ждём полное окно
   const runs = await db.shiftChecklistRun
     .findMany({ where: { date } })
     .catch(() => []);
@@ -403,47 +431,52 @@ async function mgmtChecksView() {
       const slot = `${String(h).padStart(2, "0")}:00`;
       if (done.has(`${b.id}|sanitary|${slot}`)) sanDone += 1;
     }
-    const open = done.has(`${b.id}|open|-`) ? "✅" : "—";
-    const close = done.has(`${b.id}|close|-`) ? "✅" : "—";
+    const open = done.has(`${b.id}|open|-`) ? "\u2705" : "—";
+    const close = done.has(`${b.id}|close|-`) ? "\u2705" : "—";
     const san =
       expected > 0 ? `${sanDone}/${expected}` : "окно ещё не началось";
-    const flag = expected > 0 && sanDone < expected ? " ⚠️" : "";
+    const flag = expected > 0 && sanDone < expected ? " \u26A0\uFE0F" : "";
     return (
       `<b>${esc(b.name)}</b>\n` +
       `  обход: ${san}${flag} · открытие: ${open} · закрытие: ${close}`
     );
   });
   const text =
-    `📋 <b>Чек-листы за ${date}</b>\n` +
-    `Санитарный обход — сдано/ожидается к текущему часу.\n\n` +
+    `\u{1F4CB} <b>Чек-листы за ${date}</b>\n` +
+    (isToday
+      ? `Санитарный обход — сдано/ожидается к текущему часу.\n\n`
+      : `Санитарный обход — сдано за полный день.\n\n`) +
     lines.join("\n");
-  return { text, keyboard: MGMT_BACK };
+  return { text, keyboard: mgmtBack(`mgr|checks|${day}`) };
 }
 
-// Выручка за сегодня из iiko (кэш общий с веб-аналитикой, 3 минуты).
-async function mgmtSalesView() {
-  const date = ymdTashkent();
-  const back = [
-    [
-      { text: "‹ Меню", callback_data: "mgr|menu" },
-      { text: "🔄 Обновить", callback_data: "mgr|sales" },
-    ],
-  ];
-  if (!iikoConfigured()) {
-    return {
-      text: "iiko не настроен — выручка недоступна.",
-      keyboard: back,
-    };
+// Периоды выручки: t — сегодня, y — вчера, w — последние 7 дней.
+function salesPeriod(p) {
+  const today = ymdTashkent();
+  if (p === "y") {
+    const d = ymdTashkentShift(1);
+    return { from: d, to: d, label: `вчера (${d})` };
   }
+  if (p === "w") {
+    const d = ymdTashkentShift(6);
+    return { from: d, to: today, label: `7 дней (${d} — ${today})` };
+  }
+  return { from: today, to: today, label: `сегодня (${today})` };
+}
+
+// Выручка из iiko. Кэш общий с веб-аналитикой: закрытые дни — 6 часов,
+// период с «сегодня» — 3 минуты.
+async function mgmtSalesView(period = "t") {
+  const { from, to, label } = salesPeriod(period);
+  const back = mgmtBack(`mgr|sales|${period}`);
+  if (!iikoConfigured()) {
+    return { text: "iiko не настроен — выручка недоступна.", keyboard: back };
+  }
+  const ttl = to === ymdTashkent() ? 3 * 60 * 1000 : 6 * 60 * 60 * 1000;
   try {
-    const rep = await cached(`olap:${date}:${date}:all`, 3 * 60 * 1000, () =>
-      salesReport({ from: date, to: date })
+    const rep = await cached(`olap:${from}:${to}:all`, ttl, () =>
+      salesReport({ from, to })
     );
-    const num = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    };
-    const money = (n) => Math.round(n).toLocaleString("ru-RU") + " сум";
     const byDept = {};
     let total = 0;
     let checks = 0;
@@ -457,14 +490,145 @@ async function mgmtSalesView() {
     const lines = Object.entries(byDept)
       .sort((a, z) => z[1] - a[1])
       .map(([d, sum]) => `${esc(d)}: <b>${money(sum)}</b>`);
+    const avg = checks > 0 ? total / checks : 0;
     const text =
-      `💰 <b>Выручка за ${date}</b>\n\n` +
-      `Итого: <b>${money(total)}</b> · чеков: ${checks}\n\n` +
-      (lines.length ? lines.join("\n") : "Продаж пока нет.");
+      `\u{1F4B0} <b>Выручка за ${esc(label)}</b>\n\n` +
+      `Итого: <b>${money(total)}</b>\n` +
+      `Чеков: ${checks} · средний чек: ${money(avg)}\n\n` +
+      (lines.length ? lines.join("\n") : "Продаж нет.");
     return { text, keyboard: back };
   } catch (e) {
     return {
       text: `Не удалось получить выручку из iiko: ${esc(e.message || "ошибка")}`,
+      keyboard: back,
+    };
+  }
+}
+
+// Подозрительные операции за сегодня: удаления/сторно заказов и крупные
+// скидки по сотрудникам (данные iiko, порог скидки 30 %).
+async function mgmtRiskyView() {
+  const date = ymdTashkent();
+  const back = mgmtBack("mgr|risky");
+  if (!iikoConfigured()) {
+    return { text: "iiko не настроен — отчёт недоступен.", keyboard: back };
+  }
+  try {
+    const rep = await cached(
+      `risky:${date}:${date}:all:def`,
+      3 * 60 * 1000,
+      () => riskyReport({ from: date, to: date })
+    );
+    const t = rep.totals || {};
+    const parts = [
+      `\u{1F6A8} <b>Подозрительные операции за ${date}</b>\n`,
+      `Удалений/сторно: <b>${num(t.delCount)}</b> на <b>${money(t.delSum)}</b>`,
+      `Скидок всего: <b>${money(t.discountSum)}</b> · с флагом \u26A0\uFE0F: ${num(t.flagged)}`,
+    ];
+    const dels = (rep.deletions || []).slice(0, 5);
+    if (dels.length) {
+      parts.push(`\n<b>Удаления по сотрудникам:</b>`);
+      for (const d of dels)
+        parts.push(`• ${esc(d.name)}: ${d.count} шт на ${money(d.sum)}`);
+    }
+    const flagged = (rep.discounts || [])
+      .filter((x) => x.flagged)
+      .sort((a, z) => z.discount - a.discount)
+      .slice(0, 5);
+    if (flagged.length) {
+      parts.push(`\n<b>Крупные скидки (\u2265 30 % оборота):</b>`);
+      for (const d of flagged)
+        parts.push(
+          `• ${esc(d.name)}: скидка ${money(d.discount)} (${Math.round(
+            d.share * 100
+          )} %)`
+        );
+    }
+    if (!dels.length && !flagged.length)
+      parts.push(`\nНарушений не замечено \u2705`);
+    return { text: parts.join("\n"), keyboard: back };
+  } catch (e) {
+    return {
+      text: `Не удалось получить отчёт из iiko: ${esc(e.message || "ошибка")}`,
+      keyboard: back,
+    };
+  }
+}
+
+// Деньги (данные CRM): баланс по согласованным операциям, приход/расход за
+// сегодня и сколько заявок ждёт согласования.
+async function mgmtMoneyView() {
+  const back = mgmtBack("mgr|money");
+  const date = ymdTashkent();
+  try {
+    const sum = (where) =>
+      db.moneyTx
+        .aggregate({ _sum: { amountUzs: true }, where })
+        .then((r) => num(r._sum.amountUzs));
+    const [incAll, expAll, incDay, expDay, pendCnt, pendSum] =
+      await Promise.all([
+        sum({ approval: "approved", direction: "income" }),
+        sum({ approval: "approved", direction: "expense" }),
+        sum({ approval: "approved", direction: "income", date }),
+        sum({ approval: "approved", direction: "expense", date }),
+        db.moneyTx.count({ where: { approval: "pending" } }),
+        sum({ approval: "pending" }),
+      ]);
+    const text =
+      `\u{1F4B5} <b>Деньги</b> (по данным CRM)\n\n` +
+      `Баланс: <b>${money(incAll - expAll)}</b>\n\n` +
+      `Сегодня (${date}):\n` +
+      `  приход: <b>${money(incDay)}</b>\n` +
+      `  расход: <b>${money(expDay)}</b>\n\n` +
+      `На согласовании: <b>${pendCnt}</b> заявок на <b>${money(pendSum)}</b>`;
+    return { text, keyboard: back };
+  } catch (e) {
+    return {
+      text: `Не удалось получить данные: ${esc(e.message || "ошибка")}`,
+      keyboard: back,
+    };
+  }
+}
+
+// Задачи (данные CRM): активные по фазам, просроченные SLA, новые за сегодня.
+async function mgmtTasksView() {
+  const back = mgmtBack("mgr|tasks");
+  try {
+    const now = new Date();
+    const dayStart = new Date(`${ymdTashkent()}T00:00:00+05:00`);
+    const [byPhase, overdue, createdToday] = await Promise.all([
+      db.task.groupBy({ by: ["phase"], _count: { _all: true } }),
+      db.task.count({
+        where: { phase: { lt: 5 }, slaDeadline: { lt: now } },
+      }),
+      db.task.count({ where: { createdAt: { gte: dayStart } } }),
+    ]);
+    const cnt = {};
+    let active = 0;
+    for (const row of byPhase) {
+      cnt[row.phase] = row._count._all;
+      if (row.phase < 5) active += row._count._all;
+    }
+    const PH = [
+      "Отправлено",
+      "Просмотрено",
+      "В работе",
+      "На проверке",
+      "Завершено",
+    ];
+    const lines = PH.map(
+      (nm, i) => `  ${i + 1}. ${nm}: <b>${cnt[i + 1] || 0}</b>`
+    );
+    const text =
+      `\u{1F5C2} <b>Задачи</b>\n\n` +
+      `Активных: <b>${active}</b> · просрочено SLA: <b>${overdue}</b>` +
+      (overdue > 0 ? " \u26A0\uFE0F" : "") +
+      `\nНовых за сегодня: <b>${createdToday}</b>\n\n` +
+      lines.join("\n");
+    return { text, keyboard: back };
+  } catch (e) {
+    return {
+      text: `Не удалось получить данные: ${esc(e.message || "ошибка")}`,
       keyboard: back,
     };
   }
@@ -560,18 +724,30 @@ async function onCallback(cbq) {
       return;
     }
     const action = parts[1];
+    const param = parts[2];
     if (action === "menu") {
       const mv = mgmtMenuView(user);
       await editMsg(chatId, msgId, mv.text, mv.keyboard);
     } else if (action === "checks") {
-      const cv = await mgmtChecksView();
+      const cv = await mgmtChecksView(param || "t");
       await editMsg(chatId, msgId, cv.text, cv.keyboard);
     } else if (action === "sales") {
       // Ответ на колбэк сразу — OLAP может занять пару секунд.
       await answerCb(cbq.id, "Загружаю…");
-      const sv = await mgmtSalesView();
+      const sv = await mgmtSalesView(param || "t");
       await editMsg(chatId, msgId, sv.text, sv.keyboard);
       return;
+    } else if (action === "risky") {
+      await answerCb(cbq.id, "Загружаю…");
+      const rv = await mgmtRiskyView();
+      await editMsg(chatId, msgId, rv.text, rv.keyboard);
+      return;
+    } else if (action === "money") {
+      const mv = await mgmtMoneyView();
+      await editMsg(chatId, msgId, mv.text, mv.keyboard);
+    } else if (action === "tasks") {
+      const tv = await mgmtTasksView();
+      await editMsg(chatId, msgId, tv.text, tv.keyboard);
     } else if (action === "own") {
       // Руководителю тоже можно проходить чек-листы (например, управляющему).
       if (!user.checklistBranch) {
@@ -821,6 +997,9 @@ export const _internals = {
   freshItems,
   mgmtMenuView,
   mgmtChecksView,
+  mgmtMoneyView,
+  mgmtTasksView,
+  salesPeriod,
   OFFICE_ROLES,
   hourSlots,
   branchHours,
