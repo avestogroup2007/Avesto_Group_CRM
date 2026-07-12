@@ -209,3 +209,37 @@ test("полный поток: login → me → logout → me 401", async () => 
   });
   assert.ok(logins >= 1, "вход должен попасть в AuditLog");
 });
+
+test("iiko-учётка: смена пароля не навязывается и локально запрещена", async () => {
+  // Даже если в БД стоит флаг «сменить пароль» — для SSO-учётки он не действует:
+  // пароль управляется в iiko, из CRM его не поменять.
+  await db.user.update({
+    where: { name: SSO_LOGIN },
+    data: { mustChangePassword: true },
+  });
+  const res = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: SSO_LOGIN, password: SSO_PASSWORD }),
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.mustChangePassword, false);
+  assert.equal(body.passwordManagedByIiko, true);
+
+  // Локальная смена пароля для iiko-учётки — понятный отказ.
+  const ch = await fetch(`${base}/api/auth/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${body.token}`,
+    },
+    body: JSON.stringify({
+      currentPassword: SSO_PASSWORD,
+      newPassword: "new_password_123",
+    }),
+  });
+  assert.equal(ch.status, 400);
+  const chBody = await ch.json();
+  assert.match(chBody.error, /iiko/);
+});

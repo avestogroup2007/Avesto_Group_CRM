@@ -101,7 +101,9 @@ export async function syncEmployeesToDb() {
         source: "iiko",
         iikoDeleted: e.deleted,
         active,
-        mustChangePassword: true,
+        // Пароль управляется в iiko (вход по живому SSO) — принудительная
+        // «смена пароля при первом входе» для таких учёток не имеет смысла.
+        mustChangePassword: false,
         hireDate: e.hireDate || null,
         fireDate: e.fireDate || null,
       };

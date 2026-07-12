@@ -499,16 +499,20 @@ export function TopBar({
                 </div>
               </div>
             )}
-            <button
-              onClick={() => {
-                setOpen(false);
-                setPwOpen(true);
-              }}
-              className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2.5 font-semibold"
-              style={{ color: C.ink, fontSize: 13.5 }}
-            >
-              <Lock size={16} /> Сменить пароль
-            </button>
+            {/* Пароль iiko-учёток управляется в iiko — локальную смену не
+                показываем, чтобы не путать (сервер её всё равно отклонит). */}
+            {!authUser?.passwordManagedByIiko && (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setPwOpen(true);
+                }}
+                className="w-full flex items-center gap-2 rounded-xl px-2.5 py-2.5 font-semibold"
+                style={{ color: C.ink, fontSize: 13.5 }}
+              >
+                <Lock size={16} /> Сменить пароль
+              </button>
+            )}
             {onLogout && (
               <button
                 onClick={() => {
