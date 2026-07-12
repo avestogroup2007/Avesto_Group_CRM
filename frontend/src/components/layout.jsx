@@ -12,7 +12,7 @@ import { Avatar } from "../components/ui.jsx";
 import { ROLE_OPTS } from "../lib/org.js";
 import { NAV, NAV_SHORT, navAllowed } from "../lib/nav.js";
 
-export function Sidebar({ view, setView, role }) {
+export function Sidebar({ view, setView, role, brandName }) {
   const items = NAV.filter((n) => navAllowed(n, role));
   return (
     <aside
@@ -44,7 +44,7 @@ export function Sidebar({ view, setView, role }) {
             className="font-extrabold truncate"
             style={{ color: C.ink, fontSize: 15.5, lineHeight: 1.25 }}
           >
-            Avesto Group
+            {brandName || "Avesto Group"}
           </div>
           <div
             className="truncate"

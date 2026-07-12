@@ -21,68 +21,19 @@ import { cached } from "./cache.js";
 const API = "https://api.telegram.org";
 
 // ── Конфигурация филиалов (зеркало фронтенда) ───────────────────────────────
-// iikoDept — имя торгового предприятия (Department) в iikoServer: нужно для
-// фильтра выручки по конкретному филиалу (зеркало frontend/src/lib/org.js).
-const BRANCHES = [
-  { id: 1, name: "Avesto Cafe — Микрорайон", iikoDept: "Микрорайон" },
-  { id: 2, name: "Avesto Cafe — Узбекистанская", iikoDept: "Uzbekistanskaya" },
-  { id: 3, name: "Avesto Sweets — Аэропорт", iikoDept: "Aeroport" },
-  { id: 4, name: "Avesto Sweets — Наврузий цех", iikoDept: "Navruzi Цех" },
-  {
-    id: 5,
-    name: "Avesto Sweets — Наврузий Магазин",
-    iikoDept: "Наврузи Магазин",
-  },
-  {
-    id: 6,
-    name: "ICG — Кейтеринг (основной)",
-    iikoDept: "Кейтеринг (основной)",
-  },
-];
-const PROD_BRANCH_IDS = new Set([4, 6]);
-const branchName = (id) =>
-  (BRANCHES.find((b) => b.id === Number(id)) || {}).name || "—";
-const branchHours = (id) =>
-  PROD_BRANCH_IDS.has(Number(id)) ? { from: 7, to: 16 } : { from: 8, to: 20 };
-const hourSlots = (id) => {
-  const { from, to } = branchHours(id);
-  const out = [];
-  for (let h = from; h <= to; h++) out.push(`${String(h).padStart(2, "0")}:00`);
-  return out;
-};
+// Филиалы и рабочие окна берутся из конфигурации организации (БД, кэш 60 с):
+// добавление филиала или смена окна обхода не требуют программиста.
+import {
+  refreshOrgConfig,
+  orgBranches,
+  orgBranchName,
+  orgBranchHours,
+  orgHourSlots,
+} from "./orgConfig.js";
+const branchName = (id) => orgBranchName(id);
+const branchHours = (id) => orgBranchHours(id);
+const hourSlots = (id) => orgHourSlots(id);
 
-// ── Шаблоны чек-листов (зеркало фронтенда) ──────────────────────────────────
-const SANITARY_ITEMS = [
-  { text: "Унитаз очищен", needPhoto: true },
-  { text: "Раковина вымыта", needPhoto: true },
-  { text: "Пол вымыт", needPhoto: false },
-  { text: "Туалетная бумага заправлена", needPhoto: true },
-  { text: "Мыло заправлено", needPhoto: false },
-  { text: "Средство/химия для мытья рук на месте", needPhoto: false },
-  { text: "Бумага для сушки рук на месте", needPhoto: false },
-];
-const OPEN_ITEMS = [
-  { text: "Оборудование включено", needPhoto: false },
-  { text: "Температура холодильников в норме", needPhoto: false },
-  { text: "Зал и столы чистые", needPhoto: true },
-  { text: "Санузел проверен и убран", needPhoto: true },
-  { text: "Кассовый размен на месте", needPhoto: false },
-];
-const CLOSE_ITEMS = [
-  { text: "Уборка зала и кухни", needPhoto: true },
-  { text: "Санузел убран", needPhoto: true },
-  { text: "Касса сверена", needPhoto: false },
-  { text: "Оборудование выключено", needPhoto: false },
-  { text: "Мусор вынесен", needPhoto: false },
-  { text: "Точка закрыта, сигнализация включена", needPhoto: false },
-];
-const CHECKLIST_DEFS = {
-  sanitary: { label: "Санитарный обход", hourly: true, items: SANITARY_ITEMS },
-  open: { label: "Открытие смены", hourly: false, items: OPEN_ITEMS },
-  close: { label: "Закрытие смены", hourly: false, items: CLOSE_ITEMS },
-};
-
-// ── Время (Asia/Tashkent) ───────────────────────────────────────────────────
 const ymdTashkent = () => {
   // en-CA даёт YYYY-MM-DD
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
@@ -120,6 +71,37 @@ const ROLE_LABEL = {
   staff: "Сотрудник",
 };
 
+const SANITARY_ITEMS = [
+  { text: "Унитаз очищен", needPhoto: true },
+  { text: "Раковина вымыта", needPhoto: true },
+  { text: "Пол вымыт", needPhoto: false },
+  { text: "Туалетная бумага заправлена", needPhoto: true },
+  { text: "Мыло заправлено", needPhoto: false },
+  { text: "Средство/химия для мытья рук на месте", needPhoto: false },
+  { text: "Бумага для сушки рук на месте", needPhoto: false },
+];
+const OPEN_ITEMS = [
+  { text: "Оборудование включено", needPhoto: false },
+  { text: "Температура холодильников в норме", needPhoto: false },
+  { text: "Зал и столы чистые", needPhoto: true },
+  { text: "Санузел проверен и убран", needPhoto: true },
+  { text: "Кассовый размен на месте", needPhoto: false },
+];
+const CLOSE_ITEMS = [
+  { text: "Уборка зала и кухни", needPhoto: true },
+  { text: "Санузел убран", needPhoto: true },
+  { text: "Касса сверена", needPhoto: false },
+  { text: "Оборудование выключено", needPhoto: false },
+  { text: "Мусор вынесен", needPhoto: false },
+  { text: "Точка закрыта, сигнализация включена", needPhoto: false },
+];
+const CHECKLIST_DEFS = {
+  sanitary: { label: "Санитарный обход", hourly: true, items: SANITARY_ITEMS },
+  open: { label: "Открытие смены", hourly: false, items: OPEN_ITEMS },
+  close: { label: "Закрытие смены", hourly: false, items: CLOSE_ITEMS },
+};
+
+// ── Низкоуровневые вызовы Telegram ──────────────────────────────────────────
 export function botConfigured() {
   return Boolean(env.TELEGRAM_BOT_TOKEN);
 }
@@ -220,12 +202,14 @@ async function botAuthenticate(login, password) {
 // Клавиатура выбора филиала (после привязки, если он ещё не задан).
 function branchPickView() {
   const rows = [];
-  for (let i = 0; i < BRANCHES.length; i += 2) {
+  for (let i = 0; i < orgBranches().length; i += 2) {
     rows.push(
-      BRANCHES.slice(i, i + 2).map((b) => ({
-        text: b.name,
-        callback_data: `setbr|${b.id}`,
-      }))
+      orgBranches()
+        .slice(i, i + 2)
+        .map((b) => ({
+          text: b.name,
+          callback_data: `setbr|${b.id}`,
+        }))
     );
   }
   return { text: "Выберите ваш филиал:", keyboard: rows };
@@ -475,12 +459,14 @@ function mgmtMenuView(user) {
 // Список филиалов для раздела «Филиалы».
 function branchListView() {
   const rows = [];
-  for (let i = 0; i < BRANCHES.length; i += 2) {
+  for (let i = 0; i < orgBranches().length; i += 2) {
     rows.push(
-      BRANCHES.slice(i, i + 2).map((b) => ({
-        text: b.name,
-        callback_data: `mgr|br|${b.id}`,
-      }))
+      orgBranches()
+        .slice(i, i + 2)
+        .map((b) => ({
+          text: b.name,
+          callback_data: `mgr|br|${b.id}`,
+        }))
     );
   }
   rows.push([{ text: "\u2039 Меню", callback_data: "mgr|menu" }]);
@@ -489,7 +475,7 @@ function branchListView() {
 
 // Карточка филиала: что смотреть по нему.
 function branchCardView(bid) {
-  const b = BRANCHES.find((x) => x.id === Number(bid));
+  const b = orgBranches().find((x) => x.id === Number(bid));
   if (!b) return branchListView();
   const { from, to } = branchHours(b.id);
   const text =
@@ -524,7 +510,7 @@ function branchBack(bid, refresh) {
 
 // Выручка филиала за сегодня (iiko, фильтр по Department).
 async function branchSalesView(bid) {
-  const b = BRANCHES.find((x) => x.id === Number(bid));
+  const b = orgBranches().find((x) => x.id === Number(bid));
   if (!b) return branchListView();
   const date = ymdTashkent();
   const back = branchBack(bid, `mgr|brsales|${bid}`);
@@ -568,7 +554,7 @@ async function branchSalesView(bid) {
 
 // Чек-листы филиала за сегодня: почасовая картина + открытие/закрытие.
 async function branchChecksView(bid) {
-  const b = BRANCHES.find((x) => x.id === Number(bid));
+  const b = orgBranches().find((x) => x.id === Number(bid));
   if (!b) return branchListView();
   const date = ymdTashkent();
   const hNow = hourTashkent();
@@ -603,7 +589,7 @@ async function branchChecksView(bid) {
 
 // Касса филиала: отчёты за сегодня и вчера (данные CRM /api/cash).
 async function branchCashView(bid) {
-  const b = BRANCHES.find((x) => x.id === Number(bid));
+  const b = orgBranches().find((x) => x.id === Number(bid));
   if (!b) return branchListView();
   const back = branchBack(bid, `mgr|brcash|${bid}`);
   const days = [ymdTashkent(), ymdTashkentShift(1)];
@@ -644,7 +630,7 @@ async function branchCashView(bid) {
 
 // Деньги филиала (CRM): приход/расход за сегодня и за 7 дней, на согласовании.
 async function branchMoneyView(bid) {
-  const b = BRANCHES.find((x) => x.id === Number(bid));
+  const b = orgBranches().find((x) => x.id === Number(bid));
   if (!b) return branchListView();
   const back = branchBack(bid, `mgr|brmoney|${bid}`);
   const today = ymdTashkent();
@@ -710,7 +696,7 @@ async function mgmtChecksView(day = "t") {
       .filter((r) => r.pct >= 100)
       .map((r) => `${r.branchId}|${r.kind}|${r.slot || "-"}`)
   );
-  const lines = BRANCHES.map((b) => {
+  const lines = orgBranches().map((b) => {
     const { from, to } = branchHours(b.id);
     const lastExpected = Math.min(hNow, to);
     const expected = Math.max(0, lastExpected - from + 1);
@@ -1073,7 +1059,7 @@ async function onCallback(cbq) {
   if (cmd === "setbr") {
     // Выбор филиала после привязки — только из списка филиалов.
     const bid = parts[1];
-    if (!BRANCHES.some((b) => String(b.id) === String(bid))) {
+    if (!orgBranches().some((b) => String(b.id) === String(bid))) {
       await answerCb(cbq.id, "Неизвестный филиал");
       return;
     }
@@ -1231,6 +1217,8 @@ async function submitChecklist(chatId, msgId, from, user, state) {
 // Точка входа: разбирает одно обновление вебхука.
 export async function handleUpdate(update) {
   try {
+    // Конфигурация организации (филиалы/окна) — свежая, с кэшем 60 сек.
+    await refreshOrgConfig().catch(() => {});
     if (update.callback_query) {
       await onCallback(update.callback_query);
       return;
@@ -1319,6 +1307,7 @@ export async function webhookInfo() {
 export const _internals = {
   checklistView,
   freshItems,
+  branchName,
   mgmtMenuView,
   mgmtChecksView,
   mgmtMoneyView,
@@ -1331,6 +1320,5 @@ export const _internals = {
   OFFICE_ROLES,
   hourSlots,
   branchHours,
-  branchName,
   CHECKLIST_DEFS,
 };

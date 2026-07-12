@@ -197,6 +197,30 @@ export function reducer(s, a) {
       };
     case "SET_CATDEPT":
       return { ...s, catDept: { ...s.catDept, [a.category]: a.departmentId } };
+    case "ORG_CONFIG": {
+      // Конфигурация организации с сервера — источник правды для филиалов,
+      // юрлиц и бренда. Мержим по id, чтобы не потерять локальные поля
+      // (реквизиты юрлиц и т.п.).
+      const cfg = a.config || {};
+      const mergeById = (local, remote) =>
+        (remote || []).map((r) => ({
+          ...(local || []).find((l) => Number(l.id) === Number(r.id)),
+          ...r,
+        }));
+      return {
+        ...s,
+        brandName: cfg.brandName || s.brandName,
+        companies: mergeById(s.companies, cfg.companies),
+        branches: mergeById(s.branches, cfg.branches),
+      };
+    }
+    case "UPD_BRANCH":
+      return {
+        ...s,
+        branches: s.branches.map((b) =>
+          b.id === a.id ? { ...b, ...a.patch } : b,
+        ),
+      };
     case "ADD_BRANCH":
       return {
         ...s,

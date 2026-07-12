@@ -348,3 +348,13 @@ model BotSession {
   state      Json // { kind, slot, branchId, items:[...], awaitingPhoto }
   updatedAt  DateTime @updatedAt
 }
+
+// Конфигурация организации (одна строка, id=1): бренд, юрлица, филиалы с
+// отделениями iiko и окнами чек-листов. Выносит «прибитые гвоздями» данные
+// Avesto из кода — система становится настраиваемой под любую компанию.
+model OrgConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
