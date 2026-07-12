@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LogIn, Loader2 } from "lucide-react";
 import { login } from "./api.js";
 import Logo from "./Logo.jsx";
@@ -16,6 +16,15 @@ export default function Login({ onSuccess }) {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [brand, setBrand] = useState("Avesto Group");
+  // Название бренда — с сервера (конфигурация организации, публичная часть).
+  useEffect(() => {
+    const base = import.meta.env.VITE_API_URL || "";
+    fetch(`${base}/api/org/public`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && d.brandName && setBrand(d.brandName))
+      .catch(() => {});
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -75,7 +84,7 @@ export default function Login({ onSuccess }) {
               className="font-extrabold"
               style={{ color: INK, fontSize: 17, lineHeight: 1.2 }}
             >
-              Avesto Group
+              {brand}
             </div>
             <div style={{ color: SUB, fontSize: 12.5 }}>CRM System</div>
           </div>

@@ -1,4 +1,5 @@
 // Чек-листы смены: составы пунктов и рабочие окна обходов по типу точки.
+import { ORG } from "./org.js";
 // ── Чек-листы смены ─────────────────────────────────────────────────────────
 // needPhoto — пункт требует фотоотчёт (без фото пункт не закрывается).
 export const SANITARY_ITEMS = [
@@ -33,10 +34,14 @@ export const CHECKLIST_DEFS = {
 // Рабочее окно обхода по типу точки: производство (цех/кейтеринг) — 07:00–16:00,
 // рестораны и магазины — 08:00–20:00.
 const PROD_BRANCH_IDS = new Set([4, 6]);
-export const branchHours = (branchId) =>
-  PROD_BRANCH_IDS.has(Number(branchId))
+export const branchHours = (branchId) => {
+  // Окно из конфигурации организации (сервер): у филиала может быть своё.
+  const b = (ORG.branches || []).find((x) => Number(x.id) === Number(branchId));
+  if (b && b.hours && Number.isFinite(b.hours.from)) return b.hours;
+  return PROD_BRANCH_IDS.has(Number(branchId))
     ? { from: 7, to: 16 }
     : { from: 8, to: 20 };
+};
 export const hourSlots = (branchId) => {
   const { from, to } = branchHours(branchId);
   const out = [];

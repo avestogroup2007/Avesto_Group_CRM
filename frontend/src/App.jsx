@@ -7,7 +7,7 @@ import React, {
   Suspense,
 } from "react";
 import { Building2, Archive, X, Info } from "lucide-react";
-import { apiPost } from "./api.js";
+import { apiGet, apiPost } from "./api.js";
 import { FONT, C } from "./lib/theme.js";
 import { NiceSelect, ScrollTopButton } from "./components/ui.jsx";
 import { usePersisted } from "./lib/hooks.js";
@@ -67,6 +67,15 @@ function ViewLoader() {
 /* ------------------------------ приложение --------------------------------- */
 export default function App({ authUser, onLogout }) {
   const [s, dispatch] = useReducer(reducer, undefined, init);
+
+  // Конфигурация организации с сервера (филиалы, юрлица, бренд): источник
+  // правды один для веба и Telegram-бота. Ошибка сети не мешает работе —
+  // остаются локальные значения.
+  useEffect(() => {
+    apiGet("/api/org")
+      .then((config) => dispatch({ type: "ORG_CONFIG", config }))
+      .catch(() => {});
+  }, []);
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState(null);
   const [hint, setHint] = useState(true);
@@ -390,7 +399,12 @@ export default function App({ authUser, onLogout }) {
         @media(min-width:768px){.desk-shift{margin-left:250px}}`}</style>
 
       <div className="flex" style={{ minHeight: "100vh" }}>
-        <Sidebar view={s.view} setView={setView} role={me.role} />
+        <Sidebar
+          view={s.view}
+          setView={setView}
+          role={me.role}
+          brandName={s.brandName}
+        />
         <div className="flex-1 min-w-0 flex flex-col desk-shift">
           <TopBar
             me={me}

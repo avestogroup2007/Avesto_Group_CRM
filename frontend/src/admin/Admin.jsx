@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Download,
 } from "lucide-react";
-import { apiGet, apiPost, apiPatch, apiDownload } from "../api.js";
+import { apiGet, apiPost, apiPatch, apiPut, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
 import { tr } from "../lib/i18n.js";
 import { uid } from "../lib/format.js";
@@ -841,6 +841,43 @@ function AdminPositions({ s, dispatch, notify }) {
 
 function AdminBranches({ s, dispatch, notify }) {
   const [bc, setBc] = useState(String(s.companies[0]?.id || ""));
+  const [brand, setBrand] = useState(s.brandName || "Avesto Group");
+  const [saving, setSaving] = useState(false);
+  // Отправить конфигурацию организации на сервер: её читают веб при загрузке
+  // и Telegram-бот (филиалы, отделения iiko, окна чек-листов, бренд).
+  const saveOrg = async () => {
+    setSaving(true);
+    try {
+      const cfg = {
+        brandName: brand.trim() || "Avesto Group",
+        companies: s.companies.map((c) => ({
+          id: Number(c.id),
+          name: c.name,
+        })),
+        branches: s.branches.map((b) => ({
+          id: Number(b.id),
+          name: b.name,
+          companyId: Number(b.companyId),
+          iikoDept: b.iikoDept || "",
+          cash: b.cash !== false,
+          prod: !!b.prod,
+          hours:
+            b.hours && Number.isFinite(Number(b.hours.from))
+              ? { from: Number(b.hours.from), to: Number(b.hours.to) }
+              : b.prod
+                ? { from: 7, to: 16 }
+                : { from: 8, to: 20 },
+        })),
+      };
+      const saved = await apiPut("/api/org", cfg);
+      dispatch({ type: "ORG_CONFIG", config: saved });
+      notify("Конфигурация организации сохранена на сервере");
+    } catch (e) {
+      notify(e.message || "Не удалось сохранить на сервере");
+    } finally {
+      setSaving(false);
+    }
+  };
   const [bn, setBn] = useState("");
   const [bb, setBb] = useState("300000");
   const [cn, setCn] = useState("");
@@ -874,6 +911,39 @@ function AdminBranches({ s, dispatch, notify }) {
   };
   return (
     <div className="space-y-5">
+      <AdCard
+        title="Организация"
+        desc="Эти настройки читают и веб-приложение, и Telegram-бот. После правок нажмите «Сохранить на сервере»."
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <div style={{ minWidth: 240 }}>
+            <Field label="Название (бренд)">
+              <input
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 focus:outline-none"
+                style={{
+                  border: `1px solid ${C.border}`,
+                  fontSize: 14,
+                  color: C.ink,
+                }}
+              />
+            </Field>
+          </div>
+          <button
+            onClick={saveOrg}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{
+              background: C.brandA,
+              fontSize: 14,
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {saving ? "Сохраняем…" : "💾 Сохранить на сервере"}
+          </button>
+        </div>
+      </AdCard>
       <AdCard title="Юр. лица и филиалы">
         {s.companies.map((co) => (
           <div key={co.id} className="mb-4">
@@ -888,7 +958,7 @@ function AdminBranches({ s, dispatch, notify }) {
                 .map((b) => (
                   <div
                     key={b.id}
-                    className="flex items-center gap-3 rounded-xl px-4 py-2.5"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-4 py-2.5"
                     style={{
                       background: "#FBFCFE",
                       border: `1px solid ${C.border}`,
@@ -896,10 +966,125 @@ function AdminBranches({ s, dispatch, notify }) {
                   >
                     <span
                       className="flex-1"
-                      style={{ fontSize: 14, color: C.ink, fontWeight: 600 }}
+                      style={{
+                        fontSize: 14,
+                        color: C.ink,
+                        fontWeight: 600,
+                        minWidth: 160,
+                      }}
                     >
                       Филиал «{b.name}»
                     </span>
+                    <span style={{ fontSize: 12.5, color: C.faint }}>
+                      iiko:
+                    </span>
+                    <input
+                      value={b.iikoDept || ""}
+                      placeholder="Department в iiko"
+                      onChange={(e) =>
+                        dispatch({
+                          type: "UPD_BRANCH",
+                          id: b.id,
+                          patch: { iikoDept: e.target.value },
+                        })
+                      }
+                      className="rounded-lg px-2 py-1.5 focus:outline-none"
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        fontSize: 13,
+                        color: C.ink,
+                        width: 150,
+                      }}
+                    />
+                    <span style={{ fontSize: 12.5, color: C.faint }}>
+                      обход с
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={(b.hours && b.hours.from) ?? (b.prod ? 7 : 8)}
+                      onChange={(e) =>
+                        dispatch({
+                          type: "UPD_BRANCH",
+                          id: b.id,
+                          patch: {
+                            hours: {
+                              from: +e.target.value || 0,
+                              to: (b.hours && b.hours.to) ?? (b.prod ? 16 : 20),
+                            },
+                          },
+                        })
+                      }
+                      className="rounded-lg px-1.5 py-1.5 focus:outline-none"
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        fontSize: 13,
+                        color: C.ink,
+                        width: 54,
+                      }}
+                    />
+                    <span style={{ fontSize: 12.5, color: C.faint }}>до</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={(b.hours && b.hours.to) ?? (b.prod ? 16 : 20)}
+                      onChange={(e) =>
+                        dispatch({
+                          type: "UPD_BRANCH",
+                          id: b.id,
+                          patch: {
+                            hours: {
+                              from:
+                                (b.hours && b.hours.from) ?? (b.prod ? 7 : 8),
+                              to: +e.target.value || 0,
+                            },
+                          },
+                        })
+                      }
+                      className="rounded-lg px-1.5 py-1.5 focus:outline-none"
+                      style={{
+                        border: `1px solid ${C.border}`,
+                        fontSize: 13,
+                        color: C.ink,
+                        width: 54,
+                      }}
+                    />
+                    <label
+                      className="inline-flex items-center gap-1"
+                      style={{ fontSize: 12.5, color: C.sub }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!b.prod}
+                        onChange={(e) =>
+                          dispatch({
+                            type: "UPD_BRANCH",
+                            id: b.id,
+                            patch: { prod: e.target.checked },
+                          })
+                        }
+                      />
+                      цех
+                    </label>
+                    <label
+                      className="inline-flex items-center gap-1"
+                      style={{ fontSize: 12.5, color: C.sub }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={b.cash !== false}
+                        onChange={(e) =>
+                          dispatch({
+                            type: "UPD_BRANCH",
+                            id: b.id,
+                            patch: { cash: e.target.checked },
+                          })
+                        }
+                      />
+                      касса
+                    </label>
                     <span style={{ fontSize: 12.5, color: C.faint }}>
                       Бюджет/мес:
                     </span>
