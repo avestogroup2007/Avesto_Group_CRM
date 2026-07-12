@@ -70,7 +70,39 @@ test("mgmtMenuView: офисной роли — сводки, а не чек-л�
   assert.match(text, /Директор Тест/);
   assert.match(text, /Руководство/);
   const actions = keyboard.flat().map((b) => b.callback_data);
-  assert.deepEqual(actions, ["mgr|checks", "mgr|sales", "mgr|own"]);
+  assert.deepEqual(actions, [
+    "mgr|checks|t",
+    "mgr|checks|y",
+    "mgr|sales|t",
+    "mgr|sales|y",
+    "mgr|sales|w",
+    "mgr|risky",
+    "mgr|money",
+    "mgr|tasks",
+    "mgr|own",
+  ]);
+});
+
+test("salesPeriod: сегодня/вчера/неделя дают корректные границы", () => {
+  const { salesPeriod } = _internals;
+  const t = salesPeriod("t");
+  assert.equal(t.from, t.to);
+  const y = salesPeriod("y");
+  assert.equal(y.from, y.to);
+  assert.ok(y.from < t.from);
+  const w = salesPeriod("w");
+  assert.equal(w.to, t.to);
+  assert.ok(w.from < w.to);
+});
+
+test("mgmtMoneyView и mgmtTasksView: отвечают сводкой с кнопкой возврата", async () => {
+  const { mgmtMoneyView, mgmtTasksView } = _internals;
+  const mv = await mgmtMoneyView();
+  assert.match(mv.text, /Баланс|Не удалось/);
+  assert.ok(mv.keyboard.flat().some((b) => b.callback_data === "mgr|menu"));
+  const tv = await mgmtTasksView();
+  assert.match(tv.text, /Задачи|Не удалось/);
+  assert.ok(tv.keyboard.flat().some((b) => b.callback_data === "mgr|menu"));
 });
 
 test("mgmtChecksView: сводка содержит все филиалы и кнопку возврата", async () => {
