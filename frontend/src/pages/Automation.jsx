@@ -180,6 +180,18 @@ export function AutomationView({ rules, setRules, log, setLog, now }) {
   return (
     <div className="space-y-4 max-w-4xl">
       <div
+        className="rounded-xl px-4 py-3"
+        style={{
+          background: "#FFF7E8",
+          border: "1px solid #F1DFC0",
+          color: "#8A6A2F",
+          fontSize: 13,
+        }}
+      >
+        ⚠️ Данные этого раздела пока хранятся локально в этом браузере и не
+        видны с других устройств. Перенос на сервер — в дорожной карте.
+      </div>
+      <div
         className="rounded-2xl p-4 sm:p-5"
         style={{
           background: C.brandGrad,

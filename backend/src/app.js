@@ -18,6 +18,7 @@ import taskRoutes from "./routes/tasks.js";
 import moneyRoutes from "./routes/money.js";
 import postingRoutes from "./routes/postings.js";
 import cashRoutes from "./routes/cash.js";
+import checklistRoutes from "./routes/checklists.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
@@ -121,6 +122,7 @@ app.use("/api/postings", postingRoutes);
 app.use("/api/telegram", telegramRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/cash", cashRoutes);
+app.use("/api/checklists", checklistRoutes);
 
 // Обработка 404 и ошибок — всегда последними. Sentry ставится перед нашим
 // обработчиком: ошибка сначала уходит в мониторинг, затем клиенту как обычно.

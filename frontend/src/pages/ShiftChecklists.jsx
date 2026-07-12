@@ -119,6 +119,21 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
         pct,
       },
     });
+    // Дублируем сдачу на сервер (та же таблица, что у Telegram-бота):
+    // сводки в боте видят чек-листы из веба. Фото остаются локально —
+    // на сервер уходит только отметка о наличии.
+    apiPost("/api/checklists/run", {
+      branchId: String(branchId),
+      kind: open.kind,
+      date,
+      slot: open.slot || null,
+      items: open.items.map((it) => ({
+        text: it.text,
+        done: !!it.done,
+        needPhoto: !!it.needPhoto,
+        hasPhoto: !!it.photo,
+      })),
+    }).catch(() => {});
     const def = CHECKLIST_DEFS[open.kind];
     const label = def.label + (open.slot ? ` ${open.slot}` : "");
     const bName = (branchById(branchId) || {}).name || "—";
