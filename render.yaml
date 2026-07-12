@@ -52,6 +52,13 @@ services:
       # Мониторинг ошибок Sentry — DSN задаётся в панели Render (не в git).
       - key: SENTRY_DSN
         sync: false
+      # Канал «клиент → Back Office»: на установке Back Office задать
+      # VENDOR_INTAKE_SECRET; на установке клиента — тот же секрет и адрес
+      # Back Office (VENDOR_FEEDBACK_URL). Значения — только в панели Render.
+      - key: VENDOR_INTAKE_SECRET
+        sync: false
+      - key: VENDOR_FEEDBACK_URL
+        sync: false
       # iiko (Этап 3) — заполняется в панели Render, НЕ в этом файле и не в git.
       # - key: IIKO_API_LOGIN
       #   sync: false
