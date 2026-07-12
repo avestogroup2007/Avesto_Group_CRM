@@ -10,7 +10,12 @@ import { env } from "../env.js";
 import { db } from "../db.js";
 import { log } from "../logger.js";
 import { sendTelegram, topicFor, esc } from "./telegram.js";
-import { verifyIikoCredentials } from "./iikoServer.js";
+import {
+  verifyIikoCredentials,
+  iikoConfigured,
+  salesReport,
+} from "./iikoServer.js";
+import { cached } from "./cache.js";
 
 const API = "https://api.telegram.org";
 
@@ -81,6 +86,24 @@ const hourTashkent = () =>
   );
 
 // ── Низкоуровневые вызовы Telegram ──────────────────────────────────────────
+// Управленческие роли: после входа им показывается меню сводок (чек-листы по
+// всем филиалам, выручка дня), а не персональные чек-листы уборщицы.
+const OFFICE_ROLES = new Set([
+  "director",
+  "finance",
+  "accountant",
+  "sysadmin",
+  "manager",
+]);
+const ROLE_LABEL = {
+  director: "Руководство",
+  finance: "Финансист",
+  manager: "Управляющий",
+  accountant: "Бухгалтер",
+  sysadmin: "Сист. администратор",
+  staff: "Сотрудник",
+};
+
 export function botConfigured() {
   return Boolean(env.TELEGRAM_BOT_TOKEN);
 }
@@ -249,7 +272,10 @@ async function authStep(chatId, from, session, msg) {
       `✅ Вход выполнен: <b>${esc(linked.displayName || linked.login || "")}</b>` +
         (linked.position ? `\n${esc(linked.position)}` : "")
     );
-    if (!linked.checklistBranch) {
+    if (OFFICE_ROLES.has(linked.role)) {
+      const mv = mgmtMenuView(linked);
+      await sendMsg(chatId, mv.text, mv.keyboard);
+    } else if (!linked.checklistBranch) {
       const bp = branchPickView();
       await sendMsg(chatId, bp.text, bp.keyboard);
     } else {
@@ -334,6 +360,116 @@ async function menuView(user) {
   return { text, keyboard: rows };
 }
 
+// ── Управленческое меню (руководство/офис) ──────────────────────────────────
+function mgmtMenuView(user) {
+  const text =
+    `👋 <b>${esc(user.displayName || user.login || "Сотрудник")}</b>\n` +
+    `Роль: ${esc(ROLE_LABEL[user.role] || user.role)}\n\n` +
+    `Что показать?`;
+  const keyboard = [
+    [{ text: "📋 Чек-листы сегодня", callback_data: "mgr|checks" }],
+    [{ text: "💰 Выручка сегодня", callback_data: "mgr|sales" }],
+    [{ text: "📝 Мои чек-листы", callback_data: "mgr|own" }],
+  ];
+  return { text, keyboard };
+}
+
+const MGMT_BACK = [
+  [
+    { text: "‹ Меню", callback_data: "mgr|menu" },
+    { text: "🔄 Обновить", callback_data: "mgr|checks" },
+  ],
+];
+
+// Сводка чек-листов по всем филиалам за сегодня: сколько часов санитарного
+// обхода сдано к текущему часу, сданы ли открытие/закрытие смены.
+async function mgmtChecksView() {
+  const date = ymdTashkent();
+  const hNow = hourTashkent();
+  const runs = await db.shiftChecklistRun
+    .findMany({ where: { date } })
+    .catch(() => []);
+  const done = new Set(
+    runs
+      .filter((r) => r.pct >= 100)
+      .map((r) => `${r.branchId}|${r.kind}|${r.slot || "-"}`)
+  );
+  const lines = BRANCHES.map((b) => {
+    const { from, to } = branchHours(b.id);
+    const lastExpected = Math.min(hNow, to);
+    const expected = Math.max(0, lastExpected - from + 1);
+    let sanDone = 0;
+    for (let h = from; h <= lastExpected; h++) {
+      const slot = `${String(h).padStart(2, "0")}:00`;
+      if (done.has(`${b.id}|sanitary|${slot}`)) sanDone += 1;
+    }
+    const open = done.has(`${b.id}|open|-`) ? "✅" : "—";
+    const close = done.has(`${b.id}|close|-`) ? "✅" : "—";
+    const san =
+      expected > 0 ? `${sanDone}/${expected}` : "окно ещё не началось";
+    const flag = expected > 0 && sanDone < expected ? " ⚠️" : "";
+    return (
+      `<b>${esc(b.name)}</b>\n` +
+      `  обход: ${san}${flag} · открытие: ${open} · закрытие: ${close}`
+    );
+  });
+  const text =
+    `📋 <b>Чек-листы за ${date}</b>\n` +
+    `Санитарный обход — сдано/ожидается к текущему часу.\n\n` +
+    lines.join("\n");
+  return { text, keyboard: MGMT_BACK };
+}
+
+// Выручка за сегодня из iiko (кэш общий с веб-аналитикой, 3 минуты).
+async function mgmtSalesView() {
+  const date = ymdTashkent();
+  const back = [
+    [
+      { text: "‹ Меню", callback_data: "mgr|menu" },
+      { text: "🔄 Обновить", callback_data: "mgr|sales" },
+    ],
+  ];
+  if (!iikoConfigured()) {
+    return {
+      text: "iiko не настроен — выручка недоступна.",
+      keyboard: back,
+    };
+  }
+  try {
+    const rep = await cached(`olap:${date}:${date}:all`, 3 * 60 * 1000, () =>
+      salesReport({ from: date, to: date })
+    );
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const money = (n) => Math.round(n).toLocaleString("ru-RU") + " сум";
+    const byDept = {};
+    let total = 0;
+    let checks = 0;
+    for (const r of rep.byDay || []) {
+      const dep = String(r["Department"] || "—").trim() || "—";
+      const sum = num(r["DishDiscountSumInt"]);
+      byDept[dep] = (byDept[dep] || 0) + sum;
+      total += sum;
+      checks += num(r["UniqOrderId"]);
+    }
+    const lines = Object.entries(byDept)
+      .sort((a, z) => z[1] - a[1])
+      .map(([d, sum]) => `${esc(d)}: <b>${money(sum)}</b>`);
+    const text =
+      `💰 <b>Выручка за ${date}</b>\n\n` +
+      `Итого: <b>${money(total)}</b> · чеков: ${checks}\n\n` +
+      (lines.length ? lines.join("\n") : "Продаж пока нет.");
+    return { text, keyboard: back };
+  } catch (e) {
+    return {
+      text: `Не удалось получить выручку из iiko: ${esc(e.message || "ошибка")}`,
+      keyboard: back,
+    };
+  }
+}
+
 function freshItems(kind) {
   return CHECKLIST_DEFS[kind].items.map((it) => ({
     text: it.text,
@@ -351,6 +487,12 @@ async function onStart(chatId, from, user) {
     return;
   }
   await clearSession(from.id);
+  // Руководству/офису — сводки; линейному персоналу — чек-листы.
+  if (OFFICE_ROLES.has(user.role)) {
+    const mv = mgmtMenuView(user);
+    await sendMsg(chatId, mv.text, mv.keyboard);
+    return;
+  }
   if (!user.checklistBranch) {
     const bp = branchPickView();
     await sendMsg(chatId, bp.text, bp.keyboard);
@@ -411,6 +553,39 @@ async function onCallback(cbq) {
   const parts = data.split("|");
   const cmd = parts[0];
 
+  // Управленческое меню (только офисные роли).
+  if (cmd === "mgr") {
+    if (!OFFICE_ROLES.has(user.role)) {
+      await answerCb(cbq.id, "Недоступно для вашей роли");
+      return;
+    }
+    const action = parts[1];
+    if (action === "menu") {
+      const mv = mgmtMenuView(user);
+      await editMsg(chatId, msgId, mv.text, mv.keyboard);
+    } else if (action === "checks") {
+      const cv = await mgmtChecksView();
+      await editMsg(chatId, msgId, cv.text, cv.keyboard);
+    } else if (action === "sales") {
+      // Ответ на колбэк сразу — OLAP может занять пару секунд.
+      await answerCb(cbq.id, "Загружаю…");
+      const sv = await mgmtSalesView();
+      await editMsg(chatId, msgId, sv.text, sv.keyboard);
+      return;
+    } else if (action === "own") {
+      // Руководителю тоже можно проходить чек-листы (например, управляющему).
+      if (!user.checklistBranch) {
+        const bp = branchPickView();
+        await editMsg(chatId, msgId, bp.text, bp.keyboard);
+      } else {
+        const view = await menuView(user);
+        await editMsg(chatId, msgId, view.text, view.keyboard);
+      }
+    }
+    await answerCb(cbq.id);
+    return;
+  }
+
   if (cmd === "setbr") {
     // Выбор филиала после привязки.
     const bid = parts[1];
@@ -434,7 +609,9 @@ async function onCallback(cbq) {
   }
   if (cmd === "cancel") {
     await clearSession(from.id);
-    const view = await menuView(user);
+    const view = OFFICE_ROLES.has(user.role)
+      ? mgmtMenuView(user)
+      : await menuView(user);
     await editMsg(chatId, msgId, view.text, view.keyboard);
     await answerCb(cbq.id, "Отменено");
     return;
@@ -642,6 +819,9 @@ export async function webhookInfo() {
 export const _internals = {
   checklistView,
   freshItems,
+  mgmtMenuView,
+  mgmtChecksView,
+  OFFICE_ROLES,
   hourSlots,
   branchHours,
   branchName,
