@@ -77,39 +77,60 @@ export const ORG_DEFAULTS = {
   ],
 };
 
-export const OrgConfigSchema = z.object({
-  brandName: z.string().min(1).max(80),
-  companies: z
-    .array(
-      z.object({
-        id: z.coerce.number().int(),
-        name: z.string().min(1).max(200),
-      })
-    )
-    .min(1)
-    .max(50),
-  branches: z
-    .array(
-      z.object({
-        id: z.coerce.number().int(),
-        name: z.string().min(1).max(200),
-        companyId: z.coerce.number().int(),
-        iikoDept: z.string().max(200).default(""),
-        cash: z.boolean().default(true),
-        prod: z.boolean().default(false),
-        hours: z
-          .object({
-            from: z.coerce.number().int().min(0).max(23),
-            to: z.coerce.number().int().min(0).max(23),
-          })
-          .refine((h) => h.from < h.to, {
-            message: "Начало окна должно быть раньше конца",
-          }),
-      })
-    )
-    .min(1)
-    .max(100),
-});
+export const OrgConfigSchema = z
+  .object({
+    brandName: z.string().min(1).max(80),
+    companies: z
+      .array(
+        z.object({
+          id: z.coerce.number().int(),
+          name: z.string().min(1).max(200),
+        })
+      )
+      .min(1)
+      .max(50),
+    branches: z
+      .array(
+        z.object({
+          id: z.coerce.number().int(),
+          name: z.string().min(1).max(200),
+          companyId: z.coerce.number().int(),
+          iikoDept: z.string().max(200).default(""),
+          cash: z.boolean().default(true),
+          prod: z.boolean().default(false),
+          hours: z
+            .object({
+              from: z.coerce.number().int().min(0).max(23),
+              to: z.coerce.number().int().min(0).max(23),
+            })
+            .refine((h) => h.from < h.to, {
+              message: "Начало окна должно быть раньше конца",
+            }),
+        })
+      )
+      .min(1)
+      .max(100),
+  })
+  // id филиалов уникальны — иначе orgBranchById (.find) вернёт первый, а
+  // второй филиал станет «невидимым» для окон/сводок.
+  .refine(
+    (cfg) =>
+      new Set(cfg.branches.map((b) => b.id)).size === cfg.branches.length,
+    { message: "id филиалов должны быть уникальны" }
+  )
+  .refine(
+    (cfg) =>
+      new Set(cfg.companies.map((c) => c.id)).size === cfg.companies.length,
+    { message: "id юр. лиц должны быть уникальны" }
+  )
+  // Каждый филиал ссылается на существующее юр. лицо (нет филиалов-сирот).
+  .refine(
+    (cfg) => {
+      const ids = new Set(cfg.companies.map((c) => c.id));
+      return cfg.branches.every((b) => ids.has(b.companyId));
+    },
+    { message: "Филиал ссылается на несуществующее юр. лицо" }
+  );
 
 let cache = { data: ORG_DEFAULTS, at: 0, loaded: false };
 const TTL_MS = 60 * 1000;
@@ -122,6 +143,12 @@ export async function refreshOrgConfig(force = false) {
   try {
     const row = await db.orgConfig.findUnique({ where: { id: 1 } });
     const parsed = row ? OrgConfigSchema.safeParse(row.data) : null;
+    if (row && parsed && !parsed.success) {
+      log.warn(
+        { err: parsed.error?.message },
+        "orgConfig: сохранённая конфигурация не прошла валидацию — откат на дефолты"
+      );
+    }
     cache = {
       data: parsed && parsed.success ? parsed.data : ORG_DEFAULTS,
       at: Date.now(),

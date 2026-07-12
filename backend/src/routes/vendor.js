@@ -2,13 +2,32 @@
 // развития продукта. Доступ — только owner (владелец) и vendor (его команда
 // продаж). Бизнес-ролям клиента (director, finance…) раздел недоступен —
 // в клиентских установках ролей owner/vendor просто нет.
+import crypto from "node:crypto";
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 
 const r = Router();
+
+// Сравнение секрета за постоянное время (и без утечки длины).
+function secretEqual(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+// Публичный intake: жёсткий лимит независимо от NODE_ENV — защита от спама и
+// распухания таблицы при утечке токена.
+const intakeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Слишком много обращений, попробуйте позже" },
+});
 
 // ── Входящие предложения от клиентских установок (без входа) ────────────────
 // Клиентская система шлёт сюда «что улучшить» со своим секретом-токеном
@@ -21,11 +40,12 @@ const IntakeSchema = z.object({
 });
 r.post(
   "/intake",
+  intakeLimiter,
   asyncHandler(async (req, res) => {
     const secret = process.env.VENDOR_INTAKE_SECRET || "";
     if (!secret) return res.status(404).end(); // канал не включён
     const got = String(req.get("x-intake-token") || "");
-    if (got !== secret) return res.status(401).end();
+    if (!got || !secretEqual(got, secret)) return res.status(401).end();
     const parsed = IntakeSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "Неверный формат предложения" });
@@ -144,14 +164,24 @@ function normalizeHealthUrl(raw) {
   } catch {
     return null;
   }
-  // В проде не ходим по внутренним адресам (защита от SSRF).
-  const host = parsed.hostname;
+  // В проде не ходим по внутренним адресам (защита от SSRF). Помимо частных
+  // сетей блокируем cloud-metadata (169.254.x — доступ к секретам инстанса),
+  // 0.0.0.0 и IPv6-loopback/приватные диапазоны.
+  const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
   const isPrivate =
     host === "localhost" ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host === "::" ||
     /^127\./.test(host) ||
     /^10\./.test(host) ||
     /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^169\.254\./.test(host) || // cloud metadata
+    /^0\./.test(host) ||
+    /^::ffff:/.test(host) || // IPv4-mapped IPv6
+    /^fe80:/.test(host) || // IPv6 link-local
+    /^f[cd][0-9a-f]{2}:/.test(host); // IPv6 unique-local (fc00::/7)
   // Внутренние адреса разрешены только тестам (NODE_ENV=test или явный
   // рубильник) — в проде это защита от SSRF.
   const allowPrivate =
@@ -180,6 +210,9 @@ r.post(
       const resp = await fetch(url, {
         signal: AbortSignal.timeout(8000),
         headers: { Accept: "application/json" },
+        // Не идём по редиректам: публичный адрес мог бы 302-редиректить на
+        // внутренний (обход SSRF-фильтра выше).
+        redirect: "manual",
       });
       const body = await resp.json().catch(() => ({}));
       ok = resp.ok && body && body.ok === true;

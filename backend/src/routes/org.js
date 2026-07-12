@@ -24,7 +24,7 @@ r.use(requireAuth);
 r.get(
   "/",
   asyncHandler(async (req, res) => {
-    res.json(await refreshOrgConfig(true));
+    res.json(await refreshOrgConfig());
   })
 );
 
