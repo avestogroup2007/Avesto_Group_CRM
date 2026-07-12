@@ -1,0 +1,56 @@
+# Ежедневный бэкап продовой PostgreSQL (Render) в артефакты GitHub.
+#
+# Настройка (один раз): в настройках репозитория → Secrets and variables →
+# Actions → New repository secret → имя BACKUP_DATABASE_URL, значение —
+# ВНЕШНЯЯ строка подключения БД из панели Render (External Database URL).
+# Без секрета прогон завершается с подсказкой, ничего не ломая.
+#
+# Восстановление: скачать артефакт нужного дня → pg_restore в новую базу:
+#   pg_restore --clean --if-exists -d "$DATABASE_URL" avesto-crm-YYYY-MM-DD.dump
+name: Бэкап БД
+
+on:
+  schedule:
+    # 22:30 UTC = 03:30 по Ташкенту — после закрытия всех смен.
+    - cron: "30 22 * * *"
+  workflow_dispatch: {} # ручной запуск кнопкой — проверить или снять бэкап сейчас
+
+jobs:
+  backup:
+    name: pg_dump → артефакт
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверка секрета
+        env:
+          HAS_SECRET: ${{ secrets.BACKUP_DATABASE_URL != '' }}
+        run: |
+          if [ "$HAS_SECRET" != "true" ]; then
+            echo "::warning::Секрет BACKUP_DATABASE_URL не задан — бэкап пропущен."
+            echo "Добавьте его: Settings → Secrets and variables → Actions."
+            echo "skip=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Снятие дампа (pg_dump, custom-формат со сжатием)
+        if: env.skip != 'true'
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          STAMP=$(TZ=Asia/Tashkent date +%F)
+          pg_dump --format=custom --no-owner --no-privileges \
+            --file="avesto-crm-${STAMP}.dump" "$DATABASE_URL"
+          ls -lh avesto-crm-*.dump
+          echo "stamp=${STAMP}" >> "$GITHUB_ENV"
+
+      # Проверка, что дамп читается (бэкап без проверки — не бэкап).
+      - name: Проверка дампа (pg_restore --list)
+        if: env.skip != 'true'
+        run: pg_restore --list "avesto-crm-${{ env.stamp }}.dump" | head -5
+
+      - name: Сохранение артефакта (30 дней)
+        if: env.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ env.stamp }}
+          path: avesto-crm-*.dump
+          retention-days: 30
+          if-no-files-found: error

@@ -7,8 +7,11 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 
+import * as Sentry from "@sentry/node";
+
 import { env } from "./env.js";
 import { log } from "./logger.js";
+import { db } from "./db.js";
 import authRoutes from "./auth/routes.js";
 import iikoRoutes from "./routes/iiko.js";
 import taskRoutes from "./routes/tasks.js";
@@ -18,6 +21,17 @@ import cashRoutes from "./routes/cash.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
+
+// Мониторинг ошибок: включается только при заданном SENTRY_DSN — узнаём о
+// сбоях раньше пользователей. Личные данные в события не пишем.
+if (env.SENTRY_DSN && env.NODE_ENV !== "test") {
+  Sentry.init({
+    dsn: env.SENTRY_DSN,
+    environment: env.NODE_ENV,
+    sendDefaultPii: false,
+    tracesSampleRate: 0,
+  });
+}
 
 export const app = express();
 
@@ -68,8 +82,14 @@ const aiLimiter = rateLimit({
   message: { error: "Слишком много запросов к ИИ, попробуйте позже" },
 });
 
-// Проверка живости.
-app.get("/api/health", (req, res) => res.json({ ok: true, time: Date.now() }));
+// Проверка живости (для аптайм-мониторинга): сервер + доступность БД.
+app.get("/api/health", async (req, res) => {
+  const dbOk = await db.$queryRaw`SELECT 1`.then(
+    () => true,
+    () => false
+  );
+  res.status(dbOk ? 200 : 503).json({ ok: dbOk, db: dbOk, time: Date.now() });
+});
 
 // Публичный вебхук Telegram-бота — ДО защищённого роутера /api/telegram,
 // т.к. Telegram вызывает его без токена авторизации (защита — секрет в заголовке).
@@ -92,6 +112,10 @@ app.use("/api/telegram", telegramRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/cash", cashRoutes);
 
-// Обработка 404 и ошибок — всегда последними.
+// Обработка 404 и ошибок — всегда последними. Sentry ставится перед нашим
+// обработчиком: ошибка сначала уходит в мониторинг, затем клиенту как обычно.
+if (env.SENTRY_DSN && env.NODE_ENV !== "test") {
+  Sentry.setupExpressErrorHandler(app);
+}
 app.use(notFound);
 app.use(errorHandler);

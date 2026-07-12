@@ -49,6 +49,9 @@ services:
       # Полный адрес приложения — для кнопки «Открыть CRM» в Telegram-боте.
       - key: PUBLIC_APP_URL
         value: https://avestogroup2007.github.io/Avesto_Group_CRM/
+      # Мониторинг ошибок Sentry — DSN задаётся в панели Render (не в git).
+      - key: SENTRY_DSN
+        sync: false
       # iiko (Этап 3) — заполняется в панели Render, НЕ в этом файле и не в git.
       # - key: IIKO_API_LOGIN
       #   sync: false

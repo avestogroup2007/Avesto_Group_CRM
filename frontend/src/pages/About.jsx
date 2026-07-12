@@ -23,10 +23,11 @@ export function AboutView() {
     ["Конструктор тортов + ИИ-помощник (Claude)", true],
     ["Безопасность: CSP, rate-limit, алерты о входах", true],
     ["CI/CD: линт, тесты и сборка на каждый PR", true],
+    ["Мониторинг ошибок (Sentry) и живой health-check", true],
+    ["Ежедневные бэкапы БД (GitHub Actions)", true],
     ["Автодокументы конструктора (акты, перемещения)", false],
     ["Распознавание речи (Whisper) и гео-метки фото", false],
-    ["Мониторинг ошибок (Sentry) и аптайм", false],
-    ["Ежедневные бэкапы БД (план Render)", false],
+    ["ИИ-агенты в актах и аналитике", false],
   ];
   return (
     <div className="space-y-5 max-w-3xl">

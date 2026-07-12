@@ -57,6 +57,8 @@ const EnvSchema = z.object({
   PUBLIC_BASE_URL: z.string().url().optional(),
   // Адрес веб-приложения — для кнопки «Открыть CRM» (Mini App) в Telegram-боте.
   PUBLIC_APP_URL: z.string().url().optional(),
+  // Мониторинг ошибок Sentry. Не задан — мониторинг просто выключен.
+  SENTRY_DSN: z.string().url().optional(),
   // ИИ-помощник (Claude API). Ключ задаётся ТОЛЬКО в окружении хостинга
   // (Render) и никогда не уходит клиенту. Не задан — ИИ-эндпоинты вернут 503.
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
