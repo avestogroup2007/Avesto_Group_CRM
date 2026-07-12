@@ -551,6 +551,220 @@ export async function productionRefs() {
   }
 }
 
+// ── Отчёт производства ──────────────────────────────────────────────────────
+// Папки номенклатуры iiko (группы) — в терминах компании это «отделы».
+async function fetchGroups(key) {
+  const res = await fetch(
+    `${BASE}/resto/api/v2/entities/products/group/list?key=${encodeURIComponent(
+      key
+    )}&includeDeleted=false`,
+    { headers: { Accept: "application/json" } }
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`iiko groups → ${res.status} ${text.slice(0, 300)}`.trim());
+  }
+  let arr = [];
+  try {
+    const j = JSON.parse(text);
+    arr = Array.isArray(j) ? j : Array.isArray(j.response) ? j.response : [];
+  } catch {
+    arr = [];
+  }
+  return arr
+    .map((g) => ({ id: g.id, name: g.name || "", parent: g.parent || null }))
+    .filter((g) => g.id);
+}
+
+// Полный список продуктов (без фильтра по типу) с папкой (parent) и единицей
+// измерения — для отчёта производства нужны имена ЛЮБЫХ productId из актов.
+async function fetchAllProducts(key) {
+  const res = await fetch(
+    `${BASE}/resto/api/v2/entities/products/list?key=${encodeURIComponent(
+      key
+    )}&includeDeleted=false`,
+    { headers: { Accept: "application/json" } }
+  );
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `iiko products → ${res.status} ${text.slice(0, 300)}`.trim()
+    );
+  }
+  let arr = [];
+  try {
+    const j = JSON.parse(text);
+    arr = Array.isArray(j) ? j : Array.isArray(j.response) ? j.response : [];
+  } catch {
+    arr = parseProductsXml(text);
+  }
+  return arr
+    .map((p) => ({
+      id: p.id,
+      name: p.name || "",
+      parent: p.parent || null,
+      unit: p.mainUnit || p.unitName || "",
+      type: p.type || "",
+    }))
+    .filter((p) => p.id);
+}
+
+// Разбор XML выгрузки актов приготовления: терпимо к обёрткам — ищем блоки
+// <document>…</document> (или *DocumentDto), внутри — статус и позиции.
+export function parseProductionDocsXml(text) {
+  const docs = [];
+  const docRe =
+    /<(?:document|productionDocumentDto)>([\s\S]*?)<\/(?:document|productionDocumentDto)>/g;
+  let m;
+  while ((m = docRe.exec(text))) {
+    const body = m[1];
+    const one = (tag) => {
+      const mm = body.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+      return mm ? mm[1] : "";
+    };
+    const items = [];
+    const itemRe = /<item>([\s\S]*?)<\/item>/g;
+    let im;
+    while ((im = itemRe.exec(body))) {
+      const ib = im[1];
+      const iv = (tag) => {
+        const mm = ib.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+        return mm ? mm[1] : "";
+      };
+      const productId = iv("productId");
+      const amount = Number(iv("amount"));
+      if (productId && Number.isFinite(amount))
+        items.push({ productId, amount });
+    }
+    docs.push({
+      status: one("status") || "PROCESSED",
+      dateIncoming: one("dateIncoming"),
+      documentNumber: one("documentNumber"),
+      items,
+    });
+  }
+  return docs;
+}
+
+// Отчёт производства за период: читает проведённые акты приготовления из iiko
+// и агрегирует «какой товар и сколько произведено», с отделом (папкой) товара.
+export async function productionReport({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/v2/documents/export/productionDocument?key=${encodeURIComponent(
+        key
+      )}&dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}`,
+      { headers: { Accept: "application/xml" } }
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    let docs = [];
+    // Некоторые сборки отвечают JSON — пробуем сначала его.
+    try {
+      const j = JSON.parse(text);
+      const arr = Array.isArray(j)
+        ? j
+        : Array.isArray(j.response)
+          ? j.response
+          : Array.isArray(j.documents)
+            ? j.documents
+            : [];
+      docs = arr.map((d) => ({
+        status: d.status || "PROCESSED",
+        dateIncoming: d.dateIncoming || "",
+        documentNumber: d.documentNumber || "",
+        items: (d.items || []).map((it) => ({
+          productId: it.productId,
+          amount: Number(it.amount) || 0,
+        })),
+      }));
+    } catch {
+      docs = parseProductionDocsXml(text);
+    }
+    const processed = docs.filter(
+      (d) => String(d.status).toUpperCase() !== "DELETED"
+    );
+
+    // Справочники для имён и отделов.
+    const [products, groups] = await Promise.all([
+      fetchAllProducts(key),
+      fetchGroups(key).catch(() => []),
+    ]);
+    const prodById = new Map(products.map((p) => [p.id, p]));
+    const groupById = new Map(groups.map((g) => [g.id, g]));
+    // Верхняя папка (отдел) в цепочке групп продукта.
+    const topGroup = (gid) => {
+      let g = groupById.get(gid);
+      let guard = 0;
+      while (g && g.parent && groupById.has(g.parent) && guard < 20) {
+        g = groupById.get(g.parent);
+        guard += 1;
+      }
+      return g || null;
+    };
+
+    const byProduct = new Map();
+    for (const d of processed) {
+      for (const it of d.items) {
+        const cur = byProduct.get(it.productId) || 0;
+        byProduct.set(it.productId, cur + it.amount);
+      }
+    }
+    const items = [...byProduct.entries()]
+      .map(([productId, amount]) => {
+        const p = prodById.get(productId);
+        const grp = p && p.parent ? groupById.get(p.parent) : null;
+        const dept = p && p.parent ? topGroup(p.parent) : null;
+        return {
+          productId,
+          name: p ? p.name : productId,
+          unit: p ? p.unit : "",
+          amount,
+          groupId: grp ? grp.id : null,
+          groupName: grp ? grp.name : "",
+          deptId: dept ? dept.id : null,
+          deptName: dept ? dept.name : "Без отдела",
+        };
+      })
+      .sort(
+        (a, z) =>
+          a.deptName.localeCompare(z.deptName, "ru") || z.amount - a.amount
+      );
+    const deptMap = new Map();
+    for (const it of items) {
+      const k = it.deptId || "-";
+      const cur = deptMap.get(k) || {
+        id: it.deptId,
+        name: it.deptName,
+        amount: 0,
+        positions: 0,
+      };
+      cur.amount += it.amount;
+      cur.positions += 1;
+      deptMap.set(k, cur);
+    }
+    const result = {
+      from,
+      to,
+      docCount: processed.length,
+      items,
+      depts: [...deptMap.values()].sort((a, z) => z.amount - a.amount),
+    };
+    // Диагностика: акты есть на сервере, но разбор дал ноль — покажем образец.
+    if (!processed.length && text.trim()) result.sample = text.slice(0, 1200);
+    return result;
+  } finally {
+    releaseKey(key);
+  }
+}
+
 // Экранирование значений для XML тела документа.
 function escXml(s) {
   return String(s == null ? "" : s)

@@ -14,6 +14,7 @@ import {
   riskyReport,
   productionRefs,
   createProduction,
+  productionReport,
 } from "../services/iikoServer.js";
 import {
   syncEmployeesToDb,
@@ -140,6 +141,25 @@ r.get(
   requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
     res.json(await productionRefs());
+  })
+);
+
+// Отчёт производства за период: какие товары и в каком количестве произведены
+// (по проведённым актам приготовления в iiko), с отделом (папкой) товара.
+// Тело: { from, to }. Кэш как у остальных отчётов.
+r.post(
+  "/production/report",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  handleIiko(async (req, res) => {
+    const { from, to } = req.body || {};
+    if (!from || !to) {
+      return res.status(400).json({ error: "Нужны параметры from и to" });
+    }
+    res.json(
+      await cached(`prodrep:${from}:${to}`, reportTtl(to), () =>
+        productionReport({ from, to })
+      )
+    );
   })
 );
 
