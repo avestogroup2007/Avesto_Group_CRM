@@ -127,11 +127,13 @@ test("касса: директор подтверждает отчёт, касс
 });
 
 test("чек-лист из веба пишется на сервер (via=app), мусор — 400", async () => {
+  // Филиал должен существовать в конфигурации организации (дефолт: 1..6).
+  const OKBRANCH = "1";
   const res = await fetch(`${base}/api/checklists/run`, {
     method: "POST",
     headers: auth(cashierToken),
     body: JSON.stringify({
-      branchId: BRANCH,
+      branchId: OKBRANCH,
       kind: "sanitary",
       date: DATE,
       slot: "09:00",
@@ -148,13 +150,26 @@ test("чек-лист из веба пишется на сервер (via=app), 
     where: { id: body.id },
   });
   assert.equal(row.via, "app");
-  assert.equal(row.branchId, BRANCH);
+  assert.equal(row.branchId, OKBRANCH);
   await db.shiftChecklistRun.delete({ where: { id: body.id } });
 
   const bad = await fetch(`${base}/api/checklists/run`, {
     method: "POST",
     headers: auth(cashierToken),
-    body: JSON.stringify({ branchId: BRANCH, kind: "wrong", date: DATE }),
+    body: JSON.stringify({ branchId: OKBRANCH, kind: "wrong", date: DATE }),
   });
   assert.equal(bad.status, 400);
+
+  // Неизвестный филиал (нет в конфигурации организации) — 400.
+  const unknownBranch = await fetch(`${base}/api/checklists/run`, {
+    method: "POST",
+    headers: auth(cashierToken),
+    body: JSON.stringify({
+      branchId: "999999",
+      kind: "open",
+      date: DATE,
+      items: [{ text: "x", done: true, needPhoto: false, hasPhoto: false }],
+    }),
+  });
+  assert.equal(unknownBranch.status, 400);
 });

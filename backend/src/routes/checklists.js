@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -43,6 +44,12 @@ r.post(
       return res.status(400).json({ error: "Неверный формат чек-листа" });
     }
     const d = parsed.data;
+    // Филиал должен существовать в конфигурации организации — иначе можно
+    // накрутить сдачу чек-листов по несуществующей/чужой точке.
+    await refreshOrgConfig().catch(() => {});
+    if (!orgBranchById(d.branchId)) {
+      return res.status(400).json({ error: "Неизвестный филиал" });
+    }
     const done = d.items.filter((it) => it.done).length;
     const pct = Math.round((done / d.items.length) * 100);
     const run = await db.shiftChecklistRun.create({

@@ -24,6 +24,9 @@ function replacer(key, value) {
 r.get(
   "/export",
   asyncHandler(async (req, res) => {
+    // Предел на таблицу — защита от OOM/подвисания сериализации на большой
+    // базе. При достижении лимита в ответе будет truncated:true (см. ниже).
+    const CAP = 100000;
     const [
       companies,
       branches,
@@ -39,6 +42,9 @@ r.get(
       postings,
       cashReports,
       shiftChecklistRuns,
+      orgConfig,
+      vendorClients,
+      featureRequests,
       auditLog,
     ] = await Promise.all([
       db.company.findMany(),
@@ -46,17 +52,22 @@ r.get(
       // Учётки включаются целиком (с хэшами паролей — они bcrypt): копия
       // должна позволять полное восстановление. Доступ к файлу — как к базе.
       db.user.findMany(),
-      db.task.findMany(),
-      db.taskHistory.findMany(),
-      db.comment.findMany(),
-      db.moneyTx.findMany(),
+      db.task.findMany({ take: CAP }),
+      db.taskHistory.findMany({ take: CAP }),
+      db.comment.findMany({ take: CAP }),
+      db.moneyTx.findMany({ take: CAP }),
       db.moneyDict.findMany(),
       db.moneyRecurring.findMany(),
       db.ledgerAccount.findMany(),
       db.postingRule.findMany(),
-      db.posting.findMany(),
-      db.cashReport.findMany(),
-      db.shiftChecklistRun.findMany(),
+      db.posting.findMany({ take: CAP }),
+      db.cashReport.findMany({ take: CAP }),
+      db.shiftChecklistRun.findMany({ take: CAP }),
+      // Конфигурация организации, реестр клиентов Back Office и доска развития
+      // — тоже часть полной копии (раньше пропускались).
+      db.orgConfig.findMany(),
+      db.vendorClient.findMany(),
+      db.featureRequest.findMany(),
       db.auditLog.findMany({ orderBy: { at: "desc" }, take: 20000 }),
     ]);
 
@@ -82,28 +93,20 @@ r.get(
         postings,
         cashReports,
         shiftChecklistRuns,
+        orgConfig,
+        vendorClients,
+        featureRequests,
         auditLog,
       },
-      counts: Object.fromEntries(
-        Object.entries({
-          companies,
-          branches,
-          users,
-          tasks,
-          taskHistory,
-          comments,
-          moneyTx,
-          moneyDict,
-          moneyRecurring,
-          ledgerAccounts,
-          postingRules,
-          postings,
-          cashReports,
-          shiftChecklistRuns,
-          auditLog,
-        }).map(([k, v]) => [k, v.length])
-      ),
     };
+    payload.counts = Object.fromEntries(
+      Object.entries(payload.tables).map(([k, v]) => [k, v.length])
+    );
+    // Флаг, если какая-то таблица упёрлась в предел выгрузки (нужен полный
+    // pg_dump через GitHub Actions для по-настоящему больших баз).
+    payload.truncated = [tasks, taskHistory, comments, moneyTx, postings].some(
+      (t) => t.length >= 100000
+    );
 
     await db.auditLog
       .create({

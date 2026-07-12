@@ -110,6 +110,32 @@ test("org: staff не пишет; директор сохраняет; бот в
   assert.equal(_internals.hourSlots(1).length, 10); // 09..18
   assert.equal(_internals.branchName(7), "Новый филиал");
 
+  // Дубли id филиалов — 400 (иначе второй филиал «невидим»).
+  const dup = JSON.parse(JSON.stringify(cfg));
+  dup.branches.push({ ...dup.branches[0] });
+  const dupRes = await fetch(`${base}/api/org`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${dirToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(dup),
+  });
+  assert.equal(dupRes.status, 400);
+
+  // Филиал со ссылкой на несуществующее юр. лицо — 400.
+  const orphan = JSON.parse(JSON.stringify(cfg));
+  orphan.branches[0].companyId = 99999;
+  const orphanRes = await fetch(`${base}/api/org`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${dirToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(orphan),
+  });
+  assert.equal(orphanRes.status, 400);
+
   // Мусор — 400.
   const bad = await fetch(`${base}/api/org`, {
     method: "PUT",
