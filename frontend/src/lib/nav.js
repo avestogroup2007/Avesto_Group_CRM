@@ -65,6 +65,12 @@ export const NAV = [
     roles: ["director", "finance", "accountant", "sysadmin"],
   },
   {
+    key: "payroll",
+    label: "ФОТ / Зарплата",
+    icon: Banknote,
+    roles: ["director", "finance", "accountant", "sysadmin"],
+  },
+  {
     key: "sales",
     label: "Аналитика продаж",
     icon: TrendingUp,
@@ -155,6 +161,7 @@ export const VIEW_TITLE = {
   cash: "Кассы филиалов",
   money: "Учёт и контроль денег",
   dds: "ДДС — движение денежных средств",
+  payroll: "ФОТ — зарплатная ведомость",
   sales: "Аналитика продаж",
   production: "Производство",
   checklists: "Чек-листы смены",
