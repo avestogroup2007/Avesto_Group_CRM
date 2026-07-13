@@ -199,6 +199,7 @@ model MoneyTx {
   @@index([approval])
   @@index([branchId, date])
   @@index([approval, direction, branchId])
+  @@index([approval, date]) // отчёты за период по согласованным (ДДС/сводка/план)
 }
 
 // Справочники модуля денег: типы/статьи, контрагенты, статьи ДДС, филиалы,
@@ -508,6 +509,7 @@ model TodoTask {
   @@index([branchId])
   @@index([createdById])
   @@index([dueDate])
+  @@index([status, dueDate]) // счётчик просроченных (дашборд/менеджер задач)
 }
 
 model PlanEntry {

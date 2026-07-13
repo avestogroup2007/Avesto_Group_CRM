@@ -307,6 +307,7 @@ function ActTab() {
                 акт».
               </p>
             ) : (
+              <div className="overflow-x-auto">
               <table
                 style={{ width: "100%", borderCollapse: "collapse" }}
                 className="mb-2"
@@ -348,6 +349,7 @@ function ActTab() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
 
             {formErr && (

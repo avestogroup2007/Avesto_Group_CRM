@@ -500,7 +500,8 @@ r.get(
     if (branch) where.branchId = String(branch);
     const [accounts, postings] = await Promise.all([
       db.ledgerAccount.findMany({ orderBy: { code: "asc" } }),
-      db.posting.findMany({ where }),
+      // Ограничение выдачи — защита от загрузки всей книги проводок в память.
+      db.posting.findMany({ where, orderBy: { date: "desc" }, take: 100000 }),
     ]);
     const nameByCode = {};
     const kindByCode = {};
