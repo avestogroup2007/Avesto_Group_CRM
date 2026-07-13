@@ -484,6 +484,18 @@ model FoodCostConfig {
   updatedById String?
 }
 
+model PlanEntry {
+  id        String   @id @default(cuid())
+  month     String // YYYY-MM
+  branchId  String // id филиала (org, как в CashReport/MoneyTx)
+  revenue   BigInt   @default(0) // план выручки, сум
+  expense   BigInt   @default(0) // план расходов, сум (опционально)
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, branchId])
+  @@index([month])
+}
+
 // Помесячные данные зарплатной ведомости по сотруднику: часы (для почасовых),
 // бонусы и штрафы. Ставка берётся из PayrollConfig. Одна запись на (месяц,
 // сотрудник). Деньги — BigInt (сум).

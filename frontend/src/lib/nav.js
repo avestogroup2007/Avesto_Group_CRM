@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   Users,
   Percent,
+  Target,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -81,6 +82,12 @@ export const NAV = [
     key: "sales",
     label: "Аналитика продаж",
     icon: TrendingUp,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
+    key: "plan",
+    label: "Планы и цели (план-факт)",
+    icon: Target,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
   {
@@ -179,7 +186,7 @@ export const NAV_GROUPS = [
     key: "analytics",
     label: "Аналитика",
     icon: BarChart3,
-    items: ["analytics", "sales", "reports"],
+    items: ["analytics", "sales", "plan", "reports"],
   },
   {
     key: "staff",
@@ -266,6 +273,7 @@ export const VIEW_TITLE = {
   dds: "ДДС — движение денежных средств",
   payroll: "ФОТ — зарплатная ведомость",
   foodcost: "Себестоимость — food cost и маржа",
+  plan: "Планы и цели — план-факт по филиалам",
   sales: "Аналитика продаж",
   production: "Производство",
   checklists: "Чек-листы смены",
