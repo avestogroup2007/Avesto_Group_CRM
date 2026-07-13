@@ -20,6 +20,7 @@ import {
   Briefcase,
   LayoutDashboard,
   Users,
+  Percent,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -68,6 +69,12 @@ export const NAV = [
     key: "payroll",
     label: "ФОТ / Зарплата",
     icon: Banknote,
+    roles: ["director", "finance", "accountant", "sysadmin"],
+  },
+  {
+    key: "foodcost",
+    label: "Себестоимость (food cost)",
+    icon: Percent,
     roles: ["director", "finance", "accountant", "sysadmin"],
   },
   {
@@ -166,7 +173,7 @@ export const NAV_GROUPS = [
     key: "finance",
     label: "Финансы",
     icon: Wallet,
-    items: ["cash", "money", "dds", "payroll"],
+    items: ["cash", "money", "dds", "payroll", "foodcost"],
   },
   {
     key: "analytics",
@@ -258,6 +265,7 @@ export const VIEW_TITLE = {
   money: "Учёт и контроль денег",
   dds: "ДДС — движение денежных средств",
   payroll: "ФОТ — зарплатная ведомость",
+  foodcost: "Себестоимость — food cost и маржа",
   sales: "Аналитика продаж",
   production: "Производство",
   checklists: "Чек-листы смены",

@@ -477,6 +477,13 @@ model PayrollConfig {
   updatedById String?
 }
 
+model FoodCostConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
 // Помесячные данные зарплатной ведомости по сотруднику: часы (для почасовых),
 // бонусы и штрафы. Ставка берётся из PayrollConfig. Одна запись на (месяц,
 // сотрудник). Деньги — BigInt (сум).

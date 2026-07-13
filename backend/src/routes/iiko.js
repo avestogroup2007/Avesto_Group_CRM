@@ -15,7 +15,12 @@ import {
   productionRefs,
   createProduction,
   productionReport,
+  foodCostSales,
 } from "../services/iikoServer.js";
+import {
+  refreshFoodCostConfig,
+  computeFoodCost,
+} from "../services/foodCostConfig.js";
 import {
   syncEmployeesToDb,
   listDbEmployees,
@@ -101,6 +106,43 @@ r.post(
         salesReport({ from, to, departments })
       )
     );
+  })
+);
+
+// Себестоимость (food cost) за период: продажи по блюдам из iiko × заданная в
+// системе себестоимость (гибрид). Тело: { from, to, department? }. Возвращает
+// строки по блюдам (выручка, себестоимость, ФК%, маржа) и итоги. Продажи
+// кэшируются как остальные отчёты; себестоимость применяется поверх, поэтому
+// правка настроек отражается сразу (без ожидания кэша iiko).
+r.post(
+  "/food-cost",
+  requireRole("director", "finance", "accountant", "sysadmin"),
+  handleIiko(async (req, res) => {
+    const { from, to, department } = req.body || {};
+    if (!from || !to) {
+      return res.status(400).json({ error: "Нужны параметры from и to" });
+    }
+    const dept = (await forcedDepartment(req.user)) || department;
+    const departments = dept ? [dept] : undefined;
+    const rows = await cached(
+      `foodcost:${from}:${to}:${dept || "all"}`,
+      reportTtl(to),
+      () => foodCostSales({ from, to, departments })
+    );
+    const cfg = await refreshFoodCostConfig(true);
+    const dishes = (Array.isArray(rows) ? rows : []).map((x) => ({
+      name: x.DishName || "—",
+      group: x["DishGroup.TopParent"] || "",
+      revenue: Number(x.DishDiscountSumInt ?? x.DishSumInt ?? 0),
+      qty: Number(x.DishAmountInt ?? 0),
+    }));
+    res.json({
+      configured: true,
+      from,
+      to,
+      defaultPct: cfg.defaultPct,
+      ...computeFoodCost(dishes, cfg),
+    });
   })
 );
 

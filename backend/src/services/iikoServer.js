@@ -926,6 +926,24 @@ export async function salesReport({ from, to, departments }) {
   }
 }
 
+// Продажи по блюдам с группой 1-го уровня — для расчёта себестоимости (food
+// cost). Один OLAP-срез: строка = группа + блюдо, меры — выручка со скидкой и
+// количество. Себестоимость по этим данным считается в foodCostConfig.
+export async function foodCostSales({ from, to, departments }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    return await runOlap(key, {
+      from,
+      to,
+      departments,
+      groupByRowFields: ["DishGroup.TopParent", "DishName"],
+    });
+  } finally {
+    releaseKey(key);
+  }
+}
+
 // ── Подозрительные операции ────────────────────────────────────────────────
 // Контроль злоупотреблений персонала за период по данным iiko:
 //  - удаления/сторно заказов в разрезе сотрудника (кто и на какую сумму
