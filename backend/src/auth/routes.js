@@ -184,6 +184,9 @@ r.post(
       displayName: user.displayName || user.name,
       role: user.role,
       branchId: user.branchId,
+      // Рабочий филиал сотрудника (id из конфигурации организации). Задаётся в
+      // админке; ограничивает, какие данные сотрудник видит в приложении.
+      branch: user.checklistBranch,
       position: user.position,
       mustChangePassword: passwordManagedByIiko(user)
         ? false
@@ -213,6 +216,7 @@ r.get(
         displayName: true,
         role: true,
         branchId: true,
+        checklistBranch: true,
         position: true,
         active: true,
         source: true,
@@ -230,6 +234,9 @@ r.get(
       displayName: user.displayName,
       role: user.role,
       branchId: user.branchId,
+      // Рабочий филиал сотрудника (id из конфигурации организации), задаётся в
+      // админке — по нему приложение ограничивает видимые данные.
+      branch: user.checklistBranch,
       position: user.position,
       mustChangePassword: passwordManagedByIiko(user)
         ? false

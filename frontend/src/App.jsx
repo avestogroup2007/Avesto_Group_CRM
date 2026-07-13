@@ -306,7 +306,13 @@ export default function App({ authUser, onLogout }) {
         name: authUser.displayName || authUser.name || "Пользователь",
         role: authUser.role || "staff",
         pos: authUser.position || "",
-        branchId: null,
+        // Рабочий филиал сотрудника (id из оргконфигурации, задаётся в админке).
+        // Привязанный сотрудник видит только данные своего филиала; без привязки
+        // (null) — по роли. Старшие роли всё равно выбирают филиал сами.
+        branchId:
+          authUser.branch != null && authUser.branch !== ""
+            ? Number(authUser.branch)
+            : null,
         departmentId: null,
         level: 1,
       }

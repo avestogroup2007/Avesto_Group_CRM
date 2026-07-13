@@ -210,6 +210,39 @@ test("полный поток: login → me → logout → me 401", async () => 
   assert.ok(logins >= 1, "вход должен попасть в AuditLog");
 });
 
+test("рабочий филиал сотрудника отдаётся в login и /me (для ограничения данных)", async () => {
+  // Закрепляем сотрудника за филиалом (как в админке — checklistBranch).
+  await db.user.update({
+    where: { name: SSO_LOGIN },
+    data: { checklistBranch: "2" },
+  });
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: SSO_LOGIN, password: SSO_PASSWORD }),
+  });
+  const loginBody = await login.json();
+  assert.equal(loginBody.branch, "2", "login должен вернуть рабочий филиал");
+
+  const me = await fetch(`${base}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${loginBody.token}` },
+  });
+  const meBody = await me.json();
+  assert.equal(meBody.branch, "2", "/me должен вернуть рабочий филиал");
+
+  // Без привязки — филиала нет (сотрудник видит по роли, без ограничения).
+  await db.user.update({
+    where: { name: SSO_LOGIN },
+    data: { checklistBranch: null },
+  });
+  const login2 = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login: SSO_LOGIN, password: SSO_PASSWORD }),
+  });
+  assert.equal((await login2.json()).branch, null);
+});
+
 test("iiko-учётка: смена пароля не навязывается и локально запрещена", async () => {
   // Даже если в БД стоит флаг «сменить пароль» — для SSO-учётки он не действует:
   // пароль управляется в iiko, из CRM его не поменять.
