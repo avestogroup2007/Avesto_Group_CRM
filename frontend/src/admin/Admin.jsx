@@ -258,8 +258,9 @@ function IikoStaffPreview() {
   );
 }
 
-// Привязка сотрудника к Telegram-боту чек-листов: Telegram ID + филиал.
-// HR задаёт заранее; после этого бот в личке пускает сотрудника к чек-листам.
+// Филиал сотрудника + привязка к Telegram-боту чек-листов (Telegram ID).
+// Филиал закрепляет сотрудника: в приложении он видит только данные своего
+// филиала, в боте проходит чек-листы этого филиала. HR задаёт заранее.
 function TgLinkCell({ u, patch }) {
   const [tid, setTid] = useState(u.telegramId || "");
   const branchOpts = [
@@ -321,7 +322,7 @@ function IikoStaffAccounts() {
   return (
     <AdCard
       title="Учётные записи из iiko — права доступа"
-      desc="Роль и доступ ко входу реальных сотрудников. Уволенные в iiko заблокированы автоматически. Сначала синхронизируйте, затем «Загрузить учётные записи»."
+      desc="Роль, филиал и доступ ко входу реальных сотрудников. Филиал в колонке «Филиал и бот» закрепляет сотрудника: он видит в приложении только данные своего филиала и проходит чек-листы этого филиала в боте. Уволенные в iiko заблокированы автоматически."
     >
       <button
         onClick={load}
@@ -361,7 +362,7 @@ function IikoStaffAccounts() {
                     <th className="pb-2 font-semibold">Должность</th>
                     <th className="pb-2 font-semibold">Филиал</th>
                     <th className="pb-2 font-semibold">Роль (доступ)</th>
-                    <th className="pb-2 font-semibold">Бот чек-листов</th>
+                    <th className="pb-2 font-semibold">Филиал и бот</th>
                     <th className="pb-2 font-semibold text-center">Вход</th>
                   </tr>
                 </thead>
