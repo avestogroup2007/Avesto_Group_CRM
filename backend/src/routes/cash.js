@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { forcedBranch } from "../util/branchScope.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -61,7 +62,11 @@ r.post(
     if (!parsed.success) {
       return res.status(400).json({ error: "Неверный формат отчёта" });
     }
-    const { branchId, date, ...rest } = parsed.data;
+    const { branchId: bodyBranch, date, ...rest } = parsed.data;
+    // Привязанный к филиалу кассир сдаёт только по своему филиалу — иначе можно
+    // перезаписать чужой отчёт. Старшие роли сдают по указанному в теле.
+    const forced = forcedBranch(req.user);
+    const branchId = forced || bodyBranch;
     // Подтверждённый офисом отчёт линейный персонал переписать не может —
     // иначе цифры можно менять задним числом, а подтверждение останется.
     const existing = await db.cashReport

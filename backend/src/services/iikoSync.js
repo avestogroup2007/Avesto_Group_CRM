@@ -179,6 +179,12 @@ export async function updateEmployeeAccess(
   }
   if (checklistBranch !== undefined) {
     const b = String(checklistBranch || "").trim();
+    // Филиал — id из конфигурации организации (положительное целое). Нечисловое
+    // значение отвергаем: иначе привязка «протухает» и ограничение по филиалу
+    // на фронте молча отключается (fail-open).
+    if (b && !/^\d{1,6}$/.test(b)) {
+      throw new Error("Филиал — некорректный id");
+    }
     data.checklistBranch = b || null;
   }
   try {

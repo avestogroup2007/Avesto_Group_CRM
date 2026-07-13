@@ -19,7 +19,15 @@ const ItemSchema = z.object({
   needPhoto: z.boolean().default(false),
 });
 
-const TemplateSchema = z.object({
+// Почасовой шаблон с окном from >= to даёт пустой список часов — чек-лист
+// становится неоткрываемым. Требуем корректное окно (как в конфиге орг-ии).
+const hourlyWindowOk = (d) =>
+  d.scheduleType !== "hourly" ||
+  d.fromHour == null ||
+  d.toHour == null ||
+  d.fromHour < d.toHour;
+
+const TemplateBase = z.object({
   kind: z.enum(["role", "cleaning"]),
   position: z.string().max(120).default(""),
   title: z.string().min(1).max(200),
@@ -28,6 +36,10 @@ const TemplateSchema = z.object({
   fromHour: z.coerce.number().int().min(0).max(23).nullable().optional(),
   toHour: z.coerce.number().int().min(0).max(23).nullable().optional(),
   active: z.boolean().default(true),
+});
+const TemplateSchema = TemplateBase.refine(hourlyWindowOk, {
+  message: "Начало окна должно быть раньше конца",
+  path: ["toHour"],
 });
 
 // Какой модуль нужен для kind шаблона.
@@ -80,9 +92,31 @@ r.patch(
   "/:id",
   requireRole("director", "sysadmin"),
   asyncHandler(async (req, res) => {
-    const parsed = TemplateSchema.partial().safeParse(req.body);
+    const parsed = TemplateBase.partial().safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "Неверный формат чек-листа" });
+    }
+    // Правка не должна обойти гейтинг: если после правки шаблон относится к
+    // выключенному модулю (сменили kind или включают active) — запрещаем.
+    const cur = await db.checklistTemplate
+      .findUnique({ where: { id: req.params.id } })
+      .catch(() => null);
+    if (!cur) return res.status(404).json({ error: "Чек-лист не найден" });
+    const effKind = parsed.data.kind || cur.kind;
+    const effActive =
+      parsed.data.active !== undefined ? parsed.data.active : cur.active;
+    // Окно почасового шаблона после слияния с текущим должно быть корректным.
+    const merged = { ...cur, ...parsed.data };
+    if (!hourlyWindowOk(merged)) {
+      return res
+        .status(400)
+        .json({ error: "Начало окна должно быть раньше конца" });
+    }
+    await refreshModules().catch(() => {});
+    if (effActive && !moduleEnabled(MODULE_FOR[effKind])) {
+      return res
+        .status(403)
+        .json({ error: "Модуль выключен — обратитесь к владельцу системы" });
     }
     const updated = await db.checklistTemplate
       .update({ where: { id: req.params.id }, data: parsed.data })

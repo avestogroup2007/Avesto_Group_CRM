@@ -309,10 +309,12 @@ export default function App({ authUser, onLogout }) {
         // Рабочий филиал сотрудника (id из оргконфигурации, задаётся в админке).
         // Привязанный сотрудник видит только данные своего филиала; без привязки
         // (null) — по роли. Старшие роли всё равно выбирают филиал сами.
-        branchId:
-          authUser.branch != null && authUser.branch !== ""
-            ? Number(authUser.branch)
-            : null,
+        // Fail-closed: некорректное значение (NaN, ≤0) НЕ снимает ограничение —
+        // трактуем как «без привязки», а не «все филиалы».
+        branchId: (() => {
+          const n = Number(authUser.branch);
+          return Number.isInteger(n) && n > 0 ? n : null;
+        })(),
         departmentId: null,
         level: 1,
       }

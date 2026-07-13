@@ -533,7 +533,9 @@ const CreateSchema = z.object({
   comment: z.string().max(1000).default(""),
   amount: z.number().positive().max(9e15),
   currency: z.enum(["UZS", "RUB", "USD", "EUR"]).default("UZS"),
-  rate: z.number().positive().default(1),
+  // Верхняя граница курса — защита от переполнения: amount*rate не должно
+  // давать Infinity (иначе BigInt(Math.round(...)) кидает 500 вместо 400).
+  rate: z.number().positive().max(1e7).default(1),
   branchId: z.string().nullable().optional(),
   branchName: z.string().default(""),
   // Директор/финансы могут провести расход сразу, минуя согласование.
@@ -542,7 +544,7 @@ const CreateSchema = z.object({
 
 // Кто вправе согласовывать расходы (и проводить их сразу при создании).
 const APPROVER_ROLES = ["director", "finance"];
-const canApprove = (role) => APPROVER_ROLES.includes(role);
+const canApprove = (role) => role === "owner" || APPROVER_ROLES.includes(role);
 
 r.post(
   "/",
@@ -866,7 +868,9 @@ const RecurringSchema = z.object({
   comment: z.string().max(1000).default(""),
   amount: z.number().positive().max(9e15),
   currency: z.enum(["UZS", "RUB", "USD", "EUR"]).default("UZS"),
-  rate: z.number().positive().default(1),
+  // Верхняя граница курса — защита от переполнения: amount*rate не должно
+  // давать Infinity (иначе BigInt(Math.round(...)) кидает 500 вместо 400).
+  rate: z.number().positive().max(1e7).default(1),
   branchId: z.string().nullable().optional(),
   branchName: z.string().default(""),
   dayOfMonth: z.number().int().min(1).max(28).default(1),

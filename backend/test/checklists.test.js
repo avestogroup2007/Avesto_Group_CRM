@@ -11,7 +11,14 @@ import { refreshOrgConfig } from "../src/services/orgConfig.js";
 
 const PASS = "chk_test_pass_123";
 const OKBRANCH = "1"; // существует в дефолтной конфигурации организации
-let server, base, ownerToken, directorToken, staffToken, roleTplId, cleanTplId;
+let server,
+  base,
+  ownerToken,
+  directorToken,
+  staffToken,
+  branchStaffToken,
+  roleTplId,
+  cleanTplId;
 
 async function login(name) {
   const res = await fetch(`${base}/api/auth/login`, {
@@ -39,6 +46,24 @@ before(async () => {
       create: { name, passwordHash, role, source: "iiko" },
     });
   }
+  // Сотрудник, привязанный к филиалу «3» — для проверки серверного ограничения.
+  await db.user.upsert({
+    where: { name: "chk_branch_staff" },
+    update: {
+      passwordHash,
+      role: "staff",
+      active: true,
+      source: "iiko",
+      checklistBranch: "3",
+    },
+    create: {
+      name: "chk_branch_staff",
+      passwordHash,
+      role: "staff",
+      source: "iiko",
+      checklistBranch: "3",
+    },
+  });
   await db.shiftChecklistRun.deleteMany({});
   await db.checklistTemplate.deleteMany({});
   await db.moduleConfig.deleteMany({});
@@ -50,12 +75,17 @@ before(async () => {
   ownerToken = await login("chk_owner");
   directorToken = await login("chk_director");
   staffToken = await login("chk_staff");
+  branchStaffToken = await login("chk_branch_staff");
 });
 
 after(async () => {
   await db.shiftChecklistRun.deleteMany({});
   await db.checklistTemplate.deleteMany({});
   await db.moduleConfig.deleteMany({});
+  await db.auditLog.deleteMany({
+    where: { user: { name: "chk_branch_staff" } },
+  });
+  await db.user.deleteMany({ where: { name: "chk_branch_staff" } });
   await refreshModules(true);
   server?.close();
 });
@@ -187,6 +217,25 @@ test("почасовой уборочный шаблон сохраняется 
   });
   assert.equal(run.slot, "10:00");
   assert.equal(run.pct, 100);
+});
+
+test("привязанный к филиалу сотрудник: сдача принудительно на его филиал", async () => {
+  // Просит филиал «1», но привязан к «3» — сервер обязан записать «3».
+  const res = await fetch(`${base}/api/checklists/run`, {
+    method: "POST",
+    headers: auth(branchStaffToken),
+    body: JSON.stringify({
+      branchId: "1",
+      kind: "open",
+      date: "2026-07-13",
+      items: [{ text: "Оборудование включено", done: true }],
+    }),
+  });
+  assert.equal(res.status, 201);
+  const run = await db.shiftChecklistRun.findUnique({
+    where: { id: (await res.json()).id },
+  });
+  assert.equal(run.branchId, "3", "филиал должен быть подменён на свой");
 });
 
 test("легаси-обход смены сдаётся без шаблона", async () => {

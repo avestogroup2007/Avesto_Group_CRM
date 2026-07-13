@@ -36,7 +36,13 @@ async function freshState(uid) {
   try {
     user = await db.user.findUnique({
       where: { id: uid },
-      select: { active: true, iikoDeleted: true, role: true, branchId: true },
+      select: {
+        active: true,
+        iikoDeleted: true,
+        role: true,
+        branchId: true,
+        checklistBranch: true,
+      },
     });
   } catch {
     dbError = true;
@@ -47,7 +53,14 @@ async function freshState(uid) {
   // следующем запросе — если есть валидный прежний снимок, используем его.
   if (dbError) {
     if (hit) return hit;
-    return { at: 0, ok: false, dbError: true, role: null, branchId: null };
+    return {
+      at: 0,
+      ok: false,
+      dbError: true,
+      role: null,
+      branchId: null,
+      assignedBranch: null,
+    };
   }
   const ok = Boolean(user && user.active && !user.iikoDeleted);
   const state = {
@@ -55,6 +68,9 @@ async function freshState(uid) {
     ok,
     role: user ? user.role : null,
     branchId: user ? user.branchId : null,
+    // Рабочий филиал сотрудника (id из конфигурации организации, строкой) —
+    // для серверного ограничения данных по филиалу у привязанных сотрудников.
+    assignedBranch: user ? user.checklistBranch : null,
   };
   // Эвикция по TTL при переполнении (без сброса всего кэша — иначе стампид).
   if (freshCache.size > 2000) {
@@ -89,6 +105,13 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Доступ закрыт. Войдите заново." });
   }
   // Роль/филиал — свежие из БД (важнее, чем 12-часовой снимок в токене).
-  req.user = { uid: payload.uid, role: state.role, branchId: state.branchId };
+  // assignedBranch — рабочий филиал (checklistBranch) для серверного
+  // ограничения данных по филиалу у привязанных сотрудников.
+  req.user = {
+    uid: payload.uid,
+    role: state.role,
+    branchId: state.branchId,
+    assignedBranch: state.assignedBranch,
+  };
   next();
 }
