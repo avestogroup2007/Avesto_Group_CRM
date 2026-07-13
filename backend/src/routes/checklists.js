@@ -10,8 +10,19 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
-import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
+import {
+  refreshOrgConfig,
+  orgBranchById,
+  orgBranchName,
+} from "../services/orgConfig.js";
 import { refreshModules, moduleEnabled } from "../services/modules.js";
+
+// Понятные названия легаси-обходов для отчёта (шаблонные берут title из БД).
+const LEGACY_LABELS = {
+  sanitary: "Санитарный обход",
+  open: "Открытие смены",
+  close: "Закрытие смены",
+};
 
 const r = Router();
 r.use(requireAuth);
@@ -132,6 +143,7 @@ r.get(
     if (from > to) {
       return res.status(400).json({ error: "Начало периода позже конца" });
     }
+    await refreshOrgConfig().catch(() => {});
     const where = { date: { gte: from, lte: to } };
     if (branchId) where.branchId = branchId;
     const runs = await db.shiftChecklistRun.findMany({
@@ -152,17 +164,53 @@ r.get(
         createdAt: true,
       },
     });
-    // Свод: всего сдач, средний процент, разбивка по видам.
-    const byKind = {};
+
+    // Помощник группировки: копит count и сумму процентов по ключу.
+    const group = (keyFn, labelFn) => {
+      const map = new Map();
+      for (const run of runs) {
+        const key = keyFn(run);
+        const cur = map.get(key) || {
+          key,
+          label: labelFn(run),
+          count: 0,
+          sum: 0,
+        };
+        cur.count += 1;
+        cur.sum += run.pct;
+        map.set(key, cur);
+      }
+      return [...map.values()]
+        .map((g) => ({
+          key: g.key,
+          label: g.label,
+          count: g.count,
+          avgPct: Math.round(g.sum / g.count),
+        }))
+        .sort((a, b) => b.count - a.count);
+    };
+
     let pctSum = 0;
+    const byKind = {};
     for (const run of runs) {
       byKind[run.kind] = (byKind[run.kind] || 0) + 1;
       pctSum += run.pct;
     }
+    // Разбивка по филиалам и по шаблонам/видам (для детализации в отчёте).
+    const byBranch = group(
+      (run) => run.branchId || "—",
+      (run) => (run.branchId ? orgBranchName(run.branchId) : "Без филиала")
+    );
+    const byTemplate = group(
+      (run) => run.templateId || run.kind,
+      (run) => run.title || LEGACY_LABELS[run.kind] || run.kind
+    );
     const summary = {
       total: runs.length,
       avgPct: runs.length ? Math.round(pctSum / runs.length) : 0,
       byKind,
+      byBranch,
+      byTemplate,
     };
     res.json({ runs, summary, from, to });
   })
