@@ -298,7 +298,11 @@ function RecurringManager({ list, branches, dnames, onSave, onDelete }) {
     if (typeof f.branchVal === "string" && f.branchVal.startsWith("d:")) {
       branchName = f.branchVal.slice(2);
     } else if (f.branchVal) {
-      const b = (branches || []).find((x) => x.id === f.branchVal);
+      // branchVal может быть числом (свежий выбор) или строкой (загруженная
+      // запись t.branchId) — сравниваем как строки, иначе имя филиала терялось.
+      const b = (branches || []).find(
+        (x) => String(x.id) === String(f.branchVal),
+      );
       branchId = String(f.branchVal);
       branchName = b ? b.name : "";
     }
@@ -2177,14 +2181,16 @@ function MoneyView({ s, me, branchScope }) {
                               </button>
                             </>
                           )}
-                          <button
-                            onClick={() => del(t.id)}
-                            className="p-1.5 rounded-lg"
-                            style={{ color: C.bad }}
-                            title="Удалить"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {(canApprove || me.role === "sysadmin") && (
+                            <button
+                              onClick={() => del(t.id)}
+                              className="p-1.5 rounded-lg"
+                              style={{ color: C.bad }}
+                              title="Удалить"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

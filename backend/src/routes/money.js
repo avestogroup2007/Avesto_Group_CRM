@@ -250,7 +250,13 @@ r.get(
     }
     // BOM — чтобы Excel корректно открыл кириллицу в UTF-8.
     const csv = "﻿" + lines.join("\r\n");
-    const fname = `money_${from || "all"}_${to || "all"}.csv`;
+    // Имя файла из query-параметров санируем: только даты/цифры, иначе CRLF/
+    // кавычки в from/to ломали бы заголовок (500 вместо чистого ответа).
+    const safe = (v) =>
+      String(v || "all")
+        .replace(/[^0-9-]/g, "")
+        .slice(0, 10) || "all";
+    const fname = `money_${safe(from)}_${safe(to)}.csv`;
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
     res.send(csv);

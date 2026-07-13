@@ -357,7 +357,7 @@ function RiskyView({ data }) {
           <span style={{ fontSize: 12, color: C.faint }}>● данные из iiko</span>
         </div>
         {deletions.length ? (
-          <div className="space-y-1">
+          <div className="space-y-1 overflow-x-auto">
             {deletions.slice(0, 30).map((x, i) => (
               <div
                 key={x.name}
@@ -424,7 +424,7 @@ function RiskyView({ data }) {
           {pctThreshold}% оборота.
         </p>
         {discounts.length ? (
-          <div className="space-y-1">
+          <div className="space-y-1 overflow-x-auto">
             {discounts.slice(0, 30).map((x, i) => (
               <div
                 key={x.name}
@@ -1528,7 +1528,7 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
                     Пиковый час: <b>{pad(peak.hour)}:00</b> —{" "}
                     {fmtSum(peak.revenue)}
                   </p>
-                  <div className="space-y-1">
+                  <div className="space-y-1 overflow-x-auto">
                     {active.map((h) => {
                       const isOpen = openHour === h.hour;
                       const dishes =
@@ -2088,7 +2088,7 @@ function SalesAnalytics({ s, me, branchScope, mode = "analytics" }) {
                     Самый активный: <b>{liveStaff[0].name}</b> —{" "}
                     {liveStaff[0].checks} заказ.
                   </p>
-                  <div className="space-y-1">
+                  <div className="space-y-1 overflow-x-auto">
                     {liveStaff.slice(0, 20).map((x, i) => (
                       <div
                         key={x.name}
