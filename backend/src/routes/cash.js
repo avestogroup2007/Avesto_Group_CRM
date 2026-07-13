@@ -8,7 +8,7 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
-import { forcedBranch } from "../util/branchScope.js";
+import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -147,7 +147,10 @@ r.get(
     if (from || to) where.date = {};
     if (from) where.date.gte = String(from);
     if (to) where.date.lte = String(to);
-    if (branch) where.branchId = String(branch);
+    // Управляющий видит кассу только своего филиала; бухгалтер/офис — все.
+    const forced = forcedBranch(req.user, { alsoFree: FINANCE_FREE });
+    const eff = forced || branch;
+    if (eff) where.branchId = String(eff);
     const items = await db.cashReport.findMany({
       where,
       orderBy: [{ date: "desc" }, { branchId: "asc" }],
