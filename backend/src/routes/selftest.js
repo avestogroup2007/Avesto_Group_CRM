@@ -40,10 +40,13 @@ r.get(
       detail: dbOk ? `отвечает за ${Date.now() - t0} мс` : "недоступна",
     });
 
-    // 2. Конфигурация организации читается.
+    // 2. Конфигурация организации читается. refreshOrgConfig глотает ошибки БД
+    // и возвращает дефолты, поэтому проверяем чтение строки НАПРЯМУЮ — иначе
+    // при недоступной базе проверка ложно зеленела бы.
     let orgOk = false;
     let orgBranches = 0;
     try {
+      await db.orgConfig.findUnique({ where: { id: 1 } });
       const cfg = await refreshOrgConfig(true);
       orgOk = true;
       orgBranches = cfg.branches.length;

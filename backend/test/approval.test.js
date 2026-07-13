@@ -9,7 +9,7 @@ import { db } from "../src/db.js";
 import { refreshApprovalConfig } from "../src/services/approvalConfig.js";
 
 const PASS = "appr_test_pass_123";
-let server, base, directorToken, accountantToken;
+let server, base, directorToken, accountantToken, ownerToken;
 
 async function login(name) {
   const res = await fetch(`${base}/api/auth/login`, {
@@ -29,6 +29,7 @@ before(async () => {
   for (const [name, role] of [
     ["appr_director", "director"],
     ["appr_accountant", "accountant"],
+    ["appr_owner", "owner"],
   ]) {
     await db.user.upsert({
       where: { name },
@@ -43,6 +44,7 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}`;
   directorToken = await login("appr_director");
   accountantToken = await login("appr_accountant");
+  ownerToken = await login("appr_owner");
 });
 
 after(async () => {
@@ -50,6 +52,9 @@ after(async () => {
     where: { comment: { startsWith: "APPRTEST" } },
   });
   await db.approvalConfig.deleteMany({});
+  const names = ["appr_director", "appr_accountant", "appr_owner"];
+  await db.auditLog.deleteMany({ where: { user: { name: { in: names } } } });
+  await db.user.deleteMany({ where: { name: { in: names } } });
   await refreshApprovalConfig(true);
   server?.close();
 });
@@ -130,6 +135,40 @@ test("порог по филиалу переопределяет общий", a
     await mkExpense(accountantToken, 150000, "APPRTEST br1", "1")
   ).json();
   assert.equal(otherBranch.approval, "pending");
+});
+
+test("owner может провести расход сразу (postNow), как директор/финансы", async () => {
+  const res = await fetch(`${base}/api/money`, {
+    method: "POST",
+    headers: auth(ownerToken),
+    body: JSON.stringify({
+      date: "2026-07-13",
+      direction: "expense",
+      category: "Хоз. расходы",
+      amount: 5000000,
+      comment: "APPRTEST owner postNow",
+      postNow: true,
+    }),
+  });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).approval, "approved");
+});
+
+test("запредельный курс отклоняется как 400, а не падает 500", async () => {
+  const res = await fetch(`${base}/api/money`, {
+    method: "POST",
+    headers: auth(directorToken),
+    body: JSON.stringify({
+      date: "2026-07-13",
+      direction: "expense",
+      category: "Хоз. расходы",
+      amount: 1000,
+      currency: "USD",
+      rate: 1e12,
+      comment: "APPRTEST rate",
+    }),
+  });
+  assert.equal(res.status, 400);
 });
 
 test("приход не требует согласования независимо от порога", async () => {

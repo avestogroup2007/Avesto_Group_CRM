@@ -16,6 +16,7 @@ import {
   orgBranchName,
 } from "../services/orgConfig.js";
 import { refreshModules, moduleEnabled } from "../services/modules.js";
+import { forcedBranch } from "../util/branchScope.js";
 
 // Понятные названия легаси-обходов для отчёта (шаблонные берут title из БД).
 const LEGACY_LABELS = {
@@ -69,6 +70,10 @@ r.post(
       return res.status(400).json({ error: "Неверный формат чек-листа" });
     }
     const d = parsed.data;
+    // Привязанный к филиалу сотрудник сдаёт только по своему филиалу: клиенту не
+    // доверяем — принудительно подставляем его филиал (нельзя накрутить чужой).
+    const forced = forcedBranch(req.user);
+    if (forced) d.branchId = forced;
     // Филиал должен существовать в конфигурации организации — иначе можно
     // накрутить сдачу чек-листов по несуществующей/чужой точке.
     await refreshOrgConfig().catch(() => {});
@@ -139,11 +144,15 @@ r.get(
     if (!parsed.success) {
       return res.status(400).json({ error: "Неверный период" });
     }
-    const { from, to, branchId } = parsed.data;
+    const { from, to } = parsed.data;
     if (from > to) {
       return res.status(400).json({ error: "Начало периода позже конца" });
     }
     await refreshOrgConfig().catch(() => {});
+    // Привязанный к филиалу управляющий видит отчёт только по своему филиалу;
+    // старшие роли — по выбранному (или всем, если не задан).
+    const forced = forcedBranch(req.user);
+    const branchId = forced || parsed.data.branchId;
     const where = { date: { gte: from, lte: to } };
     if (branchId) where.branchId = branchId;
     const runs = await db.shiftChecklistRun.findMany({
