@@ -484,6 +484,31 @@ model FoodCostConfig {
   updatedById String?
 }
 
+// Лёгкий менеджер задач (доска/канбан): быстрые задачи с исполнителем, сроком
+// и приоритетом. Отдельно от формального процесса «заявок» (модель Task с
+// 5 фазами и контролёром) — здесь простой статус todo/in_progress/done.
+model TodoTask {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @default("")
+  status      String    @default("todo") // todo | in_progress | done
+  priority    String    @default("normal") // low | normal | high
+  important   Boolean   @default(false) // «звёздочка» — отметка важного
+  assigneeId  String? // id пользователя-исполнителя (без FK: могут быть демо)
+  branchId    String? // id филиала (org) — для охвата/фильтра
+  dueDate     DateTime? // срок
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  doneAt      DateTime?
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([branchId])
+  @@index([createdById])
+  @@index([dueDate])
+}
+
 model PlanEntry {
   id        String   @id @default(cuid())
   month     String // YYYY-MM
