@@ -49,6 +49,7 @@ const DdsView = lazy(() => import("./pages/Dds.jsx"));
 const PayrollView = lazy(() => import("./pages/Payroll.jsx"));
 const FoodCostView = lazy(() => import("./pages/FoodCost.jsx"));
 const PlanView = lazy(() => import("./pages/Plan.jsx"));
+const SetupWizard = lazy(() => import("./components/SetupWizard.jsx"));
 const CakeConstructor = lazy(() => import("./CakeConstructor.jsx"));
 const IikoProduction = lazy(() => import("./IikoProduction.jsx"));
 
@@ -105,6 +106,7 @@ export default function App({ authUser, onLogout }) {
   const [toast, setToast] = useState(null);
   const [hint, setHint] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const notify = (m) => setToast(m);
 
   // ── Автоматизация процессов (Digital Pipeline) ──────────────────────────
@@ -338,6 +340,18 @@ export default function App({ authUser, onLogout }) {
         departmentId: null,
         level: 1,
       };
+  // Мастер первого запуска: показываем один раз директору/сисадмину, если ещё
+  // не завершали (флаг в localStorage). Дальше — по кнопке в «Оргструктуре».
+  useEffect(() => {
+    if (!["director", "sysadmin"].includes(me.role)) return;
+    let done = false;
+    try {
+      done = localStorage.getItem("avesto.setup.done") === "1";
+    } catch {
+      done = true; // нет доступа к localStorage — не навязываем мастер
+    }
+    if (!done) setWizardOpen(true);
+  }, [me.role]);
   const myShift = s.shifts[s.currentUserId] || { open: false };
   // Единый охват по филиалу: старший (руководство/финансы/сисадмин) выбирает любой;
   // сотрудник филиала «привязан» к своему и видит только его данные.
@@ -704,7 +718,20 @@ export default function App({ authUser, onLogout }) {
                     mode="reports"
                   />
                 )}
-              {s.view === "org" && <OrgStructure />}
+              {s.view === "org" && (
+                <div className="space-y-4">
+                  {["director", "sysadmin"].includes(me.role) && (
+                    <button
+                      onClick={() => setWizardOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 font-bold text-white"
+                      style={{ background: "#7B2D1F", fontSize: 13 }}
+                    >
+                      ✨ Мастер настройки
+                    </button>
+                  )}
+                  <OrgStructure />
+                </div>
+              )}
               {s.view === "about" && <AboutView />}
               {s.view === "backoffice" &&
                 ["owner", "vendor"].includes(me.role) && (
@@ -743,6 +770,15 @@ export default function App({ authUser, onLogout }) {
         view={s.view}
         setView={setView}
       />
+      {wizardOpen && (
+        <Suspense fallback={null}>
+          <SetupWizard
+            onClose={() => setWizardOpen(false)}
+            dispatch={dispatch}
+            notify={notify}
+          />
+        </Suspense>
+      )}
 
       {selected && (
         <TaskDetail
