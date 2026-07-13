@@ -43,6 +43,7 @@ const AboutView = lazy(() => import("./pages/About.jsx"));
 const AutomationView = lazy(() => import("./pages/Automation.jsx"));
 const AdminPanel = lazy(() => import("./admin/Admin.jsx"));
 const BackOfficeView = lazy(() => import("./pages/BackOffice.jsx"));
+const DashboardView = lazy(() => import("./pages/Dashboard.jsx"));
 const CakeConstructor = lazy(() => import("./CakeConstructor.jsx"));
 const IikoProduction = lazy(() => import("./IikoProduction.jsx"));
 
@@ -561,6 +562,11 @@ export default function App({ authUser, onLogout }) {
                   shiftOpen={myShift.open}
                 />
               )}
+              {s.view === "dashboard" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "dashboard").roles },
+                  me.role,
+                ) && <DashboardView me={me} dispatch={dispatch} />}
               {s.view === "create" && (
                 <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />
               )}
