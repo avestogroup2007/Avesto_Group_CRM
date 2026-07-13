@@ -10,12 +10,17 @@ import {
   Banknote,
   ClipboardList,
   ArrowRight,
+  Target,
 } from "lucide-react";
 import { apiGet } from "../api.js";
 import { C } from "../lib/theme.js";
 import { Kpi } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
+const curMonth = () =>
+  new Date()
+    .toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" })
+    .slice(0, 7);
 
 const CASH_STATUS = {
   none: { label: "Не сдана", bg: "#FEE2E2", fg: "#DC2626" },
@@ -29,10 +34,15 @@ const SEV = {
 
 export default function DashboardView({ dispatch }) {
   const [data, setData] = useState(null);
+  const [plan, setPlan] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const load = () => {
     setLoading(true);
+    // План-факт месяца — best-effort: сбой не мешает основной сводке.
+    apiGet(`/api/plan?month=${curMonth()}`)
+      .then((p) => setPlan(p))
+      .catch(() => setPlan(null));
     apiGet("/api/dashboard")
       .then((d) => {
         setData(d);
@@ -102,6 +112,9 @@ export default function DashboardView({ dispatch }) {
           tone={data.pendingExpenses.count ? C.bad : C.faint}
         />
       </div>
+
+      {/* План-факт месяца */}
+      {plan && <PlanMonthBlock plan={plan} onOpen={() => go("plan")} />}
 
       {/* Алерты */}
       {data.alerts.length > 0 && (
@@ -266,6 +279,93 @@ export default function DashboardView({ dispatch }) {
           onClick={() => go("cash")}
         />
       </div>
+    </div>
+  );
+}
+
+// Компактный блок «план-факт месяца»: % выполнения плана выручки, темп
+// (опережение/отставание к сегодня) и прогресс-бар. Данные из /api/plan.
+function PlanMonthBlock({ plan, onOpen }) {
+  const t = plan.totals || {};
+  const hasPlan = Number(t.planRevenue) > 0;
+  const pct = Number(t.revenuePct) || 0;
+  // Темп: факт vs ожидаемое к сегодня (равномерно по дням месяца).
+  const expected = Number(t.expectedRevenue) || 0;
+  const fact = Number(t.factRevenue) || 0;
+  const ahead = fact - expected;
+  const barColor = pct >= 100 ? C.ok : pct >= 60 ? "#B45309" : C.bad;
+  return (
+    <div
+      className="rounded-2xl bg-white p-4 sm:p-5"
+      style={{ border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <h3
+          className="font-bold flex items-center gap-2"
+          style={{ color: C.ink, fontSize: 15 }}
+        >
+          <Target size={17} style={{ color: C.brandA }} /> План месяца
+        </h3>
+        <button
+          onClick={onOpen}
+          className="inline-flex items-center gap-1 font-semibold"
+          style={{ color: C.brandA, fontSize: 12.5 }}
+        >
+          Открыть план-факт <ArrowRight size={13} />
+        </button>
+      </div>
+      {!hasPlan ? (
+        <div style={{ color: C.sub, fontSize: 13 }}>
+          План выручки на этот месяц не задан. Задайте его в разделе «Планы и
+          цели».
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
+            <span style={{ fontSize: 24, fontWeight: 800, color: barColor }}>
+              {pct}%
+            </span>
+            <span style={{ fontSize: 13, color: C.sub }}>
+              {money(t.factRevenue)} из {money(t.planRevenue)} сум
+            </span>
+            {expected > 0 && (
+              <span
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: ahead >= 0 ? C.ok : C.bad,
+                }}
+              >
+                {ahead >= 0 ? "▲ опережение " : "▼ отставание "}
+                {money(Math.abs(ahead))} сум к сегодня
+              </span>
+            )}
+          </div>
+          <div
+            style={{
+              height: 8,
+              borderRadius: 99,
+              background: C.line,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(100, pct)}%`,
+                height: "100%",
+                background: barColor,
+                borderRadius: 99,
+              }}
+            />
+          </div>
+          {Number(t.planExpense) > 0 && (
+            <div style={{ fontSize: 12, color: C.sub, marginTop: 8 }}>
+              Расходы: {money(t.factExpense)} из {money(t.planExpense)} сум (
+              {t.expensePct}% плана)
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
