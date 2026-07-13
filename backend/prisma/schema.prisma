@@ -497,6 +497,7 @@ model TodoTask {
   assigneeId  String? // id пользователя-исполнителя (без FK: могут быть демо)
   branchId    String? // id филиала (org) — для охвата/фильтра
   dueDate     DateTime? // срок
+  remindedOn  String? // YYYY-MM-DD последнего Telegram-напоминания (дедуп за день)
   createdById String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

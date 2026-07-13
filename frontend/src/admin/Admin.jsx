@@ -1676,7 +1676,7 @@ function AdminDepartments({ s, dispatch, notify }) {
                     patch: { name: e.target.value },
                   })
                 }
-                className="flex-1 rounded-lg px-2 py-1.5 focus:outline-none"
+                className="flex-1 min-w-0 rounded-lg px-2 py-1.5 focus:outline-none"
                 style={{
                   border: `1px solid ${C.border}`,
                   fontSize: 14,
@@ -1692,7 +1692,7 @@ function AdminDepartments({ s, dispatch, notify }) {
                     patch: { restricted: !d.restricted },
                   })
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold shrink-0 whitespace-nowrap"
                 style={
                   d.restricted
                     ? { background: "#FEECEC", color: C.bad }
@@ -1712,11 +1712,11 @@ function AdminDepartments({ s, dispatch, notify }) {
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-2 mt-3">
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           <button
             onClick={save}
             disabled={saving}
-            className="rounded-xl px-4 py-2.5 font-bold text-white"
+            className="rounded-xl px-4 py-2.5 font-bold text-white shrink-0 whitespace-nowrap"
             style={{
               background: C.brandA,
               fontSize: 14,
@@ -1725,7 +1725,7 @@ function AdminDepartments({ s, dispatch, notify }) {
           >
             {saving ? "Сохраняем…" : "💾 Сохранить отделы"}
           </button>
-          <span style={{ color: C.faint, fontSize: 12 }}>
+          <span style={{ color: C.faint, fontSize: 12, flex: "1 1 200px" }}>
             Изменения названий и доступа применяются после сохранения.
           </span>
         </div>
