@@ -80,6 +80,34 @@ r.get(
         .catch(() => ({ _sum: { amountUzs: 0 } })),
     ]);
 
+    // Задачи команды (менеджер задач): активные и просроченные в области
+    // видимости пользователя. Охват как в /api/todos: офис видит все;
+    // остальные — назначенные им, созданные ими или по своему филиалу.
+    const TODO_OFFICE = new Set(["director", "finance", "sysadmin"]);
+    let todoScope = {};
+    if (!TODO_OFFICE.has(req.user.role)) {
+      const or = [{ assigneeId: req.user.uid }, { createdById: req.user.uid }];
+      if (req.user.assignedBranch)
+        or.push({ branchId: String(req.user.assignedBranch) });
+      todoScope = { OR: or };
+    }
+    const startOfToday = new Date(`${date}T00:00:00+05:00`); // Asia/Tashkent
+    const [todoActive, todoOverdue] = await Promise.all([
+      db.todoTask
+        .count({ where: { AND: [todoScope, { status: { not: "done" } }] } })
+        .catch(() => 0),
+      db.todoTask
+        .count({
+          where: {
+            AND: [
+              todoScope,
+              { status: { not: "done" }, dueDate: { lt: startOfToday } },
+            ],
+          },
+        })
+        .catch(() => 0),
+    ]);
+
     // Собираем строки по филиалам + считаем расхождения.
     const alerts = [];
     const rows = branches.map((b) => {
@@ -132,6 +160,13 @@ r.get(
         severity: "warn",
       });
     }
+    if (todoOverdue > 0) {
+      alerts.push({
+        kind: "todos_overdue",
+        text: `Просроченных задач: ${todoOverdue}`,
+        severity: "warn",
+      });
+    }
 
     const totals = {
       declared: rows.reduce((s, x) => s + x.declared, 0),
@@ -147,6 +182,7 @@ r.get(
       rows,
       totals,
       pendingExpenses: { count: pendCount, sumUzs: pendingSum },
+      todos: { active: todoActive, overdue: todoOverdue },
       alerts,
     });
   })

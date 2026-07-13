@@ -68,7 +68,8 @@ export default function TodoManagerView({ notify }) {
     apiGet(`/api/todos?${p.toString()}`)
       .then((rows) => {
         // «Активные» = не done; фильтр статуса done уже на сервере.
-        setTodos(tab === "active" ? rows.filter((t) => t.status !== "done") : rows);
+        const list = Array.isArray(rows) ? rows : [];
+        setTodos(tab === "active" ? list.filter((t) => t.status !== "done") : list);
       })
       .catch(() => setTodos([]))
       .finally(() => setLoading(false));
@@ -76,7 +77,9 @@ export default function TodoManagerView({ notify }) {
 
   useEffect(() => {
     apiGet("/api/todos/meta")
-      .then(setMeta)
+      .then((m) =>
+        setMeta({ users: m?.users || [], branches: m?.branches || [] }),
+      )
       .catch(() => {});
   }, []);
   useEffect(() => {
