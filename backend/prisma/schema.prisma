@@ -455,3 +455,13 @@ model ApprovalConfig {
   updatedAt   DateTime @updatedAt
   updatedById String?
 }
+
+// Отделы и маршрутизация категорий задач (управляется директором/сисадмином в
+// админке): список отделов с признаком «закрытый» и карта категория→отдел.
+// Определяет видимость задач по отделам. Одна строка (id=1), JSON.
+model DeptConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}

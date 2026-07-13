@@ -29,6 +29,7 @@ import checklistTemplateRoutes from "./routes/checklistTemplates.js";
 import accessRoutes from "./routes/access.js";
 import selftestRoutes from "./routes/selftest.js";
 import approvalRoutes from "./routes/approval.js";
+import departmentRoutes from "./routes/departments.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
@@ -143,6 +144,7 @@ app.use("/api/checklist-templates", checklistTemplateRoutes);
 app.use("/api/access", accessRoutes);
 app.use("/api/selftest", selftestRoutes);
 app.use("/api/approval", approvalRoutes);
+app.use("/api/departments", departmentRoutes);
 
 // Обработка 404 и ошибок — всегда последними. Sentry ставится перед нашим
 // обработчиком: ошибка сначала уходит в мониторинг, затем клиенту как обычно.

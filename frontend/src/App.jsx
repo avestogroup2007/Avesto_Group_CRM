@@ -89,6 +89,11 @@ export default function App({ authUser, onLogout }) {
         dispatch({ type: "ACCESS_CONFIG", access: a || { overrides: {} } });
       })
       .catch(() => {});
+    // Отделы и маршрутизация категорий (настраиваются в админке, хранятся на
+    // сервере) — от них зависит видимость задач по отделам.
+    apiGet("/api/departments")
+      .then((d) => dispatch({ type: "DEPT_CONFIG", config: d }))
+      .catch(() => {});
   }, []);
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState(null);
