@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { TrendingUp, RefreshCw, Download } from "lucide-react";
 import { apiGet, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi } from "../components/ui.jsx";
+import { Kpi, PageHeader } from "../components/ui.jsx";
 
 // Клиентская выгрузка ДДС в CSV (открывается в Excel). BOM — для кириллицы.
 function downloadDdsCsv(data) {
@@ -194,15 +194,7 @@ export default function DdsView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2
-          className="font-bold flex items-center gap-2"
-          style={{ color: C.ink, fontSize: 18 }}
-        >
-          <TrendingUp size={19} style={{ color: C.brandA }} /> Движение денежных
-          средств
-        </h2>
-        <div className="flex items-center gap-2">
+      <PageHeader icon={TrendingUp} title="Движение денежных средств">
           <div className="flex gap-1">
             {PERIODS.map(([mb, lbl]) => (
               <button
@@ -258,8 +250,7 @@ export default function DdsView() {
           >
             <RefreshCw size={14} />
           </button>
-        </div>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-3 gap-2">
         <Kpi label="Приток, сум" value={money(totals.income)} tone={C.ok} />

@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { Banknote, Download, Save } from "lucide-react";
 import { apiGet, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi } from "../components/ui.jsx";
+import { Kpi, PageHeader } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
 const thisMonth = () => new Date().toISOString().slice(0, 7);
@@ -131,15 +131,7 @@ export default function PayrollView({ notify, role }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2
-          className="font-bold flex items-center gap-2"
-          style={{ color: C.ink, fontSize: 18 }}
-        >
-          <Banknote size={19} style={{ color: C.brandA }} /> ФОТ — зарплатная
-          ведомость
-        </h2>
-        <div className="flex items-center gap-2">
+      <PageHeader icon={Banknote} title="ФОТ — зарплатная ведомость">
           <button
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="rounded-lg px-2.5 py-1.5 font-bold"
@@ -190,8 +182,7 @@ export default function PayrollView({ notify, role }) {
               <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
             </button>
           )}
-        </div>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-2 gap-2">
         <Kpi label="Сотрудников" value={String(rows.length)} tone={C.brandB} />

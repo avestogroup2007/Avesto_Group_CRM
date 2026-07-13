@@ -212,6 +212,30 @@ export function Select({ value, onChange, options }) {
     />
   );
 }
+// Единая шапка экрана-отчёта: иконка + заголовок (+ подзаголовок) слева,
+// действия (период, экспорт, обновить, сохранить) справа. Один стандарт для
+// всех разделов — размеры шрифта/иконки и цвета не расходятся по страницам.
+export function PageHeader({ icon: Icon, title, subtitle, children }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2
+          className="font-bold flex items-center gap-2"
+          style={{ color: C.ink, fontSize: 18 }}
+        >
+          {Icon ? <Icon size={19} style={{ color: C.brandA }} /> : null} {title}
+        </h2>
+        {subtitle ? (
+          <div style={{ color: C.sub, fontSize: 12.5 }}>{subtitle}</div>
+        ) : null}
+      </div>
+      {children ? (
+        <div className="flex items-center gap-2">{children}</div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Kpi({ label, value, tone }) {
   return (
     <div

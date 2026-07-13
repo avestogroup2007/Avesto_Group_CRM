@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Percent, RefreshCw, Download, Save } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi } from "../components/ui.jsx";
+import { Kpi, PageHeader } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
 const onlyNum = (v) => Number(String(v).replace(/[^\d.]/g, "")) || 0;
@@ -139,15 +139,7 @@ export default function FoodCostView({ notify, role }) {
   };
 
   const header = (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2
-        className="font-bold flex items-center gap-2"
-        style={{ color: C.ink, fontSize: 18 }}
-      >
-        <Percent size={19} style={{ color: C.brandA }} /> Себестоимость (food
-        cost)
-      </h2>
-      <div className="flex items-center gap-2">
+    <PageHeader icon={Percent} title="Себестоимость (food cost)">
         <div className="flex gap-1">
           {PERIODS.map(([k, lbl]) => (
             <button
@@ -196,8 +188,7 @@ export default function FoodCostView({ notify, role }) {
             <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
           </button>
         )}
-      </div>
-    </div>
+    </PageHeader>
   );
 
   return (
