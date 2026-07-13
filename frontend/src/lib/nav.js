@@ -22,6 +22,7 @@ import {
   Users,
   Percent,
   Target,
+  ListTodo,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -32,6 +33,7 @@ export const NAV = [
     icon: LayoutDashboard,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
+  { key: "todos", label: "Менеджер задач", icon: ListTodo, roles: "all" },
   { key: "inbox", label: "Входящие", icon: Inbox, roles: "all" },
   { key: "create", label: "Создать заявку", icon: PlusCircle, roles: "all" },
   { key: "me", label: "Мои достижения", icon: Award, roles: "all" },
@@ -174,7 +176,7 @@ export const NAV_GROUPS = [
     key: "tasks",
     label: "Задачи",
     icon: Inbox,
-    items: ["inbox", "create", "me", "archive"],
+    items: ["todos", "inbox", "create", "me", "archive"],
   },
   {
     key: "finance",
@@ -262,6 +264,7 @@ export function groupOfView(view) {
 export const VIEW_TITLE = {
   backoffice: "Back Office · управление продуктом",
   dashboard: "Сводка дня — как идут дела",
+  todos: "Менеджер задач — доска и список",
   inbox: "Входящие задачи",
   create: "Создать заявку",
   me: "Мои достижения",
