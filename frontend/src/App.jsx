@@ -600,7 +600,7 @@ export default function App({ authUser, onLogout }) {
                 navAllowed(
                   { roles: NAV.find((n) => n.key === "payroll").roles },
                   me.role,
-                ) && <PayrollView notify={notify} />}
+                ) && <PayrollView notify={notify} role={me.role} />}
               {s.view === "foodcost" &&
                 navAllowed(
                   { roles: NAV.find((n) => n.key === "foodcost").roles },

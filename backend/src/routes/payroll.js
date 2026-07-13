@@ -135,6 +135,16 @@ r.put(
         note: d.note,
       },
     });
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "payroll_entry_update",
+          detail: `Ведомость ${d.month}, сотрудник ${d.userId}: часы ${d.hours}, бонус ${d.bonus}, штраф ${d.penalty}`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.json({
       userId: saved.userId,
       hours: saved.hours,

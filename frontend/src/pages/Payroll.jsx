@@ -18,7 +18,8 @@ const shiftMonth = (m, d) => {
 };
 const onlyNum = (v) => Number(String(v).replace(/[^\d.]/g, "")) || 0;
 
-export default function PayrollView({ notify }) {
+export default function PayrollView({ notify, role }) {
+  const canEdit = role === "director" || role === "sysadmin";
   const [month, setMonth] = useState(thisMonth());
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -175,18 +176,20 @@ export default function PayrollView({ notify }) {
           >
             <Download size={13} /> CSV
           </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-white"
-            style={{
-              background: C.brandA,
-              fontSize: 13,
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
-            <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
-          </button>
+          {canEdit && (
+            <button
+              onClick={save}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-white"
+              style={{
+                background: C.brandA,
+                fontSize: 13,
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -249,61 +252,85 @@ export default function PayrollView({ notify }) {
                       ) : null}
                     </td>
                     <td className="py-1.5 pr-2 text-right">
-                      <select
-                        value={r.mode}
-                        onChange={(e) =>
-                          setRow(r.userId, { mode: e.target.value })
-                        }
-                        style={{ ...inp, width: 96, textAlign: "left" }}
-                      >
-                        <option value="salary">Оклад</option>
-                        <option value="hourly">Почасовой</option>
-                      </select>
+                      {canEdit ? (
+                        <select
+                          value={r.mode}
+                          onChange={(e) =>
+                            setRow(r.userId, { mode: e.target.value })
+                          }
+                          style={{ ...inp, width: 96, textAlign: "left" }}
+                        >
+                          <option value="salary">Оклад</option>
+                          <option value="hourly">Почасовой</option>
+                        </select>
+                      ) : (
+                        <span style={{ color: C.sub }}>
+                          {r.mode === "hourly" ? "Почасовой" : "Оклад"}
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-right">
-                      <input
-                        value={r.rate}
-                        onChange={(e) =>
-                          setRow(r.userId, { rate: e.target.value })
-                        }
-                        style={inp}
-                        inputMode="numeric"
-                      />
+                      {canEdit ? (
+                        <input
+                          value={r.rate}
+                          onChange={(e) =>
+                            setRow(r.userId, { rate: e.target.value })
+                          }
+                          style={inp}
+                          inputMode="numeric"
+                        />
+                      ) : (
+                        <span style={{ color: C.sub }}>{money(r.rate)}</span>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-right">
-                      <input
-                        value={r.mode === "hourly" ? r.hours : ""}
-                        disabled={r.mode !== "hourly"}
-                        onChange={(e) =>
-                          setRow(r.userId, { hours: e.target.value })
-                        }
-                        style={{
-                          ...inp,
-                          width: 64,
-                          opacity: r.mode === "hourly" ? 1 : 0.4,
-                        }}
-                        inputMode="numeric"
-                      />
+                      {canEdit ? (
+                        <input
+                          value={r.mode === "hourly" ? r.hours : ""}
+                          disabled={r.mode !== "hourly"}
+                          onChange={(e) =>
+                            setRow(r.userId, { hours: e.target.value })
+                          }
+                          style={{
+                            ...inp,
+                            width: 64,
+                            opacity: r.mode === "hourly" ? 1 : 0.4,
+                          }}
+                          inputMode="numeric"
+                        />
+                      ) : (
+                        <span style={{ color: C.sub }}>
+                          {r.mode === "hourly" ? money(r.hours) : "—"}
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-right">
-                      <input
-                        value={r.bonus}
-                        onChange={(e) =>
-                          setRow(r.userId, { bonus: e.target.value })
-                        }
-                        style={inp}
-                        inputMode="numeric"
-                      />
+                      {canEdit ? (
+                        <input
+                          value={r.bonus}
+                          onChange={(e) =>
+                            setRow(r.userId, { bonus: e.target.value })
+                          }
+                          style={inp}
+                          inputMode="numeric"
+                        />
+                      ) : (
+                        <span style={{ color: C.sub }}>{money(r.bonus)}</span>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-right">
-                      <input
-                        value={r.penalty}
-                        onChange={(e) =>
-                          setRow(r.userId, { penalty: e.target.value })
-                        }
-                        style={inp}
-                        inputMode="numeric"
-                      />
+                      {canEdit ? (
+                        <input
+                          value={r.penalty}
+                          onChange={(e) =>
+                            setRow(r.userId, { penalty: e.target.value })
+                          }
+                          style={inp}
+                          inputMode="numeric"
+                        />
+                      ) : (
+                        <span style={{ color: C.sub }}>{money(r.penalty)}</span>
+                      )}
                     </td>
                     <td
                       className="py-1.5 text-right"

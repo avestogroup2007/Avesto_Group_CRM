@@ -71,8 +71,10 @@ export default function FoodCostView({ notify, role }) {
     load(period);
   }, [period, load]);
 
+  // Храним сырую строку (как в ФОТ/План): иначе поле не очистить (0 ≠ пусто) и
+  // нельзя ввести дробную цену («12.» → 12). onlyNum применяем при сохранении.
   const setDishCost = (name, v) =>
-    setCfg((c) => ({ ...c, dishCost: { ...c.dishCost, [name]: onlyNum(v) } }));
+    setCfg((c) => ({ ...c, dishCost: { ...c.dishCost, [name]: v } }));
 
   const save = async () => {
     setSaving(true);

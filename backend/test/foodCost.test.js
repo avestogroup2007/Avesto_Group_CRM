@@ -87,6 +87,24 @@ test("расчёт: приоритет цены (блюдо → группа →
   assert.equal(rows.length, 3);
 });
 
+test("расчёт: имя блюда как член прототипа не ломает расчёт", () => {
+  // Блюдо с именем «constructor»/«toString» не должно ложно совпасть с
+  // членом прототипа объекта и дать NaN в себестоимости/итогах.
+  const { rows, totals } = computeFoodCost(
+    [
+      { name: "constructor", group: "toString", revenue: 100000, qty: 1 },
+      { name: "Обычное", group: "Кухня", revenue: 100000, qty: 1 },
+    ],
+    { defaultPct: 30, groupPct: {}, dishCost: {} }
+  );
+  for (const r of rows) {
+    assert.ok(Number.isFinite(r.cost), `cost ${r.name} должен быть числом`);
+    assert.equal(r.cost, 30000);
+  }
+  assert.ok(Number.isFinite(totals.cost));
+  assert.equal(totals.cost, 60000);
+});
+
 test("расчёт: пустой список и нулевая выручка безопасны", () => {
   assert.deepEqual(computeFoodCost([], {}).totals, {
     revenue: 0,
@@ -148,6 +166,15 @@ test("настройки: неверный ФК% отклоняется", async 
     body: JSON.stringify({ defaultPct: 250, groupPct: {}, dishCost: {} }),
   });
   assert.equal(put.status, 400);
+});
+
+test("отчёт: неверный формат дат отклоняется (400)", async () => {
+  const res = await fetch(`${base}/api/iiko/food-cost`, {
+    method: "POST",
+    headers: jsonAuth(directorToken),
+    body: JSON.stringify({ from: "xxx", to: "2026-06-30" }),
+  });
+  assert.equal(res.status, 400);
 });
 
 test("отчёт: без настроенной iiko отдаёт 503 (configured:false)", async () => {
