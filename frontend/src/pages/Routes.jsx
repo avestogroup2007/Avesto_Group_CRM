@@ -631,10 +631,11 @@ function AdRoute({ route, s, dispatch, notify }) {
         {route.steps.map((st, i) => (
           <div
             key={i}
-            className="flex items-center gap-2 flex-wrap rounded-lg px-3 py-2"
+            className="flex items-center gap-2 rounded-lg px-3 py-2"
             style={{ background: "#fff", border: `1px solid ${C.line}` }}
           >
             <span
+              className="shrink-0"
               style={{
                 width: 18,
                 height: 18,
@@ -650,37 +651,40 @@ function AdRoute({ route, s, dispatch, notify }) {
             >
               {i + 1}
             </span>
-            <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
-              {st.title}
-            </span>
-            <span style={{ fontSize: 11.5, color: C.faint }}>· {st.actor}</span>
-            {st.photo && (
-              <Badge color={C.ok} bg="#E9F9EF">
-                📷
-              </Badge>
-            )}
-            {st.doc && (
-              <Badge color={C.violet} bg="#F5F0FE">
-                📄
-              </Badge>
-            )}
-            {st.check && (
-              <Badge color={C.brandA} bg="#EFF4FF">
-                ✔
-              </Badge>
-            )}
-            {st.pay && (
-              <Badge color={C.violet} bg="#F5F0FE">
-                💳
-              </Badge>
-            )}
-            <button
-              onClick={() => delStep(i)}
-              className="ml-auto"
-              title="Удалить шаг"
-            >
-              <X size={14} color={C.faint} />
-            </button>
+            <div className="min-w-0 flex-1 truncate">
+              <span style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+                {st.title}
+              </span>
+              <span style={{ fontSize: 11.5, color: C.faint }}>
+                {" "}
+                · {st.actor}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {st.photo && (
+                <Badge color={C.ok} bg="#E9F9EF">
+                  📷
+                </Badge>
+              )}
+              {st.doc && (
+                <Badge color={C.violet} bg="#F5F0FE">
+                  📄
+                </Badge>
+              )}
+              {st.check && (
+                <Badge color={C.brandA} bg="#EFF4FF">
+                  ✔
+                </Badge>
+              )}
+              {st.pay && (
+                <Badge color={C.violet} bg="#F5F0FE">
+                  💳
+                </Badge>
+              )}
+              <button onClick={() => delStep(i)} title="Удалить шаг">
+                <X size={14} color={C.faint} />
+              </button>
+            </div>
           </div>
         ))}
         {route.steps.length === 0 && (
