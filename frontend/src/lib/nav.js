@@ -18,10 +18,17 @@ import {
   Check,
   Cake,
   Briefcase,
+  LayoutDashboard,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
 export const NAV = [
+  {
+    key: "dashboard",
+    label: "Сводка дня",
+    icon: LayoutDashboard,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
   { key: "inbox", label: "Входящие", icon: Inbox, roles: "all" },
   { key: "create", label: "Создать заявку", icon: PlusCircle, roles: "all" },
   { key: "me", label: "Мои достижения", icon: Award, roles: "all" },
@@ -125,6 +132,7 @@ export const navAllowed = (item, role) => {
 
 export const VIEW_TITLE = {
   backoffice: "Back Office · управление продуктом",
+  dashboard: "Сводка дня — как идут дела",
   inbox: "Входящие задачи",
   create: "Создать заявку",
   me: "Мои достижения",
