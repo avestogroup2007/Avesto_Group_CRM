@@ -125,17 +125,17 @@ export async function syncEmployeesToDb() {
   };
 }
 
-const ALLOWED_ROLES = [
+// Роли, которые можно назначать сотруднику из админки кадров. Служебные роли
+// владельца (owner/vendor) сюда НЕ входят — иначе директор/сисадмин мог бы
+// повысить кого-либо (или себя) до полного доступа в обход проверок ролей;
+// эти роли ведёт только владелец в Back Office / сиде.
+const ASSIGNABLE_ROLES = [
   "director",
   "finance",
   "manager",
   "accountant",
   "sysadmin",
   "staff",
-  // Роли владельца системы: owner — полный доступ + Back Office,
-  // vendor — сотрудник продаж владельца (видит только Back Office).
-  "owner",
-  "vendor",
 ];
 
 // Поля учётной записи сотрудника, отдаваемые на экран управления кадрами.
@@ -166,7 +166,15 @@ export async function updateEmployeeAccess(
   }
   const data = {};
   if (role !== undefined) {
-    if (!ALLOWED_ROLES.includes(role)) throw new Error("Недопустимая роль");
+    // Через админку кадров нельзя назначить служебные роли владельца
+    // (owner/vendor) — иначе директор/сисадмин повысил бы кого-либо (или
+    // себя) до полного доступа в обход всех проверок ролей. Эти роли ведёт
+    // только владелец в Back Office / сиде.
+    if (!ASSIGNABLE_ROLES.includes(role)) throw new Error("Недопустимая роль");
+    // И нельзя менять роль действующему владельцу/вендору из этой админки.
+    if (existing.role === "owner" || existing.role === "vendor") {
+      throw new Error("Роль владельца изменяется только в Back Office");
+    }
     data.role = role;
   }
   if (active !== undefined) data.active = Boolean(active);

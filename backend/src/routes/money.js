@@ -335,7 +335,13 @@ r.get(
     if (from || to) where.date = {};
     if (from) where.date.gte = String(from);
     if (to) where.date.lte = String(to);
-    const items = await db.moneyTx.findMany({ where });
+    // Ограничение выдачи: без периода это могла быть вся история — защита от
+    // перегруза памяти/CPU. Свежие 100k операций покрывают любой реальный отчёт.
+    const items = await db.moneyTx.findMany({
+      where,
+      orderBy: { date: "desc" },
+      take: 100000,
+    });
 
     const period = { income: 0, expense: 0, net: 0 };
     const byCategory = {};

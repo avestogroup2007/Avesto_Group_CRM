@@ -47,42 +47,18 @@ r.get(
     let branches = orgBranches();
     if (forced) branches = branches.filter((b) => String(b.id) === forced);
 
-    // Касса за день по филиалам.
+    // Условия выборок (касса/чек-листы/согласование/задачи). Все запросы не
+    // зависят друг от друга — выполняем одним Promise.all (меньше round-trip
+    // на самом нагруженном управленческом экране).
     const cashWhere = { date };
     if (forced) cashWhere.branchId = forced;
-    const cashRows = await db.cashReport
-      .findMany({ where: cashWhere })
-      .catch(() => []);
-    const cashByBranch = new Map(cashRows.map((c) => [String(c.branchId), c]));
-
-    // Чек-листы за день по филиалам (средний % выполнения).
     const chkWhere = { date };
     if (forced) chkWhere.branchId = forced;
-    const chkRows = await db.shiftChecklistRun
-      .findMany({ where: chkWhere, select: { branchId: true, pct: true } })
-      .catch(() => []);
-    const chkByBranch = new Map();
-    for (const run of chkRows) {
-      const k = String(run.branchId);
-      const cur = chkByBranch.get(k) || { sum: 0, n: 0 };
-      cur.sum += num(run.pct);
-      cur.n += 1;
-      chkByBranch.set(k, cur);
-    }
-
-    // Расходы на согласовании (в области видимости).
     const pendWhere = { approval: "pending", direction: "expense" };
     if (forced) pendWhere.branchId = forced;
-    const [pendCount, pendAgg] = await Promise.all([
-      db.moneyTx.count({ where: pendWhere }).catch(() => 0),
-      db.moneyTx
-        .aggregate({ where: pendWhere, _sum: { amountUzs: true } })
-        .catch(() => ({ _sum: { amountUzs: 0 } })),
-    ]);
 
-    // Задачи команды (менеджер задач): активные и просроченные в области
-    // видимости пользователя. Охват как в /api/todos: офис видит все;
-    // остальные — назначенные им, созданные ими или по своему филиалу.
+    // Задачи команды: охват как в /api/todos (офис — все; остальные —
+    // назначенные/созданные/по филиалу).
     const TODO_OFFICE = new Set(["director", "finance", "sysadmin"]);
     let todoScope = {};
     if (!TODO_OFFICE.has(req.user.role)) {
@@ -92,21 +68,41 @@ r.get(
       todoScope = { OR: or };
     }
     const startOfToday = new Date(`${date}T00:00:00+05:00`); // Asia/Tashkent
-    const [todoActive, todoOverdue] = await Promise.all([
-      db.todoTask
-        .count({ where: { AND: [todoScope, { status: { not: "done" } }] } })
-        .catch(() => 0),
-      db.todoTask
-        .count({
-          where: {
-            AND: [
-              todoScope,
-              { status: { not: "done" }, dueDate: { lt: startOfToday } },
-            ],
-          },
-        })
-        .catch(() => 0),
-    ]);
+
+    const [cashRows, chkRows, pendCount, pendAgg, todoActive, todoOverdue] =
+      await Promise.all([
+        db.cashReport.findMany({ where: cashWhere }).catch(() => []),
+        db.shiftChecklistRun
+          .findMany({ where: chkWhere, select: { branchId: true, pct: true } })
+          .catch(() => []),
+        db.moneyTx.count({ where: pendWhere }).catch(() => 0),
+        db.moneyTx
+          .aggregate({ where: pendWhere, _sum: { amountUzs: true } })
+          .catch(() => ({ _sum: { amountUzs: 0 } })),
+        db.todoTask
+          .count({ where: { AND: [todoScope, { status: { not: "done" } }] } })
+          .catch(() => 0),
+        db.todoTask
+          .count({
+            where: {
+              AND: [
+                todoScope,
+                { status: { not: "done" }, dueDate: { lt: startOfToday } },
+              ],
+            },
+          })
+          .catch(() => 0),
+      ]);
+
+    const cashByBranch = new Map(cashRows.map((c) => [String(c.branchId), c]));
+    const chkByBranch = new Map();
+    for (const run of chkRows) {
+      const k = String(run.branchId);
+      const cur = chkByBranch.get(k) || { sum: 0, n: 0 };
+      cur.sum += num(run.pct);
+      cur.n += 1;
+      chkByBranch.set(k, cur);
+    }
 
     // Собираем строки по филиалам + считаем расхождения.
     const alerts = [];
