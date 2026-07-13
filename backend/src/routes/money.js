@@ -187,6 +187,76 @@ async function doEnsureRecurringPosted() {
   }
 }
 
+// ── Выгрузка реестра операций в CSV (для бухгалтера/Excel) ──────────────────
+// Экранирование значения для CSV: оборачиваем в кавычки, удваиваем кавычки.
+function csvCell(v) {
+  const s = v == null ? "" : String(v);
+  return `"${s.replace(/"/g, '""')}"`;
+}
+r.get(
+  "/export",
+  asyncHandler(async (req, res) => {
+    const { from, to, branch } = req.query;
+    const where = {};
+    if (branch) where.branchId = String(branch);
+    if (from || to) where.date = {};
+    if (from) where.date.gte = String(from);
+    if (to) where.date.lte = String(to);
+    const items = await db.moneyTx.findMany({
+      where,
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      take: 100000,
+    });
+    const dir = { income: "Приход", expense: "Расход" };
+    const appr = {
+      approved: "Проведено",
+      pending: "На согласовании",
+      rejected: "Отклонено",
+    };
+    const headers = [
+      "Дата",
+      "Направление",
+      "Статья",
+      "Статья ДДС",
+      "Тип оплаты",
+      "Контрагент",
+      "Сумма",
+      "Валюта",
+      "Сумма (сум)",
+      "Филиал",
+      "Статус",
+      "Комментарий",
+    ];
+    const lines = [headers.map(csvCell).join(";")];
+    for (const t of items) {
+      lines.push(
+        [
+          t.date,
+          dir[t.direction] || t.direction,
+          t.category,
+          t.ddsArticle || "",
+          t.paymentType || "",
+          t.counterparty || "",
+          n(t.amount),
+          t.currency || "UZS",
+          n(t.amountUzs),
+          t.branchName || "",
+          appr[t.approval] || t.approval,
+          t.comment || "",
+        ]
+          .map(csvCell)
+          .join(";")
+      );
+    }
+    // BOM — чтобы Excel корректно открыл кириллицу в UTF-8.
+    const csv = "﻿" + lines.join("\r\n");
+    const fname = `money_${from || "all"}_${to || "all"}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+    res.send(csv);
+  })
+);
+
 // ── Список движений за период (с фильтрами) ────────────────────────────────
 r.get(
   "/",

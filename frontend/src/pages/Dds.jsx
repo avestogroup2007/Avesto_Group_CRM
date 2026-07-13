@@ -2,10 +2,47 @@
 // поток за период (только согласованные операции). Данные серверные
 // (/api/money/dds).
 import { useState, useEffect } from "react";
-import { TrendingUp, RefreshCw } from "lucide-react";
-import { apiGet } from "../api.js";
+import { TrendingUp, RefreshCw, Download } from "lucide-react";
+import { apiGet, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
 import { Kpi } from "../components/ui.jsx";
+
+// Клиентская выгрузка ДДС в CSV (открывается в Excel). BOM — для кириллицы.
+function downloadDdsCsv(data) {
+  const cell = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const { months, income, expense, monthTotals, totals } = data;
+  const head = ["Тип", "Статья", ...months.map((m) => m), "Итого"];
+  const rows = [head.map(cell).join(";")];
+  const push = (label, list) => {
+    for (const r of list) {
+      rows.push(
+        [label, r.article, ...months.map((m) => r.byMonth[m] || 0), r.total]
+          .map(cell)
+          .join(";"),
+      );
+    }
+  };
+  push("Приток", income);
+  push("Отток", expense);
+  rows.push(
+    [
+      "",
+      "Чистый поток",
+      ...months.map((m) => monthTotals[m]?.net || 0),
+      totals.net,
+    ]
+      .map(cell)
+      .join(";"),
+  );
+  const csv = "﻿" + rows.join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `dds_${data.from || "all"}_${data.to || "all"}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
 const monthLabel = (m) => {
@@ -183,6 +220,36 @@ export default function DdsView() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => downloadDdsCsv(data)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.sub,
+              fontSize: 12,
+            }}
+            title="Скачать ДДС в CSV (Excel)"
+          >
+            <Download size={13} /> ДДС
+          </button>
+          <button
+            onClick={() => {
+              const from = data.from ? `from=${data.from}&` : "";
+              const to = data.to ? `to=${data.to}` : "";
+              apiDownload(`/api/money/export?${from}${to}`, "money.csv").catch(
+                () => {},
+              );
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.sub,
+              fontSize: 12,
+            }}
+            title="Выгрузить реестр операций в CSV (Excel)"
+          >
+            <Download size={13} /> Операции
+          </button>
           <button
             onClick={() => load(monthsBack)}
             className="p-2 rounded-lg"
