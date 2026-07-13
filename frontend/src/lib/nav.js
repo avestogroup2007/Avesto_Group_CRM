@@ -149,6 +149,102 @@ export const navAllowed = (item, role) => {
   return defaultAllowed(item, role);
 };
 
+// Группировка разделов в компактное меню: вместо длинного плоского списка —
+// несколько крупных сворачиваемых групп. Порядок групп = порядок в меню.
+// «Сводка дня» остаётся отдельным верхним пунктом, «Back Office» — отдельным
+// нижним (служебный). Всё остальное распределено по группам; любой пункт NAV,
+// не попавший в группу, показывается верхним уровнем (страховка при добавлении
+// новых разделов).
+export const NAV_GROUPS = [
+  {
+    key: "tasks",
+    label: "Задачи",
+    icon: Inbox,
+    items: ["inbox", "create", "me", "archive"],
+  },
+  {
+    key: "finance",
+    label: "Финансы",
+    icon: Wallet,
+    items: ["cash", "money", "dds", "payroll"],
+  },
+  {
+    key: "analytics",
+    label: "Аналитика",
+    icon: BarChart3,
+    items: ["analytics", "sales", "reports"],
+  },
+  {
+    key: "staff",
+    label: "Персонал",
+    icon: Users,
+    items: ["checklists", "staffkpi", "time"],
+  },
+  {
+    key: "ops",
+    label: "Производство",
+    icon: ListChecks,
+    items: ["production", "cakes"],
+  },
+  {
+    key: "company",
+    label: "Компания и настройки",
+    icon: Settings,
+    items: ["org", "automation", "admin", "about"],
+  },
+];
+
+const SOLO_TOP = ["dashboard"]; // всегда верхним уровнем, перед группами
+const SOLO_BOTTOM = ["backoffice"]; // служебный, после групп
+const NAV_BY_KEY = Object.fromEntries(NAV.map((n) => [n.key, n]));
+
+// Собрать меню под роль: массив секций { type:'solo', item } либо
+// { type:'group', key, label, icon, items:[...] }. В группы попадают только
+// доступные пользователю пункты; пустые группы опускаются.
+export function navSections(role) {
+  const pick = (key) => {
+    const item = NAV_BY_KEY[key];
+    return item && navAllowed(item, role) ? item : null;
+  };
+  const sections = [];
+  const placed = new Set([...SOLO_TOP, ...SOLO_BOTTOM]);
+
+  for (const key of SOLO_TOP) {
+    const it = pick(key);
+    if (it) sections.push({ type: "solo", item: it });
+  }
+  for (const g of NAV_GROUPS) {
+    g.items.forEach((k) => placed.add(k));
+    const items = g.items.map(pick).filter(Boolean);
+    if (items.length)
+      sections.push({
+        type: "group",
+        key: g.key,
+        label: g.label,
+        icon: g.icon,
+        items,
+      });
+  }
+  // Пункты, не попавшие ни в группу/соло — верхним уровнем (страховка).
+  for (const n of NAV) {
+    if (!placed.has(n.key) && navAllowed(n, role)) {
+      placed.add(n.key);
+      sections.push({ type: "solo", item: n });
+    }
+  }
+  for (const key of SOLO_BOTTOM) {
+    const it = pick(key);
+    if (it) sections.push({ type: "solo", item: it });
+  }
+  return sections;
+}
+
+// Ключ группы, содержащей раздел view (или null, если раздел верхнего уровня).
+export function groupOfView(view) {
+  const g = NAV_GROUPS.find((gr) => gr.items.includes(view));
+  return g ? g.key : null;
+}
+
 export const VIEW_TITLE = {
   backoffice: "Back Office · управление продуктом",
   dashboard: "Сводка дня — как идут дела",

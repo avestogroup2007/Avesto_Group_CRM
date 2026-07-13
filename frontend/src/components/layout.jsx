@@ -1,8 +1,8 @@
 // Каркас интерфейса: боковое меню, шапка, нижняя навигация, смена пароля.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Cell } from "recharts";
-import { X, Users, Power, Lock, Menu } from "lucide-react";
+import { X, Users, Power, Lock, Menu, ChevronDown } from "lucide-react";
 import { changePassword } from "../api.js";
 import Logo from "../Logo.jsx";
 import { C } from "../lib/theme.js";
@@ -10,10 +10,49 @@ import { tr, LANG } from "../lib/i18n.js";
 import { fmtDur } from "../lib/format.js";
 import { Avatar } from "../components/ui.jsx";
 import { ROLE_OPTS } from "../lib/org.js";
-import { NAV, NAV_SHORT, navAllowed } from "../lib/nav.js";
+import { NAV_SHORT, navSections, groupOfView } from "../lib/nav.js";
+
+// Один пункт меню (используется и в соло-разделах, и внутри групп).
+function NavItem({ n, active, onClick, nested }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`nav-item flex items-center gap-3 rounded-xl text-left${active ? " nav-item-active" : ""}`}
+      style={{
+        padding: nested ? "9px 10px 9px 12px" : "12px",
+        background: active ? C.brandGrad : "transparent",
+        color: active ? "#fff" : C.ink,
+        fontWeight: active ? 700 : 600,
+        fontSize: nested ? 13.5 : 14.5,
+        boxShadow: active ? "0 6px 18px rgba(123,45,31,.30)" : "none",
+      }}
+    >
+      <n.icon size={nested ? 18 : 20} color={active ? "#fff" : C.sub} />
+      {tr(n.label)}
+    </button>
+  );
+}
 
 export function Sidebar({ view, setView, role, brandName }) {
-  const items = NAV.filter((n) => navAllowed(n, role));
+  const sections = navSections(role);
+  const activeGroup = groupOfView(view);
+  // Раскрыта группа активного раздела; пользователь может открывать/закрывать
+  // остальные. При переходе в раздел его группа раскрывается автоматически.
+  const [open, setOpen] = useState(() =>
+    new Set(activeGroup ? [activeGroup] : []),
+  );
+  useEffect(() => {
+    if (activeGroup)
+      setOpen((prev) =>
+        prev.has(activeGroup) ? prev : new Set(prev).add(activeGroup),
+      );
+  }, [activeGroup]);
+  const toggle = (k) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      next.has(k) ? next.delete(k) : next.add(k);
+      return next;
+    });
   return (
     <aside
       className="hidden md:flex flex-col glass-chrome"
@@ -55,23 +94,64 @@ export function Sidebar({ view, setView, role, brandName }) {
         </div>
       </div>
       <nav className="flex flex-col gap-1" style={{ padding: 12 }}>
-        {items.map((n) => {
-          const active = view === n.key;
+        {sections.map((sec) => {
+          if (sec.type === "solo") {
+            return (
+              <NavItem
+                key={sec.item.key}
+                n={sec.item}
+                active={view === sec.item.key}
+                onClick={() => setView(sec.item.key)}
+              />
+            );
+          }
+          const expanded = open.has(sec.key);
+          const hasActive = sec.items.some((i) => i.key === view);
           return (
-            <button
-              key={n.key}
-              onClick={() => setView(n.key)}
-              className={`nav-item flex items-center gap-3 rounded-xl px-3 py-3 text-left${active ? " nav-item-active" : ""}`}
-              style={{
-                background: active ? C.brandGrad : "transparent",
-                color: active ? "#fff" : C.ink,
-                fontWeight: active ? 700 : 600,
-                fontSize: 14.5,
-                boxShadow: active ? "0 6px 18px rgba(123,45,31,.30)" : "none",
-              }}
-            >
-              <n.icon size={20} color={active ? "#fff" : C.sub} /> {tr(n.label)}
-            </button>
+            <div key={sec.key} className="flex flex-col gap-1">
+              <button
+                onClick={() => toggle(sec.key)}
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-left"
+                style={{
+                  background:
+                    hasActive && !expanded ? "rgba(123,45,31,.08)" : "transparent",
+                  color: hasActive ? C.brandA : C.ink,
+                  fontWeight: 700,
+                  fontSize: 14.5,
+                }}
+              >
+                <sec.icon size={20} color={hasActive ? C.brandA : C.sub} />
+                <span className="flex-1">{tr(sec.label)}</span>
+                <ChevronDown
+                  size={17}
+                  color={C.faint}
+                  style={{
+                    transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+                    transition: "transform .15s",
+                  }}
+                />
+              </button>
+              {expanded && (
+                <div
+                  className="flex flex-col gap-1"
+                  style={{
+                    marginLeft: 12,
+                    paddingLeft: 8,
+                    borderLeft: `1px solid ${C.border}`,
+                  }}
+                >
+                  {sec.items.map((n) => (
+                    <NavItem
+                      key={n.key}
+                      n={n}
+                      nested
+                      active={view === n.key}
+                      onClick={() => setView(n.key)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
@@ -91,8 +171,18 @@ export function Sidebar({ view, setView, role, brandName }) {
   );
 }
 
+// Плоский список доступных пунктов в порядке групп — для мобильной панели.
+function flatItems(role) {
+  const out = [];
+  for (const sec of navSections(role)) {
+    if (sec.type === "solo") out.push(sec.item);
+    else out.push(...sec.items);
+  }
+  return out;
+}
+
 export function BottomNav({ view, setView, role, onMore }) {
-  const items = NAV.filter((n) => navAllowed(n, role));
+  const items = flatItems(role);
   const primary = items.slice(0, 4);
   const overflow = items.slice(4);
   const overflowActive = overflow.some((n) => n.key === view);
@@ -149,8 +239,38 @@ export function BottomNav({ view, setView, role, onMore }) {
   );
 }
 
-export function MoreSheet({ open, onClose, items, view, setView }) {
+export function MoreSheet({ open, onClose, role, view, setView }) {
   if (!open) return null;
+  const sections = navSections(role);
+  const Item = (n) => {
+    const active = view === n.key;
+    return (
+      <button
+        key={n.key}
+        onClick={() => {
+          setView(n.key);
+          onClose();
+        }}
+        className="flex items-center gap-2.5 rounded-xl px-3 py-3 text-left min-w-0"
+        style={{
+          background: active ? C.brandA : "#F8FAFC",
+          color: active ? "#fff" : C.ink,
+          fontWeight: 600,
+          fontSize: 13.5,
+          border: `1px solid ${active ? C.brandA : C.border}`,
+        }}
+      >
+        <n.icon
+          size={19}
+          color={active ? "#fff" : C.sub}
+          className="shrink-0"
+        />
+        <span className="min-w-0" style={{ lineHeight: 1.15 }}>
+          {tr(n.label)}
+        </span>
+      </button>
+    );
+  };
   return (
     <div className="md:hidden fixed inset-0" style={{ zIndex: 60 }}>
       <div
@@ -196,36 +316,29 @@ export function MoreSheet({ open, onClose, items, view, setView }) {
             <X size={18} color={C.sub} />
           </button>
         </div>
-        <div className="grid grid-cols-1 gap-2">
-          {items.map((n) => {
-            const active = view === n.key;
-            return (
-              <button
-                key={n.key}
-                onClick={() => {
-                  setView(n.key);
-                  onClose();
-                }}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-3 text-left min-w-0"
-                style={{
-                  background: active ? C.brandA : "#F8FAFC",
-                  color: active ? "#fff" : C.ink,
-                  fontWeight: 600,
-                  fontSize: 13.5,
-                  border: `1px solid ${active ? C.brandA : C.border}`,
-                }}
-              >
-                <n.icon
-                  size={19}
-                  color={active ? "#fff" : C.sub}
-                  className="shrink-0"
-                />
-                <span className="min-w-0" style={{ lineHeight: 1.15 }}>
-                  {tr(n.label)}
-                </span>
-              </button>
-            );
-          })}
+        <div
+          className="flex flex-col gap-3"
+          style={{ maxHeight: "62vh", overflowY: "auto" }}
+        >
+          {sections.map((sec) =>
+            sec.type === "solo" ? (
+              <div key={sec.item.key} className="grid grid-cols-1 gap-2">
+                {Item(sec.item)}
+              </div>
+            ) : (
+              <div key={sec.key}>
+                <div
+                  className="px-1 mb-1.5 font-bold uppercase"
+                  style={{ color: C.faint, fontSize: 11, letterSpacing: ".04em" }}
+                >
+                  {tr(sec.label)}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {sec.items.map(Item)}
+                </div>
+              </div>
+            ),
+          )}
         </div>
       </div>
     </div>

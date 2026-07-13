@@ -727,7 +727,7 @@ export default function App({ authUser, onLogout }) {
       <MoreSheet
         open={moreOpen}
         onClose={() => setMoreOpen(false)}
-        items={NAV.filter((n) => navAllowed(n, me.role))}
+        role={me.role}
         view={s.view}
         setView={setView}
       />
