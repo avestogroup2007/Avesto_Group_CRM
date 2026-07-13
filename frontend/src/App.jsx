@@ -44,6 +44,7 @@ const AutomationView = lazy(() => import("./pages/Automation.jsx"));
 const AdminPanel = lazy(() => import("./admin/Admin.jsx"));
 const BackOfficeView = lazy(() => import("./pages/BackOffice.jsx"));
 const DashboardView = lazy(() => import("./pages/Dashboard.jsx"));
+const StaffKpiView = lazy(() => import("./pages/StaffKpi.jsx"));
 const CakeConstructor = lazy(() => import("./CakeConstructor.jsx"));
 const IikoProduction = lazy(() => import("./IikoProduction.jsx"));
 
@@ -567,6 +568,11 @@ export default function App({ authUser, onLogout }) {
                   { roles: NAV.find((n) => n.key === "dashboard").roles },
                   me.role,
                 ) && <DashboardView me={me} dispatch={dispatch} />}
+              {s.view === "staffkpi" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "staffkpi").roles },
+                  me.role,
+                ) && <StaffKpiView />}
               {s.view === "create" && (
                 <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />
               )}

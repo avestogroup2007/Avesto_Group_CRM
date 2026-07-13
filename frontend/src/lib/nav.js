@@ -19,6 +19,7 @@ import {
   Cake,
   Briefcase,
   LayoutDashboard,
+  Users,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -70,6 +71,12 @@ export const NAV = [
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
   { key: "checklists", label: "Чек-листы смены", icon: Check, roles: "all" },
+  {
+    key: "staffkpi",
+    label: "KPI сотрудников",
+    icon: Users,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
   {
     key: "cakes",
     label: "Торты (конструктор)",
@@ -144,6 +151,7 @@ export const VIEW_TITLE = {
   sales: "Аналитика продаж",
   production: "Производство",
   checklists: "Чек-листы смены",
+  staffkpi: "KPI сотрудников — дисциплина по чек-листам",
   cakes: "Конструктор тортов",
   reports: "Отчёты",
   org: "Оргструктура и филиалы",
