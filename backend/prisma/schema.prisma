@@ -465,3 +465,31 @@ model DeptConfig {
   updatedAt   DateTime @updatedAt
   updatedById String?
 }
+
+// Ставки оплаты труда по сотруднику (управляется директором/сисадмином в
+// админке): режим (оклад/почасовой) и сумма. Одна строка (id=1), JSON вида
+// { rates: { userId: { mode: "salary"|"hourly", amount: number } } }. Ставок в
+// iiko-API нет, поэтому задаются в системе.
+model PayrollConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+// Помесячные данные зарплатной ведомости по сотруднику: часы (для почасовых),
+// бонусы и штрафы. Ставка берётся из PayrollConfig. Одна запись на (месяц,
+// сотрудник). Деньги — BigInt (сум).
+model PayrollEntry {
+  id        String   @id @default(cuid())
+  month     String // YYYY-MM
+  userId    String
+  hours     Float    @default(0) // отработанные часы (для почасовых)
+  bonus     BigInt   @default(0) // премии/надбавки, сум
+  penalty   BigInt   @default(0) // удержания/штрафы, сум
+  note      String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, userId])
+  @@index([month])
+}
