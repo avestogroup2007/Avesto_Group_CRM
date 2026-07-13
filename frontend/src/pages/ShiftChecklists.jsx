@@ -442,7 +442,7 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
       </div>
 
       {/* Отчёт по чек-листам (руководство): сдачи за период по видам */}
-      {isMgr && report && (
+      {isMgr && report && report.summary && (
         <div
           className="rounded-2xl bg-white p-4 sm:p-5"
           style={{ border: `1px solid ${C.border}` }}

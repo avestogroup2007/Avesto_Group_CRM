@@ -1302,7 +1302,7 @@ function CreateTask({ me, tasks, now, dispatch, notify }) {
               )}
             </div>
 
-            {parsed.amount != null && (
+            {budget && (
               <div
                 className="rounded-xl px-3 py-2.5"
                 style={{

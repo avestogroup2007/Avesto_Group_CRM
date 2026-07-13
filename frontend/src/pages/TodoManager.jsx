@@ -218,6 +218,8 @@ export default function TodoManagerView({ notify }) {
     fontSize: 12.5,
     color: C.ink,
     background: "#fff",
+    // Не даём селекту растягиваться под длинное имя филиала/сотрудника.
+    maxWidth: 170,
   };
 
   return (

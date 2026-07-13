@@ -285,7 +285,7 @@ export function Analytics({
           <h3 className="font-bold mb-3" style={{ color: C.ink, fontSize: 17 }}>
             Эффективность исполнителей
           </h3>
-          <div>
+          <div className="overflow-x-auto">
             <table className="w-full" style={{ fontSize: 13 }}>
               <thead>
                 <tr style={{ color: C.faint, textAlign: "left" }}>

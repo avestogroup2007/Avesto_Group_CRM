@@ -230,7 +230,9 @@ export function PageHeader({ icon: Icon, title, subtitle, children }) {
         ) : null}
       </div>
       {children ? (
-        <div className="flex items-center gap-2">{children}</div>
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          {children}
+        </div>
       ) : null}
     </div>
   );
@@ -239,20 +241,26 @@ export function PageHeader({ icon: Icon, title, subtitle, children }) {
 export function Kpi({ label, value, tone }) {
   return (
     <div
-      className="rounded-2xl bg-white p-4"
+      className="rounded-2xl bg-white p-4 min-w-0"
       style={{ border: `1px solid ${C.border}` }}
     >
       <div className="flex items-center gap-2 mb-1">
         <span
+          className="shrink-0"
           style={{ width: 9, height: 9, borderRadius: 99, background: tone }}
         />
-        <span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>
+        <span
+          className="min-w-0 truncate"
+          style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}
+        >
           {label}
         </span>
       </div>
+      {/* Крупные суммы с неразрывными пробелами не переносятся сами — даём
+          перенос и уменьшаем шрифт на узких экранах, чтобы не вылезали за карточку. */}
       <div
-        className="font-extrabold"
-        style={{ color: C.ink, fontSize: 30, lineHeight: 1.1 }}
+        className="font-extrabold text-2xl sm:text-3xl"
+        style={{ color: C.ink, lineHeight: 1.1, overflowWrap: "anywhere" }}
       >
         {value}
       </div>
