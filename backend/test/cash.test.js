@@ -252,3 +252,26 @@ test("касса: сдача управляющего принудительно
   });
   assert.equal(other, null, "на чужой филиал ничего не записано");
 });
+
+test("расхождение кассы: расчёт недостачи/излишка и порог алерта", async () => {
+  const { cashDiscrepancy } = await import("../src/routes/cash.js");
+  // Недостача: заявлено 1 000 000, iiko 1 100 000 → diff -100 000, алерт.
+  const short = cashDiscrepancy({
+    fiscal: 600000,
+    nonFiscal: 400000,
+    iiko: 1100000,
+  });
+  assert.equal(short.declared, 1000000);
+  assert.equal(short.diff, -100000);
+  assert.equal(short.alert, true);
+  // Излишек.
+  const surplus = cashDiscrepancy({ fiscal: 1200000, iiko: 1100000 });
+  assert.equal(surplus.diff, 100000);
+  assert.equal(surplus.alert, true);
+  // В пределах порога (1000) — не алертим.
+  const ok = cashDiscrepancy({ fiscal: 1100500, iiko: 1100000 });
+  assert.equal(ok.alert, false);
+  // iiko не внесён — сверять не с чем.
+  const noIiko = cashDiscrepancy({ fiscal: 1000000, iiko: 0 });
+  assert.equal(noIiko.alert, false);
+});

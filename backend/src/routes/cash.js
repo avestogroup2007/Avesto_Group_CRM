@@ -9,9 +9,56 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
+import { sendTelegram, esc, topicFor } from "../services/telegram.js";
 
 const r = Router();
 r.use(requireAuth);
+
+// Виды оплат, из которых складывается заявленная выручка дня (без expenses/iiko).
+const PAY_FIELDS = [
+  "fiscal",
+  "nonFiscal",
+  "humo",
+  "uzcard",
+  "click",
+  "payme",
+  "uzumTezkor",
+  "yandex",
+  "transfer",
+];
+// Порог расхождения, ниже которого не шумим (округления при вводе).
+const DISCREPANCY_TOLERANCE = 1000;
+
+// Чистый расчёт расхождения кассы с iiko (для алерта и тестов). diff<0 —
+// недостача, diff>0 — излишек. alert=true, если iiko внесён и расхождение выше
+// порога.
+export function cashDiscrepancy(report) {
+  const iiko = Number(report.iiko || 0);
+  const declared = PAY_FIELDS.reduce((s, f) => s + Number(report[f] || 0), 0);
+  const diff = declared - iiko;
+  return {
+    declared,
+    iiko,
+    diff,
+    alert: iiko > 0 && Math.abs(diff) > DISCREPANCY_TOLERANCE,
+  };
+}
+
+// Сверка кассы с iiko: при существенном расхождении шлём алерт в тему «Касса».
+async function maybeAlertDiscrepancy(report) {
+  const { declared, iiko, diff, alert } = cashDiscrepancy(report);
+  if (!alert) return;
+  const fmt = (v) => Number(v).toLocaleString("ru-RU");
+  const shortage = diff < 0;
+  await sendTelegram(
+    `${shortage ? "🔴" : "🟡"} <b>Расхождение кассы</b>\n` +
+      `${esc(report.branchName || report.branchId)} · ${report.date}\n` +
+      `Заявлено: <b>${fmt(declared)}</b> · iiko: <b>${fmt(iiko)}</b>\n` +
+      `${shortage ? "Недостача" : "Излишек"}: <b>${fmt(Math.abs(diff))} сум</b>`,
+    undefined,
+    topicFor("cash")
+  );
+}
 
 // Верхняя граница — защита от мусорного ввода (в БД поля BigInt).
 const int = z.coerce.number().int().min(0).max(9e15).default(0);
@@ -107,6 +154,12 @@ r.post(
         })
         .catch(() => {});
     }
+
+    // Авто-алерт расхождения кассы с iiko: если сумма по видам оплат не сходится
+    // с выручкой iiko, система «кричит» о недостаче/излишке в Telegram (тема
+    // «Касса»). Порог — 1000 сум, чтобы не шуметь на копеечных округлениях.
+    await maybeAlertDiscrepancy(saved).catch(() => {});
+
     res.json(ser(saved));
   })
 );
