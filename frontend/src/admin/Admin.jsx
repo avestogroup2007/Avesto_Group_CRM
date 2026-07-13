@@ -15,6 +15,7 @@ import {
   Lock,
   ShieldCheck,
   Download,
+  Wallet,
 } from "lucide-react";
 import { apiGet, apiPost, apiPatch, apiPut, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -33,6 +34,7 @@ import {
 import { AdminRoutes } from "../pages/Routes.jsx";
 import AdminChecklists from "./AdminChecklists.jsx";
 import AdminAccess from "./AdminAccess.jsx";
+import AdminCashDict from "./AdminCashDict.jsx";
 
 // Предпросмотр списка сотрудников из iiko (шаг 1: только чтение). iiko —
 // источник правды по кадрам; на следующем шаге отсюда будем импортировать
@@ -1532,6 +1534,7 @@ export function AdminPanel({ s, dispatch, notify }) {
     ["routes", "Маршруты", Send],
     ["sla", "SLA-нормативы", Clock],
     ["sops", "Регламенты", ListChecks],
+    ["cashdict", "Справочники кассы", Wallet],
     ...(checklistsOn ? [["checklists", "Чек-листы", ListChecks]] : []),
     ["system", "Система", Settings],
     ["audit", "Журнал безопасности", ShieldCheck],
@@ -1584,6 +1587,7 @@ export function AdminPanel({ s, dispatch, notify }) {
         <AdminChecklists notify={notify} />
       )}
       {tab === "access" && <AdminAccess notify={notify} />}
+      {tab === "cashdict" && <AdminCashDict notify={notify} />}
       {tab === "audit" && <AdminAudit />}
       {tab === "system" && (
         <AdminSystem s={s} dispatch={dispatch} notify={notify} />

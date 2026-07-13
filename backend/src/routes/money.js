@@ -434,6 +434,16 @@ r.post(
       update: { active: true, parent: d.parent || "" },
       create: { type: d.type, name: d.name.trim(), parent: d.parent || "" },
     });
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "money_dict_add",
+          detail: `Справочник кассы: добавлено «${entry.name}» (${entry.type})`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.status(201).json(entry);
   })
 );
@@ -468,6 +478,16 @@ r.patch(
       where: { id: cur.id },
       data: { name, parent },
     });
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "money_dict_edit",
+          detail: `Справочник кассы: «${cur.name}» → «${entry.name}» (${entry.type})`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.json(entry);
   })
 );
@@ -475,7 +495,23 @@ r.patch(
 r.delete(
   "/dict/:id",
   asyncHandler(async (req, res) => {
+    // Читаем запись до удаления — чтобы в аудите осталось, что именно удалили.
+    const cur = await db.moneyDict
+      .findUnique({ where: { id: req.params.id } })
+      .catch(() => null);
     await db.moneyDict.delete({ where: { id: req.params.id } }).catch(() => {});
+    if (cur) {
+      await db.auditLog
+        .create({
+          data: {
+            userId: req.user.uid,
+            event: "money_dict_delete",
+            detail: `Справочник кассы: удалено «${cur.name}» (${cur.type})`,
+            ip: req.ip,
+          },
+        })
+        .catch(() => {});
+    }
     res.json({ ok: true });
   })
 );
