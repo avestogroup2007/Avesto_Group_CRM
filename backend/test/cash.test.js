@@ -14,10 +14,16 @@ const DIRECTOR = "cash_test_director";
 const BRANCH = "77"; // id филиала фронтенда (без FK)
 const DATE = "2026-01-15";
 
+const MANAGER = "cash_test_manager"; // привязан к филиалу BRANCH
+const ACCT = "cash_test_acct"; // бухгалтер — видит все филиалы
+const OTHER_BRANCH = "88";
+
 let server;
 let base;
 let cashierToken;
 let directorToken;
+let managerToken;
+let acctToken;
 
 async function login(name) {
   const res = await fetch(`${base}/api/auth/login`, {
@@ -38,27 +44,51 @@ function auth(token) {
 
 before(async () => {
   const passwordHash = await bcrypt.hash(PASS, 10);
-  for (const [name, role] of [
-    [CASHIER, "staff"],
-    [DIRECTOR, "director"],
+  for (const [name, role, branch] of [
+    [CASHIER, "staff", null],
+    [DIRECTOR, "director", null],
+    [MANAGER, "manager", BRANCH],
+    [ACCT, "accountant", null],
   ]) {
     await db.user.upsert({
       where: { name },
-      update: { passwordHash, role, active: true, source: "iiko" },
-      create: { name, passwordHash, role, source: "iiko" },
+      update: {
+        passwordHash,
+        role,
+        active: true,
+        source: "iiko",
+        checklistBranch: branch,
+      },
+      create: {
+        name,
+        passwordHash,
+        role,
+        source: "iiko",
+        checklistBranch: branch,
+      },
     });
   }
-  await db.cashReport.deleteMany({ where: { branchId: BRANCH } });
+  await db.cashReport.deleteMany({
+    where: { branchId: { in: [BRANCH, OTHER_BRANCH] } },
+  });
 
   server = app.listen(0);
   await new Promise((ok) => server.once("listening", ok));
   base = `http://127.0.0.1:${server.address().port}`;
   cashierToken = await login(CASHIER);
   directorToken = await login(DIRECTOR);
+  managerToken = await login(MANAGER);
+  acctToken = await login(ACCT);
 });
 
 after(async () => {
-  await db.cashReport.deleteMany({ where: { branchId: BRANCH } });
+  await db.cashReport.deleteMany({
+    where: { branchId: { in: [BRANCH, OTHER_BRANCH] } },
+  });
+  await db.auditLog.deleteMany({
+    where: { user: { name: { in: [MANAGER, ACCT] } } },
+  });
+  await db.user.deleteMany({ where: { name: { in: [MANAGER, ACCT] } } });
   server?.close();
 });
 
@@ -172,4 +202,53 @@ test("чек-лист из веба пишется на сервер (via=app), 
     }),
   });
   assert.equal(unknownBranch.status, 400);
+});
+
+test("касса: управляющий видит отчёты только своего филиала, бухгалтер — все", async () => {
+  // Офис (директор) заводит отчёты по двум филиалам.
+  for (const b of [BRANCH, OTHER_BRANCH]) {
+    const r = await fetch(`${base}/api/cash/report`, {
+      method: "POST",
+      headers: auth(directorToken),
+      body: JSON.stringify({ branchId: b, date: "2026-02-01", fiscal: 100 }),
+    });
+    assert.equal(r.status, 200);
+  }
+
+  // Управляющий привязан к BRANCH — в выборке только его филиал.
+  const mgr = await (
+    await fetch(`${base}/api/cash/reports`, { headers: auth(managerToken) })
+  ).json();
+  const mgrBranches = new Set(mgr.items.map((x) => x.branchId));
+  assert.ok(mgrBranches.has(BRANCH));
+  assert.ok(!mgrBranches.has(OTHER_BRANCH), "чужой филиал не должен попадать");
+
+  // Бухгалтер видит оба филиала (обзорная роль).
+  const acct = await (
+    await fetch(`${base}/api/cash/reports`, { headers: auth(acctToken) })
+  ).json();
+  const acctBranches = new Set(acct.items.map((x) => x.branchId));
+  assert.ok(acctBranches.has(BRANCH) && acctBranches.has(OTHER_BRANCH));
+});
+
+test("касса: сдача управляющего принудительно на его филиал", async () => {
+  // Просит чужой филиал 88, но привязан к BRANCH — запишется BRANCH.
+  const res = await fetch(`${base}/api/cash/report`, {
+    method: "POST",
+    headers: auth(managerToken),
+    body: JSON.stringify({
+      branchId: OTHER_BRANCH,
+      date: "2026-03-01",
+      fiscal: 50,
+    }),
+  });
+  assert.equal(res.status, 200);
+  const own = await db.cashReport.findUnique({
+    where: { branchId_date: { branchId: BRANCH, date: "2026-03-01" } },
+  });
+  assert.ok(own, "отчёт должен лечь на филиал управляющего");
+  const other = await db.cashReport.findUnique({
+    where: { branchId_date: { branchId: OTHER_BRANCH, date: "2026-03-01" } },
+  });
+  assert.equal(other, null, "на чужой филиал ничего не записано");
 });

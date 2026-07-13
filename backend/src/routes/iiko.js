@@ -23,6 +23,24 @@ import {
 } from "../services/iikoSync.js";
 import { sendTelegram, topicFor, esc } from "../services/telegram.js";
 import { cached } from "../services/cache.js";
+import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
+import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
+
+// iiko-подразделение (department), которым ограничен пользователь, или null,
+// если он видит все филиалы. Управляющий ограничен своим филиалом; бухгалтер и
+// офис — все. Бросает 403-совместимую ошибку, если филиал не сопоставлен с iiko.
+async function forcedDepartment(user) {
+  const forced = forcedBranch(user, { alsoFree: FINANCE_FREE });
+  if (!forced) return null;
+  await refreshOrgConfig().catch(() => {});
+  const b = orgBranchById(forced);
+  if (!b || !b.iikoDept) {
+    const e = new Error("Ваш филиал не сопоставлен с подразделением iiko");
+    e.statusCode = 403;
+    throw e;
+  }
+  return b.iikoDept;
+}
 
 // TTL кэша отчёта: закрытые дни не меняются (6 часов), период с «сегодня»
 // может пополняться продажами (3 минуты). Сегодня — по Asia/Tashkent.
@@ -48,6 +66,10 @@ function handleIiko(fn) {
       if (e instanceof IikoNotConfiguredError) {
         return res.status(503).json({ error: e.message, configured: false });
       }
+      // Явный статус (напр. 403 при ограничении по филиалу) отдаём как есть.
+      if (e && e.statusCode) {
+        return res.status(e.statusCode).json({ error: e.message });
+      }
       // Показываем реальную причину от iiko — помогает при настройке
       // (неверный логин/пароль, недоступный сервер и т.п.).
       return res
@@ -71,12 +93,12 @@ r.post(
     if (!from || !to) {
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
-    const departments = department ? [department] : undefined;
+    // Управляющий ограничен своим филиалом; бухгалтер/офис — любой/все.
+    const dept = (await forcedDepartment(req.user)) || department;
+    const departments = dept ? [dept] : undefined;
     res.json(
-      await cached(
-        `olap:${from}:${to}:${department || "all"}`,
-        reportTtl(to),
-        () => salesReport({ from, to, departments })
+      await cached(`olap:${from}:${to}:${dept || "all"}`, reportTtl(to), () =>
+        salesReport({ from, to, departments })
       )
     );
   })
@@ -92,11 +114,10 @@ r.post(
     if (!from || !to) {
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
+    const dept = (await forcedDepartment(req.user)) || department;
     res.json(
-      await cached(
-        `pnl:${from}:${to}:${department || "all"}`,
-        reportTtl(to),
-        () => pnlReport({ from, to, department: department || undefined })
+      await cached(`pnl:${from}:${to}:${dept || "all"}`, reportTtl(to), () =>
+        pnlReport({ from, to, department: dept || undefined })
       )
     );
   })
@@ -112,15 +133,16 @@ r.post(
     if (!from || !to) {
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
+    const dept = (await forcedDepartment(req.user)) || department;
     res.json(
       await cached(
-        `risky:${from}:${to}:${department || "all"}:${discountPct ?? "def"}`,
+        `risky:${from}:${to}:${dept || "all"}:${discountPct ?? "def"}`,
         reportTtl(to),
         () =>
           riskyReport({
             from,
             to,
-            department: department || undefined,
+            department: dept || undefined,
             discountPct:
               typeof discountPct === "number" ? discountPct : undefined,
           })
