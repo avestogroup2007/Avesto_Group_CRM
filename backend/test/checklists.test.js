@@ -221,6 +221,19 @@ test("отчёт по чек-листам: руководству доступе
   assert.ok(rep.summary.byKind.cleaning >= 1);
   assert.ok(rep.summary.avgPct >= 0 && rep.summary.avgPct <= 100);
 
+  // Детализация: разбивка по филиалам и по шаблонам/видам.
+  assert.ok(Array.isArray(rep.summary.byBranch));
+  const br1 = rep.summary.byBranch.find((b) => b.key === OKBRANCH);
+  assert.ok(br1 && br1.count >= 3 && br1.label.length > 0);
+  assert.ok(Array.isArray(rep.summary.byTemplate));
+  // Строка шаблона по должности использует его заголовок.
+  assert.ok(rep.summary.byTemplate.some((t) => t.label === "Открытие смены"));
+  // Легаси-обход отображается понятным названием, а не kind "open".
+  assert.ok(
+    rep.summary.byTemplate.some((t) => t.label === "Открытие смены") &&
+      rep.summary.byTemplate.every((t) => t.label !== "open")
+  );
+
   // Неверный период — 400.
   const bad = await fetch(
     `${base}/api/checklists/report?from=2026-07-20&to=2026-07-12`,

@@ -493,9 +493,20 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
               tone={C.faint}
             />
           </div>
-          {report.summary.total === 0 && (
+          {report.summary.total === 0 ? (
             <div style={{ color: C.sub, fontSize: 12.5, marginTop: 8 }}>
               За выбранный период сдач нет.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <ReportBreakdown
+                title="По филиалам"
+                rows={report.summary.byBranch}
+              />
+              <ReportBreakdown
+                title="По чек-листам"
+                rows={report.summary.byTemplate}
+              />
             </div>
           )}
         </div>
@@ -757,6 +768,61 @@ function ShiftChecklistsView({ s, me, dispatch, notify, branchScope }) {
           </div>,
           document.body,
         )}
+    </div>
+  );
+}
+
+// Детализация отчёта: список строк «название · сдач · средний %» с цветной
+// меткой процента. Показывает до 8 строк (остальное сворачивается в «ещё N»).
+function ReportBreakdown({ title, rows }) {
+  const list = Array.isArray(rows) ? rows : [];
+  const shown = list.slice(0, 8);
+  const rest = list.length - shown.length;
+  return (
+    <div
+      className="rounded-xl p-3"
+      style={{ border: `1px solid ${C.line}`, background: "#FAFAFA" }}
+    >
+      <div
+        className="font-bold mb-2"
+        style={{ color: C.sub, fontSize: 12, textTransform: "uppercase" }}
+      >
+        {title}
+      </div>
+      <div className="space-y-1.5">
+        {shown.map((row) => (
+          <div
+            key={row.key}
+            className="flex items-center justify-between gap-2"
+          >
+            <span
+              className="truncate"
+              style={{ color: C.ink, fontSize: 12.5, maxWidth: "60%" }}
+            >
+              {row.label}
+            </span>
+            <span className="flex items-center gap-2 shrink-0">
+              <span style={{ color: C.sub, fontSize: 11.5 }}>
+                {row.count} сдач
+              </span>
+              <span
+                className="rounded-full px-2 py-0.5"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: row.avgPct >= 80 ? "#DCFCE7" : "#FEF3C7",
+                  color: row.avgPct >= 80 ? "#15803D" : "#B45309",
+                }}
+              >
+                {row.avgPct}%
+              </span>
+            </span>
+          </div>
+        ))}
+        {rest > 0 && (
+          <div style={{ color: C.faint, fontSize: 11.5 }}>ещё {rest}…</div>
+        )}
+      </div>
     </div>
   );
 }
