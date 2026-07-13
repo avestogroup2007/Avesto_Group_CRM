@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Target, RefreshCw, Save } from "lucide-react";
 import { apiGet, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi } from "../components/ui.jsx";
+import { Kpi, PageHeader } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
 const onlyNum = (v) => Number(String(v).replace(/[^\d.]/g, "")) || 0;
@@ -87,15 +87,7 @@ export default function PlanView({ notify, role }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2
-          className="font-bold flex items-center gap-2"
-          style={{ color: C.ink, fontSize: 18 }}
-        >
-          <Target size={19} style={{ color: C.brandA }} /> Планы и цели
-          (план-факт)
-        </h2>
-        <div className="flex items-center gap-2">
+      <PageHeader icon={Target} title="Планы и цели (план-факт)">
           <button
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="rounded-lg px-2.5 py-1.5 font-bold"
@@ -134,8 +126,7 @@ export default function PlanView({ notify, role }) {
               <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
             </button>
           )}
-        </div>
-      </div>
+      </PageHeader>
 
       {loading && !data ? (
         <div style={{ color: C.sub, fontSize: 14 }}>Загрузка…</div>

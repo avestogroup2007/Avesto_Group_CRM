@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { Users, RefreshCw } from "lucide-react";
 import { apiGet } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi } from "../components/ui.jsx";
+import { Kpi, PageHeader } from "../components/ui.jsx";
 
 const PERIODS = [
   [7, "7 дней"],
@@ -50,20 +50,16 @@ export default function StaffKpiView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2
-            className="font-bold flex items-center gap-2"
-            style={{ color: C.ink, fontSize: 18 }}
-          >
-            <Users size={19} style={{ color: C.brandA }} /> KPI сотрудников
-          </h2>
-          <div style={{ color: C.sub, fontSize: 12.5 }}>
+      <PageHeader
+        icon={Users}
+        title="KPI сотрудников"
+        subtitle={
+          <>
             Дисциплина по чек-листам · {data.from} — {data.to}
             {data.scope === "branch" ? " · ваш филиал" : ""}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+          </>
+        }
+      >
           <div className="flex gap-1">
             {PERIODS.map(([d, lbl]) => (
               <button
@@ -89,8 +85,7 @@ export default function StaffKpiView() {
           >
             <RefreshCw size={14} />
           </button>
-        </div>
-      </div>
+      </PageHeader>
 
       <div className="grid grid-cols-3 gap-2">
         <Kpi
