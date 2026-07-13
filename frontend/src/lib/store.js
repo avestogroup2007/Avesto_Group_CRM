@@ -195,8 +195,29 @@ export function reducer(s, a) {
           d.id === a.id ? { ...d, ...a.patch } : d,
         ),
       };
+    case "DELETE_DEPARTMENT": {
+      // Удаляем отдел и снимаем ссылки на него из карты категорий (иначе задачи
+      // «повиснут» на несуществующем отделе).
+      const catDept = { ...(s.catDept || {}) };
+      for (const k of Object.keys(catDept))
+        if (catDept[k] === a.id) delete catDept[k];
+      return {
+        ...s,
+        departments: s.departments.filter((d) => d.id !== a.id),
+        catDept,
+      };
+    }
     case "SET_CATDEPT":
       return { ...s, catDept: { ...s.catDept, [a.category]: a.departmentId } };
+    case "DEPT_CONFIG":
+      // Серверная конфигурация отделов (пришла при загрузке приложения).
+      return {
+        ...s,
+        departments: Array.isArray(a.config?.departments)
+          ? a.config.departments
+          : s.departments,
+        catDept: a.config?.catDept || s.catDept,
+      };
     case "MODULES":
       return { ...s, modules: a.flags || {} };
     case "ACCESS_CONFIG":

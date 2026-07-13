@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Download,
   Wallet,
+  Trash2,
 } from "lucide-react";
 import { apiGet, apiPost, apiPatch, apiPut, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -1603,6 +1604,7 @@ export function AdminPanel({ s, dispatch, notify }) {
 function AdminDepartments({ s, dispatch, notify }) {
   const [name, setName] = useState("");
   const [restricted, setRestricted] = useState(false);
+  const [saving, setSaving] = useState(false);
   const add = () => {
     if (!name.trim()) {
       notify("Укажите название отдела");
@@ -1616,9 +1618,40 @@ function AdminDepartments({ s, dispatch, notify }) {
         restricted,
       },
     });
-    notify("Отдел добавлен");
+    notify("Отдел добавлен. Не забудьте сохранить.");
     setName("");
     setRestricted(false);
+  };
+  const removeDept = (id) => {
+    dispatch({ type: "DELETE_DEPARTMENT", id });
+    notify("Отдел удалён. Не забудьте сохранить.");
+  };
+  // Сохранение на сервер: отделы + карта категорий. Пустые названия отбрасываем.
+  const save = async () => {
+    const departments = (s.departments || [])
+      .map((d) => ({
+        id: d.id,
+        name: String(d.name || "").trim(),
+        restricted: !!d.restricted,
+      }))
+      .filter((d) => d.name);
+    if (!departments.length) {
+      notify("Нужен хотя бы один отдел с названием");
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await apiPut("/api/departments", {
+        departments,
+        catDept: s.catDept || {},
+      });
+      dispatch({ type: "DEPT_CONFIG", config: saved });
+      notify("Отделы сохранены");
+    } catch (e) {
+      notify(e.message || "Не удалось сохранить отделы");
+    } finally {
+      setSaving(false);
+    }
   };
   const cats = Object.keys(s.catDept);
   return (
@@ -1668,8 +1701,33 @@ function AdminDepartments({ s, dispatch, notify }) {
               >
                 <Lock size={14} /> {d.restricted ? "Закрытый" : "Открытый"}
               </button>
+              <button
+                onClick={() => removeDept(d.id)}
+                className="p-2 rounded-lg shrink-0"
+                style={{ color: C.bad, border: `1px solid ${C.border}` }}
+                title="Удалить отдел"
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
           ))}
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{
+              background: C.brandA,
+              fontSize: 14,
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {saving ? "Сохраняем…" : "💾 Сохранить отделы"}
+          </button>
+          <span style={{ color: C.faint, fontSize: 12 }}>
+            Изменения названий и доступа применяются после сохранения.
+          </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end mt-4">
           <AdInput
