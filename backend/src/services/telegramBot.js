@@ -485,6 +485,7 @@ async function menuView(user) {
       ]);
     }
   }
+  rows.push([{ text: "📋 Мои задачи", callback_data: "todo|list" }]);
   if (env.PUBLIC_APP_URL) {
     rows.push([
       { text: "\u{1F310} Открыть CRM", web_app: { url: env.PUBLIC_APP_URL } },
@@ -518,6 +519,7 @@ function mgmtMenuView(user) {
       { text: "\u{1F3E2} Филиалы", callback_data: "mgr|brlist" },
       { text: "\u{1F4DD} Мои чек-листы", callback_data: "mgr|own" },
     ],
+    [{ text: "📋 Мои задачи", callback_data: "todo|list" }],
   ];
   if (env.PUBLIC_APP_URL) {
     keyboard.push([
@@ -982,6 +984,50 @@ async function mgmtTasksView() {
   }
 }
 
+// ── Мои задачи (менеджер задач) в боте ──────────────────────────────────────
+// Личные задачи сотрудника (назначенные ему), незавершённые. Быстрое закрытие
+// кнопкой и добавление новой одним сообщением. Общие с веб-разделом «Менеджер
+// задач» (модель TodoTask).
+async function todoListView(user) {
+  const rows = await db.todoTask
+    .findMany({
+      where: { assigneeId: user.id, status: { not: "done" } },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      take: 20,
+    })
+    .catch(() => []);
+  const today = ymdTashkent();
+  const lines = rows.length
+    ? rows
+        .map((t, i) => {
+          const due = t.dueDate
+            ? new Date(t.dueDate).toLocaleDateString("en-CA", {
+                timeZone: "Asia/Tashkent",
+              })
+            : null;
+          const mark = due
+            ? due < today
+              ? "🔴"
+              : due === today
+                ? "🟡"
+                : "🗓"
+            : "";
+          return `${i + 1}. ${esc(t.title)}${due ? ` ${mark} ${due}` : ""}`;
+        })
+        .join("\n")
+    : "Активных задач нет.";
+  const text = `📋 <b>Мои задачи</b>\n\n${lines}`;
+  const keyboard = rows.slice(0, 10).map((t) => [
+    {
+      text: `✅ ${t.title.slice(0, 40)}`,
+      callback_data: `todo|done|${t.id}`,
+    },
+  ]);
+  keyboard.push([{ text: "➕ Новая задача", callback_data: "todo|new" }]);
+  keyboard.push([{ text: "‹ Меню", callback_data: "backmenu" }]);
+  return { text, keyboard };
+}
+
 function freshItems(kind) {
   return CHECKLIST_DEFS[kind].items.map((it) => ({
     text: it.text,
@@ -1282,6 +1328,59 @@ async function onCallback(cbq) {
     await answerCb(cbq.id);
     return;
   }
+  // Мои задачи: список, закрытие, добавление (менеджер задач).
+  if (cmd === "todo") {
+    const action = parts[1];
+    if (action === "list") {
+      const v = await todoListView(user);
+      await editMsg(chatId, msgId, v.text, v.keyboard);
+      await answerCb(cbq.id);
+      return;
+    }
+    if (action === "done") {
+      const t = await db.todoTask
+        .findUnique({ where: { id: parts[2] } })
+        .catch(() => null);
+      // Закрыть может исполнитель, автор или офис (как в веб-правке).
+      const allowed =
+        t &&
+        (t.assigneeId === user.id ||
+          t.createdById === user.id ||
+          OFFICE_ROLES.has(user.role));
+      if (allowed) {
+        await db.todoTask
+          .update({
+            where: { id: t.id },
+            data: { status: "done", doneAt: new Date() },
+          })
+          .catch(() => {});
+        await answerCb(cbq.id, "Задача закрыта ✅");
+      } else {
+        await answerCb(cbq.id, "Недоступно");
+      }
+      const v = await todoListView(user);
+      await editMsg(chatId, msgId, v.text, v.keyboard);
+      return;
+    }
+    if (action === "new") {
+      await setSession(from.id, { flow: "todo", step: "title" });
+      await editMsg(
+        chatId,
+        msgId,
+        "➕ <b>Новая задача</b>\n\nПришлите текст задачи одним сообщением.",
+        [[{ text: "Отмена", callback_data: "todo|cancel" }]]
+      );
+      await answerCb(cbq.id);
+      return;
+    }
+    if (action === "cancel") {
+      await clearSession(from.id);
+      const v = await todoListView(user);
+      await editMsg(chatId, msgId, v.text, v.keyboard);
+      await answerCb(cbq.id, "Отменено");
+      return;
+    }
+  }
   const state = await getSession(from.id);
   if (!state) {
     await answerCb(cbq.id, "Сессия истекла, отправьте /start.");
@@ -1472,6 +1571,25 @@ export async function handleUpdate(update) {
       await sendMsg(chatId, `Ваш Telegram ID: <b>${from.id}</b>`);
       return;
     }
+    // Ввод текста новой задачи (менеджер задач).
+    const session = await getSession(from.id);
+    if (session && session.flow === "todo" && session.step === "title") {
+      const title = text.slice(0, 300).trim();
+      if (!title) {
+        await sendMsg(chatId, "Пустая задача. Пришлите текст задачи.");
+        return;
+      }
+      await db.todoTask
+        .create({
+          data: { title, assigneeId: user.id, createdById: user.id },
+        })
+        .catch(() => {});
+      await clearSession(from.id);
+      await sendMsg(chatId, `✅ Задача добавлена: <b>${esc(title)}</b>`);
+      const v = await todoListView(user);
+      await sendMsg(chatId, v.text, v.keyboard);
+      return;
+    }
     // Прочее — подсказка.
     await sendMsg(chatId, "Отправьте /start, чтобы открыть чек-листы смены.");
   } catch (e) {
@@ -1536,4 +1654,5 @@ export const _internals = {
   templateSlots,
   templateHoursView,
   menuView,
+  todoListView,
 };
