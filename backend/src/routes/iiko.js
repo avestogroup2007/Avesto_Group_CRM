@@ -119,8 +119,11 @@ r.post(
   requireRole("director", "finance", "accountant", "sysadmin"),
   handleIiko(async (req, res) => {
     const { from, to, department } = req.body || {};
-    if (!from || !to) {
-      return res.status(400).json({ error: "Нужны параметры from и to" });
+    const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+    if (!isDate(from) || !isDate(to)) {
+      return res
+        .status(400)
+        .json({ error: "Нужны корректные даты from и to (ГГГГ-ММ-ДД)" });
     }
     const dept = (await forcedDepartment(req.user)) || department;
     const departments = dept ? [dept] : undefined;

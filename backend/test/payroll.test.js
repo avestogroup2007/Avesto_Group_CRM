@@ -186,6 +186,26 @@ test("ФОТ: сохранение ставок и помесячных запи
   assert.equal(d.totalPay, expected);
 });
 
+test("ФОТ: правка записи пишется в журнал безопасности", async () => {
+  await db.auditLog.deleteMany({ where: { event: "payroll_entry_update" } });
+  const res = await fetch(`${base}/api/payroll/entry`, {
+    method: "PUT",
+    headers: jsonAuth(directorToken),
+    body: JSON.stringify({
+      month: MONTH,
+      userId: uSalary,
+      hours: 0,
+      bonus: 100000,
+      penalty: 0,
+    }),
+  });
+  assert.equal(res.status, 200);
+  const logs = await db.auditLog.count({
+    where: { event: "payroll_entry_update" },
+  });
+  assert.ok(logs >= 1, "должна быть запись payroll_entry_update в журнале");
+});
+
 test("ФОТ: запись обновляется (upsert), не дублируется", async () => {
   const upd = await fetch(`${base}/api/payroll/entry`, {
     method: "PUT",

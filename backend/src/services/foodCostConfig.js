@@ -81,6 +81,7 @@ export function computeFoodCost(dishes, config) {
   const cfg = { ...defaults(), ...(config || {}) };
   const groupPct = cfg.groupPct || {};
   const dishCost = cfg.dishCost || {};
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const rows = (Array.isArray(dishes) ? dishes : []).map((d) => {
     const name = d.name || "—";
     const group = d.group || "";
@@ -88,10 +89,12 @@ export function computeFoodCost(dishes, config) {
     const qty = Number(d.qty) || 0;
     let cost;
     let source;
-    if (dishCost[name] != null) {
+    // Доступ через hasOwnProperty: блюдо/группа с именем как у члена прототипа
+    // (constructor/toString) не должны ложно совпадать и портить расчёт (NaN).
+    if (has(dishCost, name) && dishCost[name] != null) {
       cost = Number(dishCost[name]) * qty;
       source = "dish"; // ручная цена за единицу
-    } else if (group && groupPct[group] != null) {
+    } else if (group && has(groupPct, group) && groupPct[group] != null) {
       cost = (revenue * Number(groupPct[group])) / 100;
       source = "group"; // % по группе
     } else {
