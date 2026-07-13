@@ -329,6 +329,89 @@ r.get(
   })
 );
 
+// ── ДДС: движение денежных средств по месяцам и статьям ─────────────────────
+// Отчёт для руководства: приток/отток по статьям ДДС, помесячно, за период.
+// Только согласованные операции (заявки/отклонённые не входят). Роль доступа —
+// как у всего модуля денег (офис).
+r.get(
+  "/dds",
+  asyncHandler(async (req, res) => {
+    const { from, to, branch } = req.query;
+    const where = { approval: "approved" };
+    if (branch) where.branchId = String(branch);
+    if (from || to) where.date = {};
+    if (from) where.date.gte = String(from);
+    if (to) where.date.lte = String(to);
+    const items = await db.moneyTx.findMany({
+      where,
+      select: {
+        date: true,
+        direction: true,
+        ddsArticle: true,
+        amountUzs: true,
+      },
+      take: 50000,
+    });
+
+    const monthOf = (d) => String(d).slice(0, 7); // YYYY-MM
+    const monthsSet = new Set();
+    // article -> { income: {month: sum}, expense: {month: sum}, tIn, tEx }
+    const byArticle = new Map();
+    const monthTotals = {}; // month -> { income, expense }
+    for (const t of items) {
+      const m = monthOf(t.date);
+      monthsSet.add(m);
+      const art = t.ddsArticle || "Без статьи";
+      const a =
+        byArticle.get(art) ||
+        (byArticle.set(art, { income: {}, expense: {}, tIn: 0, tEx: 0 }),
+        byArticle.get(art));
+      const amt = n(t.amountUzs);
+      const dir = t.direction === "income" ? "income" : "expense";
+      a[dir][m] = (a[dir][m] || 0) + amt;
+      if (dir === "income") a.tIn += amt;
+      else a.tEx += amt;
+      if (!monthTotals[m]) monthTotals[m] = { income: 0, expense: 0 };
+      monthTotals[m][dir] += amt;
+    }
+    const months = [...monthsSet].sort();
+    const pack = (dir, totalKey) =>
+      [...byArticle.entries()]
+        .map(([article, v]) => ({
+          article,
+          byMonth: v[dir],
+          total: v[totalKey],
+        }))
+        .filter((x) => x.total > 0)
+        .sort((x, y) => y.total - x.total);
+
+    const totals = {
+      income: Object.values(monthTotals).reduce((s, m) => s + m.income, 0),
+      expense: Object.values(monthTotals).reduce((s, m) => s + m.expense, 0),
+    };
+    totals.net = totals.income - totals.expense;
+
+    res.json({
+      from: from || null,
+      to: to || null,
+      months,
+      income: pack("income", "tIn"),
+      expense: pack("expense", "tEx"),
+      monthTotals: Object.fromEntries(
+        months.map((m) => [
+          m,
+          {
+            income: monthTotals[m]?.income || 0,
+            expense: monthTotals[m]?.expense || 0,
+            net: (monthTotals[m]?.income || 0) - (monthTotals[m]?.expense || 0),
+          },
+        ])
+      ),
+      totals,
+    });
+  })
+);
+
 // ── Справочники ────────────────────────────────────────────────────────────
 // Возвращаем по каждому типу массив записей {id, name, parent}. Базовые
 // значения при первом запуске заносятся в БД (ensureSeeded) — тогда у них
