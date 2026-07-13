@@ -60,6 +60,18 @@ before(async () => {
       iiko: 1100000n,
     },
   });
+  // Просроченная задача — для счётчика задач на дашборде.
+  await db.todoTask.deleteMany({
+    where: { title: { startsWith: "DASHTODO" } },
+  });
+  await db.todoTask.create({
+    data: {
+      title: "DASHTODO просрочка",
+      createdById: "dash-test",
+      status: "todo",
+      dueDate: new Date("2026-07-01T00:00:00Z"),
+    },
+  });
   await refreshOrgConfig(true);
   server = app.listen(0);
   await new Promise((ok) => server.once("listening", ok));
@@ -71,6 +83,9 @@ before(async () => {
 
 after(async () => {
   await db.cashReport.deleteMany({ where: { date: DATE } });
+  await db.todoTask.deleteMany({
+    where: { title: { startsWith: "DASHTODO" } },
+  });
   await db.auditLog.deleteMany({
     where: { user: { name: { startsWith: "dash_" } } },
   });
@@ -100,6 +115,17 @@ test("дашборд: расхождение кассы считается и п
   assert.ok(d.alerts.some((a) => a.kind === "shortage" && a.branchId === "1"));
   // Филиалы без кассы — алерт «не сдана».
   assert.ok(d.alerts.some((a) => a.kind === "cash_missing"));
+});
+
+test("дашборд: счётчик задач (активные/просроченные) и алерт", async () => {
+  const res = await fetch(`${base}/api/dashboard?date=${DATE}`, {
+    headers: auth(directorToken),
+  });
+  const d = await res.json();
+  assert.ok(d.todos, "должен быть блок задач");
+  assert.ok(d.todos.active >= 1, "есть активные задачи");
+  assert.ok(d.todos.overdue >= 1, "есть просроченные задачи");
+  assert.ok(d.alerts.some((a) => a.kind === "todos_overdue"));
 });
 
 test("дашборд: управляющий видит только свой филиал", async () => {

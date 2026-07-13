@@ -11,6 +11,7 @@ import {
   ClipboardList,
   ArrowRight,
   Target,
+  ListTodo,
 } from "lucide-react";
 import { apiGet } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -112,6 +113,41 @@ export default function DashboardView({ dispatch }) {
           tone={data.pendingExpenses.count ? C.bad : C.faint}
         />
       </div>
+
+      {/* Задачи команды */}
+      {data.todos && (
+        <button
+          onClick={() => go("todos")}
+          className="w-full rounded-2xl bg-white p-4 flex items-center gap-3 text-left"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <div
+            className="rounded-lg p-2 shrink-0"
+            style={{ background: "#F5F3FF" }}
+          >
+            <ListTodo size={18} style={{ color: C.brandA }} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold" style={{ color: C.ink, fontSize: 14 }}>
+              Задачи команды
+            </div>
+            <div style={{ fontSize: 12.5, color: C.sub }}>
+              Активных: <b style={{ color: C.ink }}>{data.todos.active}</b>
+              {data.todos.overdue > 0 ? (
+                <>
+                  {" · "}
+                  <b style={{ color: C.bad }}>
+                    просрочено {data.todos.overdue}
+                  </b>
+                </>
+              ) : (
+                " · просрочек нет"
+              )}
+            </div>
+          </div>
+          <ArrowRight size={15} style={{ color: C.brandA }} />
+        </button>
+      )}
 
       {/* План-факт месяца */}
       {plan && <PlanMonthBlock plan={plan} onOpen={() => go("plan")} />}
