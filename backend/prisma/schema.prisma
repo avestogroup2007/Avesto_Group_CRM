@@ -444,3 +444,14 @@ model AccessConfig {
   updatedAt   DateTime @updatedAt
   updatedById String?
 }
+
+// Пороги согласования расходов (управляется директором/сисадмином в админке):
+// расход не выше порога проводится сразу, выше — уходит на согласование.
+// Есть переопределение по филиалам. Одна строка (id=1), JSON. По умолчанию
+// порог 0 — согласования требует любой расход (прежнее поведение).
+model ApprovalConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
