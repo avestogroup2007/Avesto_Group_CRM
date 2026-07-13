@@ -148,8 +148,8 @@ function ClientsTab({ me, notify }) {
                 {label}
               </div>
               <div
-                className="font-extrabold"
-                style={{ color: C.ink, fontSize: 22 }}
+                className="font-extrabold text-xl sm:text-2xl"
+                style={{ color: C.ink, overflowWrap: "anywhere" }}
               >
                 {value}
               </div>
@@ -256,7 +256,13 @@ function ClientsTab({ me, notify }) {
                       </span>
                     ) : null}
                   </div>
-                  <div style={{ fontSize: 12.5, color: C.sub }}>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: C.sub,
+                      overflowWrap: "anywhere",
+                    }}
+                  >
                     {[c.contact, c.phone, c.deployUrl]
                       .filter(Boolean)
                       .join(" · ") || "—"}
