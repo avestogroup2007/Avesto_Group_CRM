@@ -35,6 +35,7 @@ import { AdminRoutes } from "../pages/Routes.jsx";
 import AdminChecklists from "./AdminChecklists.jsx";
 import AdminAccess from "./AdminAccess.jsx";
 import AdminCashDict from "./AdminCashDict.jsx";
+import AdminApproval from "./AdminApproval.jsx";
 
 // Предпросмотр списка сотрудников из iiko (шаг 1: только чтение). iiko —
 // источник правды по кадрам; на следующем шаге отсюда будем импортировать
@@ -1536,6 +1537,7 @@ export function AdminPanel({ s, dispatch, notify }) {
     ["sla", "SLA-нормативы", Clock],
     ["sops", "Регламенты", ListChecks],
     ["cashdict", "Справочники кассы", Wallet],
+    ["approval", "Согласование расходов", ShieldCheck],
     ...(checklistsOn ? [["checklists", "Чек-листы", ListChecks]] : []),
     ["system", "Система", Settings],
     ["audit", "Журнал безопасности", ShieldCheck],
@@ -1589,6 +1591,7 @@ export function AdminPanel({ s, dispatch, notify }) {
       )}
       {tab === "access" && <AdminAccess notify={notify} />}
       {tab === "cashdict" && <AdminCashDict notify={notify} />}
+      {tab === "approval" && <AdminApproval s={s} notify={notify} />}
       {tab === "audit" && <AdminAudit />}
       {tab === "system" && (
         <AdminSystem s={s} dispatch={dispatch} notify={notify} />

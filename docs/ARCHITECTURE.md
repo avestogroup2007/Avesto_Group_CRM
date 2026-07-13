@@ -70,6 +70,7 @@ Office живёт на установке владельца и НЕ имеет 
 - `OrgConfig` — организация (управляет sysadmin/director в админке)
 - `ModuleConfig` — модули (управляет owner в Back Office)
 - `AccessConfig` — доступ по ролям (управляет sysadmin в админке)
+- `ApprovalConfig` — пороги согласования расходов (управляет director/sysadmin в админке)
 
 Все читаются сервисом с кэшем TTL 60 сек и безопасными дефолтами.
 

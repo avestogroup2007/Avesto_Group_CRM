@@ -12,6 +12,10 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { sendTelegram, esc, topicFor } from "../services/telegram.js";
+import {
+  refreshApprovalConfig,
+  thresholdForBranch,
+} from "../services/approvalConfig.js";
 
 // Сумма для Telegram-сообщений (с разделителями разрядов).
 const fmtMoney = (v) => Number(v).toLocaleString("ru-RU");
@@ -549,15 +553,23 @@ r.post(
     }
     const d = parsed.data;
     const rate = d.currency === "UZS" ? 1 : d.rate;
+    const amountUzs = toUzs(d.amount, rate);
     // Приходы согласования не требуют. Расход становится заявкой (pending),
-    // кроме случая, когда согласующий сам создаёт и просит провести сразу.
+    // кроме случая, когда согласующий сам создаёт и просит провести сразу
+    // ИЛИ сумма не превышает порог согласования (общий или по филиалу).
     let approval = "approved";
     const approvedFields = {};
     if (d.direction === "expense") {
+      await refreshApprovalConfig().catch(() => {});
+      const threshold = thresholdForBranch(d.branchId);
+      const withinThreshold = threshold > 0 && amountUzs <= threshold;
       const postDirect = d.postNow && canApprove(req.user.role);
-      approval = postDirect ? "approved" : "pending";
+      approval = postDirect || withinThreshold ? "approved" : "pending";
       if (postDirect) {
         approvedFields.approvedById = req.user.uid;
+        approvedFields.approvedAt = new Date();
+      } else if (withinThreshold) {
+        // Авто-согласование по порогу: фиксируем время, исполнитель — система.
         approvedFields.approvedAt = new Date();
       }
     }
@@ -575,7 +587,7 @@ r.post(
         amount: BigInt(Math.round(d.amount)),
         currency: d.currency,
         rate,
-        amountUzs: BigInt(toUzs(d.amount, rate)),
+        amountUzs: BigInt(amountUzs),
         branchId: d.branchId || null,
         branchName: d.branchName || "",
         source: "manual",
