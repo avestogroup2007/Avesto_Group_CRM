@@ -36,6 +36,7 @@ import payrollRoutes from "./routes/payroll.js";
 import foodCostRoutes from "./routes/foodCost.js";
 import planRoutes from "./routes/plan.js";
 import todoRoutes from "./routes/todos.js";
+import todosCronRoutes from "./routes/todosCron.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
@@ -157,6 +158,8 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/food-cost", foodCostRoutes);
 app.use("/api/plan", planRoutes);
 app.use("/api/todos", todoRoutes);
+// Крон-напоминания — свой секрет в заголовке, без пользовательской авторизации.
+app.use("/api/todos-cron", todosCronRoutes);
 
 // Обработка 404 и ошибок — всегда последними. Sentry ставится перед нашим
 // обработчиком: ошибка сначала уходит в мониторинг, затем клиенту как обычно.

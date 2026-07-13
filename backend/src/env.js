@@ -54,6 +54,10 @@ const EnvSchema = z.object({
   // X-Telegram-Bot-Api-Secret-Token; пусто = вебхук отключён. PUBLIC_BASE_URL —
   // внешний адрес бэкенда для setWebhook (на Render можно RENDER_EXTERNAL_URL).
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // Секрет крон-эндпоинта напоминаний о задачах (POST /api/todos-cron/remind).
+  // Внешний планировщик (Render Cron/пингер) шлёт его в заголовке X-Cron-Secret.
+  // Пусто = напоминания отключены (эндпоинт отвечает 503).
+  TODO_REMINDER_SECRET: z.string().min(1).optional(),
   PUBLIC_BASE_URL: z.string().url().optional(),
   // Адрес веб-приложения — для кнопки «Открыть CRM» (Mini App) в Telegram-боте.
   PUBLIC_APP_URL: z.string().url().optional(),
