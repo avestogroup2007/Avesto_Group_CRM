@@ -1464,19 +1464,37 @@ export async function storeBalances({ timestamp, departmentId }) {
   }
 }
 
-// Справочник поставщиков iiko: { id -> имя }. Терпимо к формату (разные версии
-// отдают <employee>/<supplierDto>/<counteragent>).
+// Справочник поставщиков iiko: { id -> имя }. Терпимо к формату — пробуем JSON и
+// XML, несколько имён элементов/полей (версии iiko отдают по-разному).
 async function fetchSuppliers(key) {
   const map = {};
   try {
     const res = await fetch(
-      `${BASE}/resto/api/suppliers?key=${encodeURIComponent(key)}`
+      `${BASE}/resto/api/suppliers?key=${encodeURIComponent(key)}`,
+      { headers: { Accept: "application/json" } }
     );
     const text = await res.text();
-    if (!res.ok) return { map, rawFirst: "" };
+    if (!res.ok) return { map, rawFirst: text.slice(0, 500) };
+    const trimmed = text.trim();
+    // JSON: массив объектов { id, name/displayName/code }.
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      try {
+        const j = JSON.parse(trimmed);
+        const arr = Array.isArray(j) ? j : j.suppliers || j.items || [];
+        for (const s of arr) {
+          if (s && s.id) map[s.id] = s.name || s.displayName || s.code || s.id;
+        }
+        return {
+          map,
+          rawFirst: arr[0] ? JSON.stringify(arr[0]).slice(0, 700) : "",
+        };
+      } catch {
+        /* не JSON — попробуем XML ниже */
+      }
+    }
     const blocks =
       text.match(
-        /<(?:employee|supplierDto|counteragent)\b[^>]*>[\s\S]*?<\/(?:employee|supplierDto|counteragent)>/g
+        /<(?:employee|supplierDto|supplier|counteragent|corporateItemDto)\b[^>]*>[\s\S]*?<\/(?:employee|supplierDto|supplier|counteragent|corporateItemDto)>/g
       ) || [];
     for (const b of blocks) {
       const one = (tag) => {
@@ -1487,7 +1505,10 @@ async function fetchSuppliers(key) {
       const name = one("name") || one("displayName") || one("code");
       if (id) map[id] = name || id;
     }
-    return { map, rawFirst: blocks[0] ? blocks[0].slice(0, 900) : "" };
+    return {
+      map,
+      rawFirst: blocks[0] ? blocks[0].slice(0, 900) : text.slice(0, 500),
+    };
   } catch {
     return { map, rawFirst: "" };
   }
@@ -1520,28 +1541,45 @@ export async function supplierBalances({ timestamp }) {
       /* оставим пустым */
     }
     const byCa = new Map();
+    const nameByCa = new Map();
     for (const r of rows) {
       const ca =
         r.counteragent || r.counteragentId || r.supplier || r.account || null;
       if (!ca) continue;
       const sum = Number(r.sum ?? r.balance ?? r.amount ?? r.value ?? 0) || 0;
       byCa.set(ca, (byCa.get(ca) || 0) + sum);
+      // Имя нередко есть прямо в строке баланса — берём его в первую очередь.
+      const nm =
+        r.counteragentName ||
+        r.name ||
+        r.supplierName ||
+        r.accountName ||
+        r.counteragentGroup ||
+        "";
+      if (nm && !nameByCa.has(ca)) nameByCa.set(ca, nm);
     }
     const { map: supMap, rawFirst: supRaw } = await fetchSuppliers(key);
     const out = [...byCa.entries()]
       .map(([id, balance]) => ({
         supplierId: id,
-        name: supMap[id] || id,
+        name: nameByCa.get(id) || supMap[id] || id,
         debt: Math.round(balance * 100) / 100,
       }))
       // Долг = кому мы должны (баланс > 0). Нулевые/переплаты — в конце.
       .sort((a, b) => b.debt - a.debt);
+    // Диагностика: если имена не подставились (остались GUID) — покажем сырую
+    // первую строку баланса (увидеть имена полей) и образец справочника.
+    const guid = /^[0-9a-fA-F-]{30,40}$/;
+    const namesMissing = out.length > 0 && out.every((x) => guid.test(x.name));
     const result = { rows: out, raw: rows.length };
     if (!rows.length) {
       result.sample = text.slice(0, 1000);
       result.bytes = text.length;
     }
-    if (!Object.keys(supMap).length) result.suppliersRawFirst = supRaw;
+    if (namesMissing || !rows.length) {
+      result.rowSample = rows[0] ? JSON.stringify(rows[0]).slice(0, 700) : "";
+      result.suppliersRawFirst = supRaw;
+    }
     return result;
   } finally {
     releaseKey(key);
