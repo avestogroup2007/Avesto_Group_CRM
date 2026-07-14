@@ -842,7 +842,9 @@ function DebtsTab() {
               <table className="w-full" style={{ fontSize: 12.5 }}>
                 <thead>
                   <tr style={{ color: C.faint, textAlign: "left" }}>
-                    <th className="pb-2 pr-2 font-semibold">Поставщик</th>
+                    <th className="pb-2 pr-2 font-semibold">
+                      Счёт / контрагент
+                    </th>
                     <th className="pb-2 font-semibold text-right">Долг, сум</th>
                   </tr>
                 </thead>
