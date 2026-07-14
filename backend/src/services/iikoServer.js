@@ -809,12 +809,17 @@ export function buildProductionXml({
         `</item>`
     )
     .join("");
+  // Акт приготовления в iiko — документ списания (AbstractProductsWriteoffDocument),
+  // которому обязателен склад НА УРОВНЕ ДОКУМЕНТА (<storeId>). Без него iiko
+  // отвечает «Argument for @NotNull parameter 'store' … must not be null».
+  // Склад в позициях оставляем для сборок, где он читается там.
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<document>` +
     (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
     `<dateIncoming>${dt}</dateIncoming>` +
     `<status>${status}</status>` +
+    `<storeId>${escXml(storeId)}</storeId>` +
     (comment ? `<comment>${escXml(comment)}</comment>` : "") +
     `<items>${rows}</items>` +
     `</document>`
