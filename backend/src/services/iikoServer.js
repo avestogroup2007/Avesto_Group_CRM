@@ -1587,6 +1587,10 @@ export async function supplierBalances({ timestamp }) {
     }
     const [{ map: accMap, rawFirst: accRaw }, { map: supMap }] =
       await Promise.all([fetchAccounts(key), fetchSuppliers(key)]);
+    // Долг поставщикам — только счета РАСЧЁТОВ С ПОСТАВЩИКАМИ (кредиторка), а не
+    // весь план счетов (иначе в «долг» попадут выручка/касса/склады). Отбираем
+    // по названию/типу счёта.
+    const SUPPLIER_RE = /поставщик|кредитор|supplier|payable|creditor/i;
     const out = [...byAcc.entries()]
       .map(([id, balance]) => {
         const a = accMap[id];
@@ -1600,7 +1604,11 @@ export async function supplierBalances({ timestamp }) {
           debt: Math.round(-balance * 100) / 100,
         };
       })
-      .filter((x) => x.balance !== 0)
+      .filter(
+        (x) =>
+          x.balance !== 0 &&
+          (SUPPLIER_RE.test(x.name) || SUPPLIER_RE.test(x.accountType))
+      )
       .sort((a, b) => b.debt - a.debt);
     // Диагностика: если имена не подставились (остались GUID) — покажем сырую
     // строку баланса и образец плана счетов.
