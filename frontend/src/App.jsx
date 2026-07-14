@@ -48,6 +48,7 @@ const StaffKpiView = lazy(() => import("./pages/StaffKpi.jsx"));
 const DdsView = lazy(() => import("./pages/Dds.jsx"));
 const PayrollView = lazy(() => import("./pages/Payroll.jsx"));
 const FoodCostView = lazy(() => import("./pages/FoodCost.jsx"));
+const ProcurementView = lazy(() => import("./pages/Procurement.jsx"));
 const PlanView = lazy(() => import("./pages/Plan.jsx"));
 const SetupWizard = lazy(() => import("./components/SetupWizard.jsx"));
 const TodoManagerView = lazy(() => import("./pages/TodoManager.jsx"));
@@ -620,6 +621,11 @@ export default function App({ authUser, onLogout }) {
                   { roles: NAV.find((n) => n.key === "plan").roles },
                   me.role,
                 ) && <PlanView notify={notify} role={me.role} />}
+              {s.view === "procurement" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "procurement").roles },
+                  me.role,
+                ) && <ProcurementView notify={notify} role={me.role} />}
               {s.view === "todos" && <TodoManagerView notify={notify} />}
               {s.view === "create" && (
                 <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />
