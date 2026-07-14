@@ -33,6 +33,35 @@ function isBootstrapAdmin(user) {
   const key = env.BOOTSTRAP_ADMIN_LOGIN;
   return user.name === key || user.login === key;
 }
+
+// Бутстрап владельца: если логин совпадает с OWNER_LOGIN (задаётся в окружении
+// хостинга), при входе выдаём роль owner — это единственный безопасный способ
+// назначить владельца (через интерфейс owner назначить нельзя). Идемпотентно.
+async function maybePromoteOwner(user) {
+  // Читаем из process.env напрямую — значение задаётся в окружении хостинга
+  // (Render) и не является секретом; так же оно доступно и тестам во время
+  // выполнения. Схема env.js документирует переменную.
+  const key = process.env.OWNER_LOGIN;
+  if (!key) return user;
+  const matches = user.name === key || user.login === key;
+  if (!matches || user.role === "owner") return user;
+  const updated = await db.user
+    .update({ where: { id: user.id }, data: { role: "owner" } })
+    .catch(() => null);
+  if (updated) {
+    await db.auditLog
+      .create({
+        data: {
+          userId: user.id,
+          event: "owner_bootstrap",
+          detail: `Аккаунт ${user.name} повышен до owner по OWNER_LOGIN`,
+        },
+      })
+      .catch(() => {});
+    return updated;
+  }
+  return user;
+}
 async function loginAllowed(user) {
   if (isBootstrapAdmin(user)) return true;
   if (user.source === "iiko") return !user.iikoDeleted;
@@ -130,9 +159,13 @@ r.post(
       });
     }
 
+    // Бутстрап владельца по OWNER_LOGIN (до выпуска токена — чтобы роль owner
+    // сразу попала в токен и раздел «Back Office» стал виден с первого входа).
+    const authed = await maybePromoteOwner(user);
+
     // В токен кладём только id и роль — ничего секретного.
     const token = jwt.sign(
-      { uid: user.id, role: user.role, branchId: user.branchId },
+      { uid: authed.id, role: authed.role, branchId: authed.branchId },
       env.JWT_SECRET,
       { expiresIn: `${TOKEN_TTL_HOURS}h` }
     );
@@ -182,7 +215,7 @@ r.post(
       id: user.id,
       name: user.name,
       displayName: user.displayName || user.name,
-      role: user.role,
+      role: authed.role,
       branchId: user.branchId,
       // Рабочий филиал сотрудника (id из конфигурации организации). Задаётся в
       // админке; ограничивает, какие данные сотрудник видит в приложении.

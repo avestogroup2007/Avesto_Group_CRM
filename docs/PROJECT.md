@@ -200,6 +200,7 @@ sysadmin/staff), `Task`/`TaskHistory`/`Comment`, `CashReport`, `MoneyTx`
 | TELEGRAM_WEBHOOK_SECRET, PUBLIC_BASE_URL | вебхук бота чек-листов |
 | ANTHROPIC_API_KEY | ИИ-помощник (Claude API) |
 | BOOTSTRAP_ADMIN_LOGIN | защищённая учётка (по умолчанию sysadmin) |
+| OWNER_LOGIN | логин владельца: при входе этот аккаунт получает роль `owner` (полный доступ + раздел «Back Office»). Назначить owner через интерфейс нельзя — только этой переменной |
 | TZ=Asia/Tashkent | часовой пояс |
 
 Все секреты задаются только в окружении хостинга и никогда не попадают в код

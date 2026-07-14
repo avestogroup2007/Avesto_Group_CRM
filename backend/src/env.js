@@ -71,6 +71,11 @@ const EnvSchema = z.object({
   // первичной синхронизации и на случай, если iiko-сервер недоступен. Логин
   // этой учётки задаётся здесь (по умолчанию «sysadmin» — демо-админ из сида).
   BOOTSTRAP_ADMIN_LOGIN: z.string().min(1).default("sysadmin"),
+  // Логин владельца системы: при входе этот аккаунт автоматически получает роль
+  // owner (полный доступ + раздел «Back Office»). Задаётся ТОЛЬКО в окружении
+  // хостинга (Render) — назначить owner через интерфейс нельзя (защита от
+  // эскалации). Пусто — авто-повышения нет.
+  OWNER_LOGIN: z.string().min(1).optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
