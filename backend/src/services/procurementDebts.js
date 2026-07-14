@@ -94,10 +94,48 @@ export async function importDebtWorkbook(buffer) {
 
 // Сводка долга по поставщикам из импортированных документов (или null, если
 // импорта ещё не было). Долг = сумма «Осталось оплатить»; просрочка — по сроку.
-export async function importedDebtSummary() {
-  const docs = await db.supplierDebtDoc.findMany({ take: 100000 });
-  if (!docs.length) return null;
+// warehouse — необязательный фильтр по складу/филиалу (иначе — все склады).
+// Дополнительно отдаём разбивку по складам (byWarehouse) для показа «по филиалам».
+export async function importedDebtSummary({ warehouse = "" } = {}) {
+  const all = await db.supplierDebtDoc.findMany({ take: 100000 });
+  if (!all.length) return null;
   const today = new Date();
+  const round2 = (n) => Math.round(n * 100) / 100;
+
+  // Разбивку по складам считаем по ВСЕМ документам (независимо от фильтра),
+  // чтобы селектор филиала всегда показывал полный список складов.
+  const byWh = new Map();
+  for (const d of all) {
+    const rem = Number(d.remaining) || 0;
+    if (rem <= 0) continue;
+    const wh = d.warehouse || "—";
+    const cur = byWh.get(wh) || {
+      warehouse: wh,
+      debt: 0,
+      docs: 0,
+      overdueDebt: 0,
+      suppliers: new Set(),
+    };
+    cur.debt += rem;
+    cur.docs += 1;
+    cur.suppliers.add(d.supplier);
+    if (d.dueDate && d.dueDate < today) cur.overdueDebt += rem;
+    byWh.set(wh, cur);
+  }
+  const byWarehouse = [...byWh.values()]
+    .map((x) => ({
+      warehouse: x.warehouse,
+      debt: round2(x.debt),
+      docs: x.docs,
+      overdueDebt: round2(x.overdueDebt),
+      suppliers: x.suppliers.size,
+    }))
+    .sort((a, b) => b.debt - a.debt);
+
+  const docs = warehouse
+    ? all.filter((d) => (d.warehouse || "—") === warehouse)
+    : all;
+
   const bySup = new Map();
   let total = 0;
   let overdueTotal = 0;
@@ -124,16 +162,18 @@ export async function importedDebtSummary() {
   const rows = [...bySup.values()]
     .map((x) => ({
       ...x,
-      debt: Math.round(x.debt * 100) / 100,
-      overdueDebt: Math.round(x.overdueDebt * 100) / 100,
+      debt: round2(x.debt),
+      overdueDebt: round2(x.overdueDebt),
     }))
     .sort((a, b) => b.debt - a.debt);
   return {
     source: "import",
     rows,
-    totalDebt: Math.round(total * 100) / 100,
-    overdueTotal: Math.round(overdueTotal * 100) / 100,
+    byWarehouse,
+    warehouse: warehouse || "",
+    totalDebt: round2(total),
+    overdueTotal: round2(overdueTotal),
     count: rows.length,
-    importedAt: docs[0].importedAt,
+    importedAt: all[0].importedAt,
   };
 }

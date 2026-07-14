@@ -564,6 +564,20 @@ export async function productionRefs() {
   }
 }
 
+// Список складов iiko (id + название) для фильтра «по филиалам» в модуле
+// «Закупки и склад». В сети iiko склад = единица филиала (у каждого филиала
+// свой склад). Best-effort: если iiko не настроен — пустой список.
+export async function procurementStores() {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const s = await fetchStores(key);
+    return { stores: s.stores, sample: s.stores.length ? "" : s.sample };
+  } finally {
+    releaseKey(key);
+  }
+}
+
 // ── Отчёт производства ──────────────────────────────────────────────────────
 // Папки номенклатуры iiko (группы) — в терминах компании это «отделы».
 async function fetchGroups(key) {
@@ -1435,8 +1449,9 @@ export async function incomingInvoices({ from, to }) {
 }
 
 // Остатки складов на момент timestamp (yyyy-MM-ddTHH:mm:ss). Агрегируем по
-// товару (сумма по складам), обогащаем именем/единицей.
-export async function storeBalances({ timestamp, departmentId }) {
+// товару (сумма по складам), обогащаем именем/единицей. storeId — необязательный
+// фильтр по конкретному складу/филиалу (иначе — все склады).
+export async function storeBalances({ timestamp, departmentId, storeId }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await acquireKey();
   try {
@@ -1462,8 +1477,14 @@ export async function storeBalances({ timestamp, departmentId }) {
     } catch {
       /* оставим пустым */
     }
+    // Набор складов, встретившихся в ответе (для справки/диагностики).
+    const storesSeen = new Set();
     const byProduct = new Map();
     for (const r of rows) {
+      const st = r.store || r.storeId || "";
+      if (st) storesSeen.add(st);
+      // Фильтр по складу (филиалу), если задан.
+      if (storeId && st !== storeId) continue;
       const pid = r.product || r.productId;
       if (!pid) continue;
       const cur = byProduct.get(pid) || { productId: pid, stock: 0 };
@@ -1481,7 +1502,7 @@ export async function storeBalances({ timestamp, departmentId }) {
         stock: Math.round(x.stock * 1000) / 1000,
       };
     });
-    const result = { rows: out, raw: rows.length };
+    const result = { rows: out, raw: rows.length, storesSeen: [...storesSeen] };
     if (!rows.length) result.sample = text.slice(0, 800);
     return result;
   } finally {
