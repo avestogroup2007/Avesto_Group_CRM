@@ -592,7 +592,7 @@ async function fetchGroups(key) {
 // Полный список продуктов (без фильтра по типу) с папкой (parent) и единицей
 // измерения — для отчёта производства нужны имена ЛЮБЫХ productId из актов.
 async function fetchAllProducts(key) {
-  const res = await fetch(
+  const res = await fetchT(
     `${BASE}/resto/api/v2/entities/products/list?key=${encodeURIComponent(
       key
     )}&includeDeleted=false`,
@@ -1277,6 +1277,26 @@ export async function pnlReport({ from, to, department }) {
 // остатков. Разбор XML-выгрузки приходных накладных
 // (/documents/export/incomingInvoice).
 // Терпимо к обёрткам: ищем <document>…</document>, внутри — шапка и позиции.
+
+// fetch с таймаутом: iiko/Render иногда отвечают очень долго — без таймаута
+// синхронизация «висит» бесконечно. По истечении — понятная ошибка.
+async function fetchT(url, opts = {}, ms = 40000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctl.signal });
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      throw new Error(
+        `iiko не ответил за ${Math.round(ms / 1000)} сек (таймаут)`
+      );
+    }
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export function parseIncomingInvoicesXml(xml) {
   const docs = [];
   // Документ-накладная приходит как <document> (иногда <incomingInvoiceDto>).
@@ -1362,7 +1382,7 @@ export async function incomingInvoices({ from, to }) {
       `?from=${encodeURIComponent(from)}` +
       `&to=${encodeURIComponent(to)}` +
       `&key=${encodeURIComponent(key)}`;
-    const res = await fetch(url);
+    const res = await fetchT(url);
     const text = await res.text();
     if (res.status === 401) invalidateKey(key);
     if (!res.ok) {
