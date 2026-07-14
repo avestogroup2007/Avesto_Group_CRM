@@ -50,6 +50,7 @@ const EnvSchema = z.object({
   TELEGRAM_TOPIC_STAFF: z.string().min(1).optional(), // персонал (синхро iiko, доступ)
   TELEGRAM_TOPIC_REPORTS: z.string().min(1).optional(), // отчёты/сводки
   TELEGRAM_TOPIC_CHECKLIST: z.string().min(1).optional(), // чек-листы смены
+  TELEGRAM_TOPIC_GOODS: z.string().min(1).optional(), // закупки/склад: цены, остатки, движение
   // Интерактивный бот чек-листов (вебхук). Секрет проверяется в заголовке
   // X-Telegram-Bot-Api-Secret-Token; пусто = вебхук отключён. PUBLIC_BASE_URL —
   // внешний адрес бэкенда для setWebhook (на Render можно RENDER_EXTERNAL_URL).
@@ -58,6 +59,10 @@ const EnvSchema = z.object({
   // Внешний планировщик (Render Cron/пингер) шлёт его в заголовке X-Cron-Secret.
   // Пусто = напоминания отключены (эндпоинт отвечает 503).
   TODO_REMINDER_SECRET: z.string().min(1).optional(),
+  // Секрет крон-эндпоинта проверки закупок/склада (POST /api/procurement-cron/
+  // check). Внешний планировщик шлёт его в заголовке X-Cron-Secret. Пусто =
+  // авто-проверка отключена (эндпоинт отвечает 503).
+  PROCUREMENT_CRON_SECRET: z.string().min(1).optional(),
   PUBLIC_BASE_URL: z.string().url().optional(),
   // Адрес веб-приложения — для кнопки «Открыть CRM» (Mini App) в Telegram-боте.
   PUBLIC_APP_URL: z.string().url().optional(),

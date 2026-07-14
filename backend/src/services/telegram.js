@@ -22,6 +22,7 @@ export function topicFor(kind) {
   if (kind === "staff") return env.TELEGRAM_TOPIC_STAFF || undefined;
   if (kind === "report") return env.TELEGRAM_TOPIC_REPORTS || undefined;
   if (kind === "checklist") return env.TELEGRAM_TOPIC_CHECKLIST || undefined;
+  if (kind === "goods") return env.TELEGRAM_TOPIC_GOODS || undefined;
   return undefined;
 }
 

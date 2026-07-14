@@ -613,6 +613,31 @@ function ConfigTab({ notify, canConfig }) {
   const [cfg, setCfg] = useState(null);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      const r = await apiPost("/api/procurement/check-now");
+      if (r.skipped) {
+        notify &&
+          notify(
+            r.reason === "notify_off"
+              ? "Сигналы в Telegram выключены в правилах"
+              : "Telegram не настроен на сервере",
+          );
+      } else {
+        notify &&
+          notify(
+            `Проверка выполнена: отправлено ${r.sent}, повторов пропущено ${r.duplicatesSkipped}`,
+          );
+      }
+    } catch (e) {
+      notify && notify(e.message || "Ошибка проверки");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   useEffect(() => {
     apiGet("/api/procurement/config")
@@ -738,18 +763,34 @@ function ConfigTab({ notify, canConfig }) {
       />
 
       {canConfig && (
-        <button
-          onClick={save}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
-          style={{
-            background: C.brandA,
-            fontSize: 14,
-            opacity: saving ? 0.7 : 1,
-          }}
-        >
-          <Save size={16} /> {saving ? "Сохранение…" : "Сохранить правила"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{
+              background: C.brandA,
+              fontSize: 14,
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            <Save size={16} /> {saving ? "Сохранение…" : "Сохранить правила"}
+          </button>
+          <button
+            onClick={checkNow}
+            disabled={checking}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.sub,
+              fontSize: 14,
+              opacity: checking ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={16} className={checking ? "animate-spin" : ""} />
+            {checking ? "Проверка…" : "Проверить сигналы сейчас"}
+          </button>
+        </div>
       )}
     </div>
   );

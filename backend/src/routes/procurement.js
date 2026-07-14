@@ -19,6 +19,7 @@ import {
   stockOverview,
   movementReport,
 } from "../services/procurementSync.js";
+import { sendProcurementAlerts } from "../services/procurementAlerts.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -81,6 +82,16 @@ r.post(
       })
       .catch(() => {});
     res.json(out);
+  })
+);
+
+// ── Проверить сейчас: собрать сигналы и отправить в Telegram (с дедупом) ─────
+r.post(
+  "/check-now",
+  requireRole("director", "finance", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const result = await sendProcurementAlerts();
+    res.json(result);
   })
 );
 
