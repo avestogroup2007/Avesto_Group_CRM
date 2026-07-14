@@ -1514,9 +1514,41 @@ async function fetchSuppliers(key) {
   }
 }
 
-// Задолженность перед поставщиками на дату: баланс взаиморасчётов по контрагентам
-// из iiko (timestamp: yyyy-MM-ddTHH:mm:ss). Группируем по контрагенту, обогащаем
-// именем поставщика. Знак: положительный баланс = мы должны поставщику.
+// План счетов iiko: { id -> { name, type } } — для имён счетов взаиморасчётов.
+async function fetchAccounts(key) {
+  const map = {};
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/v2/entities/accounts/list?key=${encodeURIComponent(
+        key
+      )}`,
+      { headers: { Accept: "application/json" } }
+    );
+    const text = await res.text();
+    if (!res.ok) return { map, rawFirst: text.slice(0, 400) };
+    let arr = [];
+    try {
+      const j = JSON.parse(text);
+      arr = Array.isArray(j) ? j : j.accounts || [];
+    } catch {
+      return { map, rawFirst: text.slice(0, 400) };
+    }
+    for (const a of arr) {
+      if (a && a.id) map[a.id] = { name: a.name || a.id, type: a.type || "" };
+    }
+    return {
+      map,
+      rawFirst: arr[0] ? JSON.stringify(arr[0]).slice(0, 500) : "",
+    };
+  } catch {
+    return { map, rawFirst: "" };
+  }
+}
+
+// Задолженность по взаиморасчётам из iiko (timestamp: yyyy-MM-ddTHH:mm:ss).
+// Отчёт balance/counteragents часто отдаёт остаток ПО СЧЁТУ (counteragent=null),
+// поэтому группируем по счёту (или контрагенту, если он есть) и берём имя из
+// плана счетов. Долг = кредитовый (отрицательный) остаток → сколько мы должны.
 export async function supplierBalances({ timestamp }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await acquireKey();
@@ -1540,35 +1572,38 @@ export async function supplierBalances({ timestamp }) {
     } catch {
       /* оставим пустым */
     }
-    const byCa = new Map();
-    const nameByCa = new Map();
+    // Группируем по счёту (в ответе counteragent часто null) — или по контрагенту,
+    // если он задан. Имя из строки берём в первую очередь, если есть.
+    const byAcc = new Map();
+    const nameByAcc = new Map();
     for (const r of rows) {
-      const ca =
-        r.counteragent || r.counteragentId || r.supplier || r.account || null;
-      if (!ca) continue;
+      const acc =
+        r.account || r.counteragent || r.counteragentId || r.supplier || null;
+      if (!acc) continue;
       const sum = Number(r.sum ?? r.balance ?? r.amount ?? r.value ?? 0) || 0;
-      byCa.set(ca, (byCa.get(ca) || 0) + sum);
-      // Имя нередко есть прямо в строке баланса — берём его в первую очередь.
-      const nm =
-        r.counteragentName ||
-        r.name ||
-        r.supplierName ||
-        r.accountName ||
-        r.counteragentGroup ||
-        "";
-      if (nm && !nameByCa.has(ca)) nameByCa.set(ca, nm);
+      byAcc.set(acc, (byAcc.get(acc) || 0) + sum);
+      const nm = r.accountName || r.counteragentName || r.name || "";
+      if (nm && !nameByAcc.has(acc)) nameByAcc.set(acc, nm);
     }
-    const { map: supMap, rawFirst: supRaw } = await fetchSuppliers(key);
-    const out = [...byCa.entries()]
-      .map(([id, balance]) => ({
-        supplierId: id,
-        name: nameByCa.get(id) || supMap[id] || id,
-        debt: Math.round(balance * 100) / 100,
-      }))
-      // Долг = кому мы должны (баланс > 0). Нулевые/переплаты — в конце.
+    const [{ map: accMap, rawFirst: accRaw }, { map: supMap }] =
+      await Promise.all([fetchAccounts(key), fetchSuppliers(key)]);
+    const out = [...byAcc.entries()]
+      .map(([id, balance]) => {
+        const a = accMap[id];
+        return {
+          supplierId: id,
+          name: nameByAcc.get(id) || (a && a.name) || supMap[id] || id,
+          accountType: a ? a.type : "",
+          balance: Math.round(balance * 100) / 100,
+          // Долг = кредитовый (отрицательный) остаток → сколько мы должны.
+          // Положительный debt = мы должны; отрицательный = аванс/переплата.
+          debt: Math.round(-balance * 100) / 100,
+        };
+      })
+      .filter((x) => x.balance !== 0)
       .sort((a, b) => b.debt - a.debt);
     // Диагностика: если имена не подставились (остались GUID) — покажем сырую
-    // первую строку баланса (увидеть имена полей) и образец справочника.
+    // строку баланса и образец плана счетов.
     const guid = /^[0-9a-fA-F-]{30,40}$/;
     const namesMissing = out.length > 0 && out.every((x) => guid.test(x.name));
     const result = { rows: out, raw: rows.length };
@@ -1578,7 +1613,7 @@ export async function supplierBalances({ timestamp }) {
     }
     if (namesMissing || !rows.length) {
       result.rowSample = rows[0] ? JSON.stringify(rows[0]).slice(0, 700) : "";
-      result.suppliersRawFirst = supRaw;
+      result.suppliersRawFirst = accRaw;
     }
     return result;
   } finally {
