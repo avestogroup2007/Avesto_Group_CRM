@@ -146,6 +146,7 @@ export async function supplierDebts() {
     raw: res.raw,
     sample: res.sample,
     bytes: res.bytes,
+    rowSample: res.rowSample,
     suppliersRawFirst: res.suppliersRawFirst,
   };
 }

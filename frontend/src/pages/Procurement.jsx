@@ -760,6 +760,39 @@ function DebtsTab() {
             />
           </div>
 
+          {(data?.rowSample || data?.suppliersRawFirst) && rows.length > 0 ? (
+            <div
+              className="rounded-2xl p-3"
+              style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+            >
+              <div
+                className="font-bold mb-1"
+                style={{ color: "#92400E", fontSize: 13 }}
+              >
+                Диагностика: имена поставщиков не подставились
+              </div>
+              <pre
+                className="overflow-x-auto"
+                style={{
+                  fontSize: 10.5,
+                  background: "#fff",
+                  border: "1px solid #FDE68A",
+                  borderRadius: 8,
+                  padding: 8,
+                  maxHeight: 240,
+                  whiteSpace: "pre-wrap",
+                  color: "#57430E",
+                }}
+              >
+                {`Строка баланса: ${data.rowSample || "—"}\n\nСправочник: ${data.suppliersRawFirst || "—"}`}
+              </pre>
+              <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+                Пришлите этот блок разработчику — по нему подставим настоящие
+                имена поставщиков.
+              </div>
+            </div>
+          ) : null}
+
           {rows.length === 0 ? (
             <>
               <EmptyState
