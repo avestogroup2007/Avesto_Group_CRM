@@ -1463,3 +1463,87 @@ export async function storeBalances({ timestamp, departmentId }) {
     releaseKey(key);
   }
 }
+
+// Справочник поставщиков iiko: { id -> имя }. Терпимо к формату (разные версии
+// отдают <employee>/<supplierDto>/<counteragent>).
+async function fetchSuppliers(key) {
+  const map = {};
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/suppliers?key=${encodeURIComponent(key)}`
+    );
+    const text = await res.text();
+    if (!res.ok) return { map, rawFirst: "" };
+    const blocks =
+      text.match(
+        /<(?:employee|supplierDto|counteragent)\b[^>]*>[\s\S]*?<\/(?:employee|supplierDto|counteragent)>/g
+      ) || [];
+    for (const b of blocks) {
+      const one = (tag) => {
+        const mm = b.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+        return mm ? decodeXml(mm[1].trim()) : "";
+      };
+      const id = one("id");
+      const name = one("name") || one("displayName") || one("code");
+      if (id) map[id] = name || id;
+    }
+    return { map, rawFirst: blocks[0] ? blocks[0].slice(0, 900) : "" };
+  } catch {
+    return { map, rawFirst: "" };
+  }
+}
+
+// Задолженность перед поставщиками на дату: баланс взаиморасчётов по контрагентам
+// из iiko (timestamp: yyyy-MM-ddTHH:mm:ss). Группируем по контрагенту, обогащаем
+// именем поставщика. Знак: положительный баланс = мы должны поставщику.
+export async function supplierBalances({ timestamp }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const url =
+      `${BASE}/resto/api/v2/reports/balance/counteragents` +
+      `?timestamp=${encodeURIComponent(timestamp)}` +
+      `&key=${encodeURIComponent(key)}`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko balance/counteragents → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    let rows = [];
+    try {
+      const j = text ? JSON.parse(text) : [];
+      rows = Array.isArray(j) ? j : j.rows || j.data || [];
+    } catch {
+      /* оставим пустым */
+    }
+    const byCa = new Map();
+    for (const r of rows) {
+      const ca =
+        r.counteragent || r.counteragentId || r.supplier || r.account || null;
+      if (!ca) continue;
+      const sum = Number(r.sum ?? r.balance ?? r.amount ?? r.value ?? 0) || 0;
+      byCa.set(ca, (byCa.get(ca) || 0) + sum);
+    }
+    const { map: supMap, rawFirst: supRaw } = await fetchSuppliers(key);
+    const out = [...byCa.entries()]
+      .map(([id, balance]) => ({
+        supplierId: id,
+        name: supMap[id] || id,
+        debt: Math.round(balance * 100) / 100,
+      }))
+      // Долг = кому мы должны (баланс > 0). Нулевые/переплаты — в конце.
+      .sort((a, b) => b.debt - a.debt);
+    const result = { rows: out, raw: rows.length };
+    if (!rows.length) {
+      result.sample = text.slice(0, 1000);
+      result.bytes = text.length;
+    }
+    if (!Object.keys(supMap).length) result.suppliersRawFirst = supRaw;
+    return result;
+  } finally {
+    releaseKey(key);
+  }
+}

@@ -18,6 +18,7 @@ import {
   priceTrends,
   stockOverview,
   movementReport,
+  supplierDebts,
 } from "../services/procurementSync.js";
 import { sendProcurementAlerts } from "../services/procurementAlerts.js";
 
@@ -139,6 +140,26 @@ r.get(
       return res.status(400).json({ error: "Укажите период from/to" });
     }
     res.json(await movementReport(parsed.data));
+  })
+);
+
+// ── Задолженность перед поставщиками (баланс взаиморасчётов из iiko) ─────────
+r.get(
+  "/debts",
+  asyncHandler(async (req, res) => {
+    try {
+      res.json(await supplierDebts());
+    } catch (e) {
+      const notConfigured = e && e.name === "IikoNotConfiguredError";
+      res.status(notConfigured ? 200 : 502).json({
+        rows: [],
+        totalDebt: 0,
+        iikoConfigured: !notConfigured,
+        error: notConfigured
+          ? "Интеграция iiko не настроена"
+          : e.message || "Ошибка обращения к iiko",
+      });
+    }
   })
 );
 
