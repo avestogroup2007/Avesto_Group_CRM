@@ -2,7 +2,11 @@
 // накладные и остатки, кладёт историю цен в БД и прогоняет через чистое ядро
 // (procurement.js). Универсально: источник данных (iiko) — сменный адаптер.
 import { db } from "../db.js";
-import { incomingInvoices, storeBalances } from "./iikoServer.js";
+import {
+  incomingInvoices,
+  storeBalances,
+  supplierBalances,
+} from "./iikoServer.js";
 import {
   analyzePriceTrends,
   analyzeStock,
@@ -127,6 +131,23 @@ export async function stockOverview({ days = 30 } = {}) {
     };
   });
   return analyzeStock(items, cfg);
+}
+
+// Задолженность перед поставщиками на сегодня (баланс взаиморасчётов из iiko).
+export async function supplierDebts() {
+  const now = new Date();
+  const res = await supplierBalances({ timestamp: `${ymd(now)}T23:59:59` });
+  const rows = res.rows || [];
+  const owed = rows.filter((r) => r.debt > 0);
+  return {
+    rows,
+    totalDebt: Math.round(owed.reduce((s, r) => s + r.debt, 0) * 100) / 100,
+    count: owed.length,
+    raw: res.raw,
+    sample: res.sample,
+    bytes: res.bytes,
+    suppliersRawFirst: res.suppliersRawFirst,
+  };
 }
 
 // Движение товара за период: сверка начало + приход − конец = расход.

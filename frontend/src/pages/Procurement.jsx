@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Save,
   AlertTriangle,
+  Receipt,
 } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -23,6 +24,7 @@ import {
   NiceDate,
   NiceSelect,
   AdToggle,
+  CountUp,
 } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
@@ -79,6 +81,7 @@ const TABS = [
   { key: "trends", label: "Цены", icon: TrendingUp },
   { key: "stock", label: "Остатки", icon: Boxes },
   { key: "movement", label: "Движение", icon: ArrowRightLeft },
+  { key: "debts", label: "Долги", icon: Receipt },
   { key: "config", label: "Правила", icon: SlidersHorizontal },
 ];
 
@@ -120,6 +123,7 @@ export default function Procurement({ notify, role }) {
       {tab === "trends" && <TrendsTab notify={notify} canEdit={canEdit} />}
       {tab === "stock" && <StockTab />}
       {tab === "movement" && <MovementTab />}
+      {tab === "debts" && <DebtsTab />}
       {tab === "config" && <ConfigTab notify={notify} canConfig={canConfig} />}
     </div>
   );
@@ -682,6 +686,150 @@ function MovementTab() {
                       </td>
                       <td className="py-2">
                         <Pill meta={MOVE[r.flag] || MOVE.ok} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Долги поставщикам ───────────────────────────────────────────────────────
+function DebtsTab() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    apiGet("/api/procurement/debts")
+      .then((d) => {
+        setData(d);
+        setErr("");
+      })
+      .catch((e) => setErr(e.message || "Не удалось загрузить"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const rows = (data?.rows || []).filter((r) => r.debt > 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
+          style={{
+            border: `1px solid ${C.border}`,
+            color: C.sub,
+            fontSize: 13,
+          }}
+        >
+          <RefreshCw size={14} /> Обновить
+        </button>
+        <div style={{ fontSize: 11.5, color: C.faint }}>
+          Взаиморасчёты с поставщиками из iiko на сегодня
+        </div>
+      </div>
+
+      {data?.error && <ErrBox text={data.error} />}
+      {err && <ErrBox text={err} />}
+
+      {loading ? (
+        <Spinner label="Загрузка задолженностей…" />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Kpi
+              label="Всего должны, сум"
+              value={<CountUp to={data?.totalDebt || 0} format={money} />}
+              tone={C.bad}
+            />
+            <Kpi
+              label="Поставщиков с долгом"
+              value={String(rows.length)}
+              tone={C.warn}
+            />
+          </div>
+
+          {rows.length === 0 ? (
+            <>
+              <EmptyState
+                icon={Receipt}
+                title="Задолженностей нет"
+                hint="Либо всё оплачено, либо в iiko не ведутся взаиморасчёты с поставщиками."
+              />
+              {data &&
+              data.raw === 0 &&
+              (data.sample || data.suppliersRawFirst) ? (
+                <div
+                  className="rounded-2xl p-3"
+                  style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+                >
+                  <div
+                    className="font-bold mb-1"
+                    style={{ color: "#92400E", fontSize: 13 }}
+                  >
+                    Диагностика (ответ iiko)
+                  </div>
+                  <pre
+                    className="overflow-x-auto"
+                    style={{
+                      fontSize: 10.5,
+                      background: "#fff",
+                      border: "1px solid #FDE68A",
+                      borderRadius: 8,
+                      padding: 8,
+                      maxHeight: 220,
+                      whiteSpace: "pre-wrap",
+                      color: "#57430E",
+                    }}
+                  >
+                    {data.sample || data.suppliersRawFirst}
+                  </pre>
+                  <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+                    Пришлите разработчику — настроим разбор взаиморасчётов.
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div
+              className="rounded-2xl bg-white p-3 overflow-x-auto"
+              style={{ border: `1px solid ${C.border}` }}
+            >
+              <table className="w-full" style={{ fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ color: C.faint, textAlign: "left" }}>
+                    <th className="pb-2 pr-2 font-semibold">Поставщик</th>
+                    <th className="pb-2 font-semibold text-right">Долг, сум</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 400).map((r) => (
+                    <tr
+                      key={r.supplierId}
+                      style={{ borderTop: `1px solid ${C.line}` }}
+                    >
+                      <td
+                        className="py-2 pr-2"
+                        style={{ color: C.ink, fontWeight: 600 }}
+                      >
+                        {r.name}
+                      </td>
+                      <td
+                        className="py-2 text-right"
+                        style={{ color: C.bad, fontWeight: 700 }}
+                      >
+                        {money(r.debt)}
                       </td>
                     </tr>
                   ))}
