@@ -20,6 +20,7 @@ import {
   movementReport,
   supplierDebts,
 } from "../services/procurementSync.js";
+import { procurementStores } from "../services/iikoServer.js";
 import { sendProcurementAlerts } from "../services/procurementAlerts.js";
 import {
   importDebtWorkbook,
@@ -115,12 +116,35 @@ r.post(
   })
 );
 
+// ── Список складов/филиалов для фильтра «по филиалам» ────────────────────────
+r.get(
+  "/stores",
+  asyncHandler(async (req, res) => {
+    try {
+      res.json(await procurementStores());
+    } catch (e) {
+      const notConfigured = e && e.name === "IikoNotConfiguredError";
+      res.status(notConfigured ? 200 : 502).json({
+        stores: [],
+        iikoConfigured: !notConfigured,
+        error: notConfigured
+          ? "Интеграция iiko не настроена"
+          : e.message || "Ошибка обращения к iiko",
+      });
+    }
+  })
+);
+
+// Необязательный фильтр по складу (id): пустая строка → все склады.
+const storeId = () => z.string().max(200).optional();
+
 // ── Тренд цен закупки (сезонная норма + сигналы) ────────────────────────────
 r.get(
   "/price-trends",
   asyncHandler(async (req, res) => {
     const months = Math.min(60, Math.max(1, Number(req.query.months) || 24));
-    res.json(await priceTrends({ months }));
+    const store = String(req.query.store || "");
+    res.json(await priceTrends({ months, storeId: store }));
   })
 );
 
@@ -129,7 +153,8 @@ r.get(
   "/stock",
   asyncHandler(async (req, res) => {
     const days = Math.min(180, Math.max(1, Number(req.query.days) || 30));
-    res.json(await stockOverview({ days }));
+    const store = String(req.query.store || "");
+    res.json(await stockOverview({ days, storeId: store }));
   })
 );
 
@@ -138,12 +163,22 @@ r.get(
   "/movement",
   asyncHandler(async (req, res) => {
     const parsed = z
-      .object({ from: YMD, to: YMD })
-      .safeParse({ from: req.query.from, to: req.query.to });
+      .object({ from: YMD, to: YMD, store: storeId() })
+      .safeParse({
+        from: req.query.from,
+        to: req.query.to,
+        store: req.query.store,
+      });
     if (!parsed.success) {
       return res.status(400).json({ error: "Укажите период from/to" });
     }
-    res.json(await movementReport(parsed.data));
+    res.json(
+      await movementReport({
+        from: parsed.data.from,
+        to: parsed.data.to,
+        storeId: parsed.data.store || "",
+      })
+    );
   })
 );
 
@@ -153,7 +188,8 @@ r.get(
   asyncHandler(async (req, res) => {
     // Приоритет — импортированный отчёт «Задолженность перед контрагентами»
     // (реальный долг по каждому поставщику). Если импорта не было — баланс iiko.
-    const imported = await importedDebtSummary().catch(() => null);
+    const warehouse = String(req.query.warehouse || "");
+    const imported = await importedDebtSummary({ warehouse }).catch(() => null);
     if (imported) return res.json(imported);
     try {
       res.json(await supplierDebts());

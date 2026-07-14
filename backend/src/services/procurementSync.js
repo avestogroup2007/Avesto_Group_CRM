@@ -61,11 +61,14 @@ export async function syncInvoices({ from, to }) {
 
 // Тренд цен: читаем историю из БД (по умолчанию — последние 2 года), прогоняем
 // через ядро с учётом сезонной нормы.
-export async function priceTrends({ months = 24 } = {}) {
+export async function priceTrends({ months = 24, storeId = "" } = {}) {
   const since = new Date();
   since.setMonth(since.getMonth() - months);
   const rows = await db.purchaseEntry.findMany({
-    where: { date: { gte: since } },
+    where: {
+      date: { gte: since },
+      ...(storeId ? { storeId } : {}),
+    },
     orderBy: { date: "asc" },
     take: 200000,
   });
@@ -88,7 +91,7 @@ const ymd = (d) => d.toISOString().slice(0, 10);
 
 // Обзор остатков: текущий остаток + средний дневной расход за `days` дней
 // (расход = остаток_нач + приход − остаток_кон), + правила мин/макс из БД.
-export async function stockOverview({ days = 30 } = {}) {
+export async function stockOverview({ days = 30, storeId = "" } = {}) {
   const cfg = await refreshProcurementConfig(true);
   const now = new Date();
   const past = new Date(now.getTime() - days * 86400000);
@@ -96,8 +99,8 @@ export async function stockOverview({ days = 30 } = {}) {
   const pastTs = `${ymd(past)}T00:00:00`;
 
   const [cur, prev, inv, rules] = await Promise.all([
-    storeBalances({ timestamp: nowTs }),
-    storeBalances({ timestamp: pastTs }).catch(() => ({ rows: [] })),
+    storeBalances({ timestamp: nowTs, storeId }),
+    storeBalances({ timestamp: pastTs, storeId }).catch(() => ({ rows: [] })),
     incomingInvoices({ from: ymd(past), to: ymd(now) }).catch(() => ({
       entries: [],
     })),
@@ -107,6 +110,8 @@ export async function stockOverview({ days = 30 } = {}) {
   const prevById = new Map(prev.rows.map((r) => [r.productId, r.stock]));
   const incomeById = new Map();
   for (const e of inv.entries) {
+    // Приход учитываем только по выбранному складу (если фильтр задан).
+    if (storeId && e.storeId && e.storeId !== storeId) continue;
     incomeById.set(
       e.productId,
       (incomeById.get(e.productId) || 0) + (Number(e.amount) || 0)
@@ -152,12 +157,12 @@ export async function supplierDebts() {
 }
 
 // Движение товара за период: сверка начало + приход − конец = расход.
-export async function movementReport({ from, to }) {
+export async function movementReport({ from, to, storeId = "" }) {
   const [openBal, closeBal, inv] = await Promise.all([
-    storeBalances({ timestamp: `${from}T00:00:00` }).catch(() => ({
+    storeBalances({ timestamp: `${from}T00:00:00`, storeId }).catch(() => ({
       rows: [],
     })),
-    storeBalances({ timestamp: `${to}T23:59:59` }),
+    storeBalances({ timestamp: `${to}T23:59:59`, storeId }),
     incomingInvoices({ from, to }).catch(() => ({ entries: [] })),
   ]);
   const openById = new Map(openBal.rows.map((r) => [r.productId, r.stock]));
@@ -169,6 +174,8 @@ export async function movementReport({ from, to }) {
   }
   const incomeById = new Map();
   for (const e of inv.entries) {
+    // Приход — только по выбранному складу (если фильтр задан).
+    if (storeId && e.storeId && e.storeId !== storeId) continue;
     incomeById.set(
       e.productId,
       (incomeById.get(e.productId) || 0) + (Number(e.amount) || 0)

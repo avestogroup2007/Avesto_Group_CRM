@@ -4,7 +4,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
-import { parseDebtWorkbook } from "../src/services/procurementDebts.js";
+import {
+  parseDebtWorkbook,
+  importedDebtSummary,
+} from "../src/services/procurementDebts.js";
+import { db } from "../src/db.js";
 
 async function makeWorkbook(rows) {
   const wb = new ExcelJS.Workbook();
@@ -69,4 +73,51 @@ test("разбор долгов: пустой/чужой файл — пусто
   const buf = await wb.xlsx.writeBuffer();
   const { rows } = await parseDebtWorkbook(Buffer.from(buf));
   assert.deepEqual(rows, []);
+});
+
+test("сводка долгов: разбивка и фильтр по складу (филиалу)", async () => {
+  await db.supplierDebtDoc.deleteMany({});
+  const importedAt = new Date();
+  await db.supplierDebtDoc.createMany({
+    data: [
+      {
+        supplier: "Поставщик А",
+        remaining: 800,
+        warehouse: "Склад Кухни",
+        dueDate: new Date("2000-01-01"), // просрочено
+        importedAt,
+      },
+      {
+        supplier: "Поставщик Б",
+        remaining: 200,
+        warehouse: "Склад Кухни",
+        dueDate: null,
+        importedAt,
+      },
+      {
+        supplier: "Поставщик А",
+        remaining: 500,
+        warehouse: "Склад Магазина",
+        dueDate: null,
+        importedAt,
+      },
+    ],
+  });
+
+  const all = await importedDebtSummary();
+  assert.equal(all.totalDebt, 1500);
+  // Разбивка по складам — по всем документам, отсортирована по долгу.
+  assert.equal(all.byWarehouse.length, 2);
+  assert.equal(all.byWarehouse[0].warehouse, "Склад Кухни");
+  assert.equal(all.byWarehouse[0].debt, 1000);
+  assert.equal(all.byWarehouse[0].overdueDebt, 800);
+
+  // Фильтр по складу — только его документы.
+  const kitchen = await importedDebtSummary({ warehouse: "Склад Кухни" });
+  assert.equal(kitchen.totalDebt, 1000);
+  assert.equal(kitchen.warehouse, "Склад Кухни");
+  // Разбивка по складам остаётся полной (для селектора филиала).
+  assert.equal(kitchen.byWarehouse.length, 2);
+
+  await db.supplierDebtDoc.deleteMany({});
 });

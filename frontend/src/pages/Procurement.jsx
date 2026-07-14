@@ -103,6 +103,23 @@ export default function Procurement({ notify, role }) {
   const canEdit = ["director", "finance", "sysadmin", "owner"].includes(role);
   const canConfig = ["director", "sysadmin", "owner"].includes(role);
   const [tab, setTab] = useState("trends");
+  // Список складов iiko (филиалы) и выбранный склад — общий фильтр «по филиалам»
+  // для вкладок Цены/Остатки/Движение. Пустая строка — все филиалы.
+  const [stores, setStores] = useState([]);
+  const [store, setStore] = useState("");
+
+  useEffect(() => {
+    apiGet("/api/procurement/stores")
+      .then((d) => setStores(d.stores || []))
+      .catch(() => setStores([]));
+  }, []);
+
+  // Селектор филиала показываем только там, где он влияет на данные.
+  const showFilial = ["trends", "stock", "movement"].includes(tab);
+  const storeOptions = [
+    { value: "", label: "Все филиалы" },
+    ...stores.map((s) => ({ value: s.id, label: s.name || s.code || s.id })),
+  ];
 
   return (
     <div className="space-y-4">
@@ -134,9 +151,31 @@ export default function Procurement({ notify, role }) {
         })}
       </div>
 
-      {tab === "trends" && <TrendsTab notify={notify} canEdit={canEdit} />}
-      {tab === "stock" && <StockTab />}
-      {tab === "movement" && <MovementTab />}
+      {/* Фильтр по филиалу (складу) — общий для Цены/Остатки/Движение */}
+      {showFilial && stores.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>
+            Филиал:
+          </span>
+          <NiceSelect
+            value={store}
+            onChange={setStore}
+            options={storeOptions}
+            width={240}
+          />
+          {store && (
+            <span style={{ fontSize: 11.5, color: C.faint }}>
+              Показаны данные выбранного филиала
+            </span>
+          )}
+        </div>
+      )}
+
+      {tab === "trends" && (
+        <TrendsTab notify={notify} canEdit={canEdit} store={store} />
+      )}
+      {tab === "stock" && <StockTab store={store} />}
+      {tab === "movement" && <MovementTab store={store} />}
       {tab === "debts" && <DebtsTab notify={notify} />}
       {tab === "config" && <ConfigTab notify={notify} canConfig={canConfig} />}
     </div>
@@ -155,7 +194,7 @@ function ErrBox({ text }) {
 }
 
 // ── Тренд цен + синхронизация ───────────────────────────────────────────────
-function TrendsTab({ notify, canEdit }) {
+function TrendsTab({ notify, canEdit, store = "" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -167,7 +206,8 @@ function TrendsTab({ notify, canEdit }) {
 
   const load = () => {
     setLoading(true);
-    apiGet("/api/procurement/price-trends?months=24")
+    const q = store ? `&store=${encodeURIComponent(store)}` : "";
+    apiGet(`/api/procurement/price-trends?months=24${q}`)
       .then((d) => {
         setData(d);
         setErr("");
@@ -177,7 +217,8 @@ function TrendsTab({ notify, canEdit }) {
   };
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store]);
 
   const sync = async () => {
     setSyncing(true);
@@ -438,7 +479,7 @@ function TrendsTab({ notify, canEdit }) {
 }
 
 // ── Остатки ─────────────────────────────────────────────────────────────────
-function StockTab() {
+function StockTab({ store = "" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -446,7 +487,8 @@ function StockTab() {
 
   const load = () => {
     setLoading(true);
-    apiGet(`/api/procurement/stock?days=${days}`)
+    const q = store ? `&store=${encodeURIComponent(store)}` : "";
+    apiGet(`/api/procurement/stock?days=${days}${q}`)
       .then((d) => {
         setData(d);
         setErr("");
@@ -457,7 +499,7 @@ function StockTab() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [days, store]);
 
   const rows = data?.rows || [];
   const s = data?.summary || {};
@@ -570,7 +612,7 @@ function StockTab() {
 }
 
 // ── Движение товара ─────────────────────────────────────────────────────────
-function MovementTab() {
+function MovementTab({ store = "" }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -579,7 +621,8 @@ function MovementTab() {
 
   const load = () => {
     setLoading(true);
-    apiGet(`/api/procurement/movement?from=${from}&to=${to}`)
+    const q = store ? `&store=${encodeURIComponent(store)}` : "";
+    apiGet(`/api/procurement/movement?from=${from}&to=${to}${q}`)
       .then((d) => {
         setData(d);
         setErr("");
@@ -590,7 +633,7 @@ function MovementTab() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [store]);
 
   const rows = data?.rows || [];
   const s = data?.summary || {};
@@ -719,10 +762,13 @@ function DebtsTab({ notify }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  // Фильтр по складу (филиалу) — по названию из отчёта. Пусто — все филиалы.
+  const [wh, setWh] = useState("");
 
-  const load = () => {
+  const load = (warehouse = wh) => {
     setLoading(true);
-    apiGet("/api/procurement/debts")
+    const q = warehouse ? `?warehouse=${encodeURIComponent(warehouse)}` : "";
+    apiGet(`/api/procurement/debts${q}`)
       .then((d) => {
         setData(d);
         setErr("");
@@ -732,7 +778,8 @@ function DebtsTab({ notify }) {
   };
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wh]);
 
   // Загрузка отчёта iiko «Задолженность перед контрагентами» (Excel) →
   // реальный долг по каждому поставщику. Файл читаем как base64 и шлём на сервер.
@@ -814,6 +861,27 @@ function DebtsTab({ notify }) {
         </div>
       </div>
 
+      {/* Фильтр по филиалу (складу) — из отчёта, по названию склада */}
+      {data?.source === "import" && (data?.byWarehouse || []).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>
+            Филиал:
+          </span>
+          <NiceSelect
+            value={wh}
+            onChange={setWh}
+            options={[
+              { value: "", label: "Все филиалы" },
+              ...(data?.byWarehouse || []).map((w) => ({
+                value: w.warehouse,
+                label: `${w.warehouse} · ${money(w.debt)} сум`,
+              })),
+            ]}
+            width={300}
+          />
+        </div>
+      )}
+
       {data?.error && <ErrBox text={data.error} />}
       {err && <ErrBox text={err} />}
 
@@ -844,6 +912,84 @@ function DebtsTab({ notify }) {
               />
             )}
           </div>
+
+          {/* Разбивка долга по филиалам (складам) */}
+          {data?.source === "import" &&
+            !wh &&
+            (data?.byWarehouse || []).length > 1 && (
+              <div
+                className="rounded-2xl bg-white p-3 overflow-x-auto"
+                style={{ border: `1px solid ${C.border}` }}
+              >
+                <div
+                  className="font-bold mb-2"
+                  style={{ color: C.ink, fontSize: 13 }}
+                >
+                  По филиалам (складам)
+                </div>
+                <table className="w-full" style={{ fontSize: 12.5 }}>
+                  <thead>
+                    <tr style={{ color: C.faint, textAlign: "left" }}>
+                      <th className="pb-2 pr-2 font-semibold">
+                        Филиал / склад
+                      </th>
+                      <th className="pb-2 pr-2 font-semibold text-right">
+                        Поставщиков
+                      </th>
+                      <th className="pb-2 pr-2 font-semibold text-right">
+                        Просрочено, сум
+                      </th>
+                      <th className="pb-2 font-semibold text-right">
+                        Долг, сум
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.byWarehouse || []).map((w) => (
+                      <tr
+                        key={w.warehouse}
+                        onClick={() => setWh(w.warehouse)}
+                        style={{
+                          borderTop: `1px solid ${C.line}`,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <td
+                          className="py-2 pr-2"
+                          style={{ color: C.ink, fontWeight: 600 }}
+                        >
+                          {w.warehouse}
+                        </td>
+                        <td
+                          className="py-2 pr-2 text-right"
+                          style={{ color: C.sub }}
+                        >
+                          {w.suppliers}
+                        </td>
+                        <td
+                          className="py-2 pr-2 text-right"
+                          style={{
+                            color: w.overdueDebt > 0 ? C.bad : C.faint,
+                            fontWeight: w.overdueDebt > 0 ? 700 : 400,
+                          }}
+                        >
+                          {w.overdueDebt > 0 ? money(w.overdueDebt) : "—"}
+                        </td>
+                        <td
+                          className="py-2 text-right"
+                          style={{ color: C.bad, fontWeight: 700 }}
+                        >
+                          {money(w.debt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>
+                  Нажмите на филиал, чтобы показать долг только по нему.
+                </div>
+              </div>
+            )}
 
           {(data?.rowSample || data?.suppliersRawFirst) && rows.length > 0 ? (
             <div
