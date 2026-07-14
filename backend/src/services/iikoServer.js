@@ -1274,13 +1274,8 @@ export async function pnlReport({ from, to, department }) {
 
 // ── Закупки и склад ─────────────────────────────────────────────────────────
 // Приходные накладные и остатки складов из iiko — для модуля контроля цен и
-// остатков. Даты документов iiko ждёт в формате DD.MM.YYYY.
-function ddmmyyyy(ymd) {
-  const [y, m, d] = String(ymd).slice(0, 10).split("-");
-  return `${d}.${m}.${y}`;
-}
-
-// Разбор XML-выгрузки приходных накладных (/documents/export/incomingInvoice).
+// остатков. Разбор XML-выгрузки приходных накладных
+// (/documents/export/incomingInvoice).
 // Терпимо к обёрткам: ищем <document>…</document>, внутри — шапка и позиции.
 export function parseIncomingInvoicesXml(xml) {
   const docs = [];
@@ -1360,10 +1355,12 @@ export async function incomingInvoices({ from, to }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await acquireKey();
   try {
+    // Этот эндпоинт (в отличие от OLAP) ждёт дату в формате yyyy-MM-dd —
+    // from/to уже приходят в этом виде (валидируются в маршруте).
     const url =
       `${BASE}/resto/api/documents/export/incomingInvoice` +
-      `?from=${encodeURIComponent(ddmmyyyy(from))}` +
-      `&to=${encodeURIComponent(ddmmyyyy(to))}` +
+      `?from=${encodeURIComponent(from)}` +
+      `&to=${encodeURIComponent(to)}` +
       `&key=${encodeURIComponent(key)}`;
     const res = await fetch(url);
     const text = await res.text();
