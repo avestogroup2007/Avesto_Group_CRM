@@ -540,3 +540,49 @@ model PayrollEntry {
   @@unique([month, userId])
   @@index([month])
 }
+
+// ── Закупки и склад ─────────────────────────────────────────────────────────
+// История позиций приходных накладных из iiko (одна строка = одна позиция).
+// По ней строим тренд цен закупки и ловим аномальные скачки (с учётом сезонной
+// нормы). Синхронизация дедупит по iikoDocId (удаляет позиции документа и
+// пишет заново), поэтому уникального ключа на позицию не требуется.
+model PurchaseEntry {
+  id          String   @id @default(cuid())
+  iikoDocId   String // id документа-накладной в iiko
+  docNumber   String   @default("")
+  date        DateTime // учётный день накладной (дата прихода)
+  supplier    String   @default("")
+  productId   String // id товара в iiko
+  productName String   @default("")
+  unit        String   @default("")
+  amount      Float    @default(0) // количество
+  price       Float    @default(0) // цена за единицу, сум
+  sum         Float    @default(0) // сумма позиции, сум
+  storeId     String   @default("")
+  storeName   String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([iikoDocId])
+  @@index([productId, date])
+  @@index([date])
+}
+
+// Пороги остатка по товару: авто (по среднему расходу) + ручное переопределение.
+model ProductStockRule {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  name      String   @default("")
+  minQty    Float? // ручной минимум (перекрывает авто, если manual=true)
+  maxQty    Float? // ручной целевой запас (для рекомендации заказа)
+  manual    Boolean  @default(false) // true — пороги заданы вручную
+  updatedAt DateTime @updatedAt
+}
+
+// Конфигурация модуля закупок/склада (одна строка, id=1, JSON): пороги скачка
+// цены, окно базовой цены, метод минимальных остатков, погода/уведомления.
+model ProcurementConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
