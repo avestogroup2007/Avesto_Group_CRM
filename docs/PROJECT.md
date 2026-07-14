@@ -20,7 +20,7 @@ CRM/BPM-система для сети заведений Avesto Group (Узбе
 | Аутентификация | JWT (Bearer + cookie), bcrypt, живой пароль iiko (SSO) |
 | Интеграции | iiko Server API (resto), Telegram Bot API, Claude API (@anthropic-ai/sdk) |
 | Качество | ESLint, Prettier, node:test (интеграционные тесты), GitHub Actions CI |
-| Деплой | Render (web + PostgreSQL, autodeploy из main), GitHub Pages (фронтенд) |
+| Деплой | Render (web + PostgreSQL, autodeploy из main) + GitHub Pages (фронт); либо свой сервер под `avesto.group/crm` (nginx/Caddy, см. `deploy/DEPLOY.md`) |
 
 ## 2. Структура репозитория
 
@@ -205,6 +205,20 @@ sysadmin/staff), `Task`/`TaskHistory`/`Comment`, `CashReport`, `MoneyTx`
 
 Все секреты задаются только в окружении хостинга и никогда не попадают в код
 или клиент.
+
+### Размещение на своём сервере под подпутём (`avesto.group/crm`)
+
+Полная пошаговая инструкция — в `deploy/DEPLOY.md` (+ готовые конфиги
+`deploy/nginx-avesto-crm.conf`, `deploy/Caddyfile`, юнит
+`deploy/avesto-crm.service`, пример окружения `backend/.env.production.example`).
+Кратко: фронт и API на одном домене (same-origin), reverse-proxy отдаёт статику
+под `/crm` и проксирует `/crm/api → :3000`.
+
+- Сборка фронта: `VITE_BASE=/crm/ VITE_API_URL=/crm npm run build`.
+- Окружение бэкенда: `FRONTEND_URL=https://avesto.group`, `COOKIE_SECURE=true`,
+  `COOKIE_SAMESITE=lax` (same-origin), `PUBLIC_BASE_URL=https://avesto.group/crm`
+  (Telegram-вебхук), `PUBLIC_APP_URL=https://avesto.group/crm/` (кнопка «Открыть
+  CRM»).
 
 ## 8. Аутентификация и доступы
 

@@ -1,0 +1,33 @@
+# Avesto Group CRM — размещение под avesto.group/crm через Caddy.
+# Caddy сам получает и продлевает TLS-сертификаты (Let's Encrypt) — обычно это
+# самый простой вариант для небольшого бизнеса.
+#
+# Установка:
+#   1) Соберите фронтенд (см. deploy/DEPLOY.md) → скопируйте frontend/dist/*
+#      в /var/www/avesto.group/crm/
+#   2) Запустите бэкенд на 127.0.0.1:3000 (systemd-юнит в deploy/DEPLOY.md)
+#   3) Положите этот файл как /etc/caddy/Caddyfile и: systemctl reload caddy
+
+avesto.group {
+    # ── API бэкенда: /crm/api/* → Node на :3000 ──
+    # strip_prefix убирает «/crm», и бэкенд получает привычный /api/...
+    handle /crm/api/* {
+        uri strip_prefix /crm
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    # ── Статика SPA под /crm ── неизвестные пути отдают index.html
+    handle /crm* {
+        root * /var/www/avesto.group
+        try_files {path} /crm/index.html
+        file_server
+    }
+
+    # Голый /crm без слэша → на /crm/.
+    redir /crm /crm/ 308
+
+    # Загрузка фото/файлов — лимит тела как у express.json (2 МБ).
+    request_body {
+        max_size 2MB
+    }
+}

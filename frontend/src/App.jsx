@@ -6,7 +6,7 @@ import React, {
   lazy,
   Suspense,
 } from "react";
-import { Building2, Archive, X, Info } from "lucide-react";
+import { Building2, Archive, X, Info, Loader2 } from "lucide-react";
 import { apiGet, apiPost } from "./api.js";
 import { FONT, C } from "./lib/theme.js";
 import { NiceSelect, ScrollTopButton } from "./components/ui.jsx";
@@ -48,6 +48,7 @@ const StaffKpiView = lazy(() => import("./pages/StaffKpi.jsx"));
 const DdsView = lazy(() => import("./pages/Dds.jsx"));
 const PayrollView = lazy(() => import("./pages/Payroll.jsx"));
 const FoodCostView = lazy(() => import("./pages/FoodCost.jsx"));
+const ProcurementView = lazy(() => import("./pages/Procurement.jsx"));
 const PlanView = lazy(() => import("./pages/Plan.jsx"));
 const SetupWizard = lazy(() => import("./components/SetupWizard.jsx"));
 const TodoManagerView = lazy(() => import("./pages/TodoManager.jsx"));
@@ -58,10 +59,11 @@ const IikoProduction = lazy(() => import("./IikoProduction.jsx"));
 function ViewLoader() {
   return (
     <div
-      className="flex items-center justify-center"
-      style={{ minHeight: 240, color: C.faint, fontWeight: 600, fontSize: 15 }}
+      className="flex flex-col items-center justify-center gap-3"
+      style={{ minHeight: 240, color: C.faint }}
     >
-      Загрузка раздела…
+      <Loader2 size={26} className="animate-spin" style={{ color: C.brandA }} />
+      <span style={{ fontWeight: 600, fontSize: 14 }}>Загрузка раздела…</span>
     </div>
   );
 }
@@ -435,6 +437,13 @@ export default function App({ authUser, onLogout }) {
         .nav-item:not(.nav-item-active):hover{background:rgba(123,45,31,.07)!important}
         @keyframes glassFadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
         .fade-up{animation:glassFadeUp .34s cubic-bezier(.22,.61,.36,1) both}
+        /* Скелетон загрузки: мягкий перелив (shimmer) вместо голого «Загрузка…» */
+        @keyframes shimmer{100%{transform:translateX(100%)}}
+        .skeleton{position:relative;overflow:hidden;background:#EFEAE1}
+        .skeleton::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:shimmer 1.4s infinite}
+        /* Мягкое «парение» иконки в пустых состояниях */
+        @keyframes floatSoft{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+        .float-soft{animation:floatSoft 3.2s ease-in-out infinite}
         @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
         select{appearance:none;-webkit-appearance:none;-moz-appearance:none;
           background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important;
@@ -612,6 +621,11 @@ export default function App({ authUser, onLogout }) {
                   { roles: NAV.find((n) => n.key === "plan").roles },
                   me.role,
                 ) && <PlanView notify={notify} role={me.role} />}
+              {s.view === "procurement" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "procurement").roles },
+                  me.role,
+                ) && <ProcurementView notify={notify} role={me.role} />}
               {s.view === "todos" && <TodoManagerView notify={notify} />}
               {s.view === "create" && (
                 <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />

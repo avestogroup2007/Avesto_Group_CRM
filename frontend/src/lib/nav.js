@@ -23,6 +23,7 @@ import {
   Percent,
   Target,
   ListTodo,
+  PackageSearch,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -79,6 +80,12 @@ export const NAV = [
     label: "Себестоимость (food cost)",
     icon: Percent,
     roles: ["director", "finance", "accountant", "sysadmin"],
+  },
+  {
+    key: "procurement",
+    label: "Закупки и склад",
+    icon: PackageSearch,
+    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
   {
     key: "sales",
@@ -182,7 +189,7 @@ export const NAV_GROUPS = [
     key: "finance",
     label: "Финансы",
     icon: Wallet,
-    items: ["cash", "money", "dds", "payroll", "foodcost"],
+    items: ["cash", "money", "dds", "payroll", "foodcost", "procurement"],
   },
   {
     key: "analytics",
@@ -276,6 +283,7 @@ export const VIEW_TITLE = {
   dds: "ДДС — движение денежных средств",
   payroll: "ФОТ — зарплатная ведомость",
   foodcost: "Себестоимость — food cost и маржа",
+  procurement: "Закупки и склад — цены, остатки, движение",
   plan: "Планы и цели — план-факт по филиалам",
   sales: "Аналитика продаж",
   production: "Производство",

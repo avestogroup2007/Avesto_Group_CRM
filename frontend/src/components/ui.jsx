@@ -7,6 +7,8 @@ import {
   ChevronDown,
   CalendarDays,
   ArrowUp,
+  Loader2,
+  Inbox,
 } from "lucide-react";
 import { C, PHASES } from "../lib/theme.js";
 import { tr } from "../lib/i18n.js";
@@ -241,7 +243,7 @@ export function PageHeader({ icon: Icon, title, subtitle, children }) {
 export function Kpi({ label, value, tone }) {
   return (
     <div
-      className="rounded-2xl bg-white p-4 min-w-0"
+      className="lift rounded-2xl bg-white p-4 min-w-0"
       style={{ border: `1px solid ${C.border}` }}
     >
       <div className="flex items-center gap-2 mb-1">
@@ -847,6 +849,89 @@ export function AdToggle({ label, hint, checked, onChange }) {
     </div>
   );
 }
+// ── Оживление интерфейса: счётчик чисел, спиннер, скелетон, пустое состояние ──
+// Все анимации — на transform/opacity (быстро на слабых телефонах) и уважают
+// системную настройку «уменьшить движение» (класс/keyframes глушатся в App.jsx).
+
+// Плавный «доезд» числа от 0 до целевого значения (easeOutCubic). value можно
+// передавать как готовый React-узел в Kpi/цифры сводки: <CountUp to={n}
+// format={money} />. При reduced-motion сразу показывает финальное число.
+export function CountUp({ to, format = (n) => n, dur = 750 }) {
+  const target = Number(to) || 0;
+  const [v, setV] = useState(target);
+  useEffect(() => {
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setV(target);
+      return;
+    }
+    let raf;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setV(target * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, dur]);
+  return <>{format(Math.round(v))}</>;
+}
+
+// Единый спиннер загрузки (фирменный цвет) с подписью по желанию.
+export function Spinner({ size = 22, color = C.brandA, label }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2">
+      <Loader2 size={size} className="animate-spin" style={{ color }} />
+      {label && (
+        <span style={{ fontSize: 13, color: C.sub, fontWeight: 600 }}>
+          {label}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Плейсхолдер-скелетон с «переливом» (shimmer) на время загрузки данных —
+// вместо голого текста «Загрузка…». Класс .skeleton описан в App.jsx.
+export function Skeleton({ height = 16, width = "100%", radius = 10 }) {
+  return (
+    <span
+      className="skeleton block"
+      style={{ height, width, borderRadius: radius }}
+    />
+  );
+}
+
+// Дружелюбное пустое состояние: мягко «парящая» иконка + заголовок и подсказка
+// вместо сухого «нет данных».
+export function EmptyState({ icon: Icon = Inbox, title, hint }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center px-4 py-10">
+      <div
+        className="float-soft flex items-center justify-center rounded-2xl mb-3"
+        style={{ width: 60, height: 60, background: "#F5F0E8" }}
+      >
+        <Icon size={28} style={{ color: C.brandA }} />
+      </div>
+      <div className="font-bold" style={{ color: C.ink, fontSize: 15 }}>
+        {title}
+      </div>
+      {hint && (
+        <div
+          style={{ color: C.sub, fontSize: 13, marginTop: 4, maxWidth: 340 }}
+        >
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdCard({ title, children, desc }) {
   return (
     <div

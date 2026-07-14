@@ -56,15 +56,63 @@ export default function Login({ onSuccess }) {
       className="min-h-dvh flex items-center justify-center p-4"
       style={{
         fontFamily: FONT,
+        position: "relative",
+        overflow: "hidden",
         background:
-          "radial-gradient(900px 520px at 12% -10%, rgba(200,137,46,0.22), transparent 60%)," +
-          "radial-gradient(820px 620px at 100% 0%, rgba(123,45,31,0.18), transparent 55%)," +
-          "radial-gradient(900px 800px at 50% 120%, rgba(124,58,237,0.10), transparent 60%)," +
+          "radial-gradient(900px 520px at 12% -10%, rgba(200,137,46,0.14), transparent 60%)," +
+          "radial-gradient(820px 620px at 100% 0%, rgba(123,45,31,0.12), transparent 55%)," +
           "linear-gradient(180deg, #FBF8F3 0%, #F3ECE2 100%)",
       }}
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
-        @keyframes lgUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}`}</style>
+        @keyframes lgUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+        @keyframes lgBlobA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(48px,-38px) scale(1.18)}}
+        @keyframes lgBlobB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-40px,48px) scale(1.12)}}
+        @keyframes lgBlobC{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(28px,28px) scale(1.1)}}
+        .lg-blob{position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none;will-change:transform;z-index:0}
+        .lg-in{transition:border-color .18s ease,box-shadow .18s ease}
+        .lg-in:focus{border-color:#B4704F;box-shadow:0 0 0 4px rgba(180,112,79,.16)}
+        .lg-btn{position:relative;overflow:hidden;transition:transform .12s ease,box-shadow .2s ease,opacity .2s}
+        .lg-btn::after{content:"";position:absolute;top:0;left:0;width:55%;height:100%;transform:translateX(-160%) skewX(-18deg);background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent)}
+        .lg-btn:hover:not(:disabled){transform:translateY(-1px)}
+        .lg-btn:hover:not(:disabled)::after{animation:lgSheen .9s ease}
+        @keyframes lgSheen{to{transform:translateX(240%) skewX(-18deg)}}
+        @media(prefers-reduced-motion:reduce){.lg-blob{animation:none!important}}`}</style>
+
+      {/* Мягко дрейфующие «ауроры» на фоне — оживляют экран входа, не отвлекая. */}
+      <div
+        className="lg-blob"
+        style={{
+          width: 340,
+          height: 340,
+          left: "-6%",
+          top: "-10%",
+          background: "rgba(200,137,46,.28)",
+          animation: "lgBlobA 15s ease-in-out infinite",
+        }}
+      />
+      <div
+        className="lg-blob"
+        style={{
+          width: 380,
+          height: 380,
+          right: "-8%",
+          top: "-4%",
+          background: "rgba(123,45,31,.22)",
+          animation: "lgBlobB 19s ease-in-out infinite",
+        }}
+      />
+      <div
+        className="lg-blob"
+        style={{
+          width: 300,
+          height: 300,
+          left: "28%",
+          bottom: "-16%",
+          background: "rgba(124,58,237,.14)",
+          animation: "lgBlobC 17s ease-in-out infinite",
+        }}
+      />
       <div
         className="w-full max-w-sm rounded-2xl p-6 sm:p-7"
         style={{
@@ -75,6 +123,8 @@ export default function Login({ onSuccess }) {
           boxShadow:
             "0 20px 60px rgba(74,38,22,.16), inset 0 1px 0 rgba(255,255,255,.6)",
           animation: "lgUp .5s cubic-bezier(.22,.61,.36,1) both",
+          position: "relative",
+          zIndex: 1,
         }}
       >
         <div className="flex items-center gap-3 mb-5">
@@ -113,7 +163,7 @@ export default function Login({ onSuccess }) {
               onChange={(e) => setLoginName(e.target.value)}
               autoFocus
               autoComplete="username"
-              className="w-full rounded-xl px-3.5 py-2.5 focus:outline-none"
+              className="lg-in w-full rounded-xl px-3.5 py-2.5 focus:outline-none"
               style={inputStyle}
               placeholder="например, director"
             />
@@ -130,7 +180,7 @@ export default function Login({ onSuccess }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full rounded-xl px-3.5 py-2.5 focus:outline-none"
+              className="lg-in w-full rounded-xl px-3.5 py-2.5 focus:outline-none"
               style={inputStyle}
               placeholder="••••••••"
             />
@@ -153,7 +203,7 @@ export default function Login({ onSuccess }) {
           <button
             type="submit"
             disabled={busy}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold text-white"
+            className="lg-btn w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold text-white"
             style={{
               background:
                 "linear-gradient(135deg, #8A3323 0%, #7B2D1F 55%, #5E2016 100%)",

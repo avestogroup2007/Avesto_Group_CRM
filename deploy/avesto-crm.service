@@ -1,0 +1,26 @@
+# systemd-юнит для бэкенда Avesto Group CRM.
+# Установка:
+#   sudo cp deploy/avesto-crm.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now avesto-crm
+# Логи: journalctl -u avesto-crm -f
+
+[Unit]
+Description=Avesto Group CRM backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# Пользователь и путь к репозиторию — подставьте свои.
+User=avesto
+WorkingDirectory=/opt/avesto-crm/backend
+# Переменные окружения читаются из файла (см. backend/.env.production.example).
+EnvironmentFile=/opt/avesto-crm/backend/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=3
+# Бэкенд слушает только localhost — наружу его отдаёт reverse-proxy.
+
+[Install]
+WantedBy=multi-user.target
