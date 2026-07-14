@@ -13,14 +13,15 @@ import { refreshProcurementConfig } from "./procurementConfig.js";
 // Синхронизация накладных за период (from/to — YYYY-MM-DD): дедуп по документу
 // (удаляем позиции документа и пишем заново), затем сохраняем в PurchaseEntry.
 export async function syncInvoices({ from, to }) {
-  const { entries, docCount } = await incomingInvoices({ from, to });
+  const inv = await incomingInvoices({ from, to });
+  const entries = inv.entries || [];
   const docIds = [...new Set(entries.map((e) => e.iikoDocId).filter(Boolean))];
   if (docIds.length) {
     await db.purchaseEntry.deleteMany({
       where: { iikoDocId: { in: docIds } },
     });
   }
-  const data = entries
+  const mapped = entries
     .filter((e) => e.productId)
     .map((e) => ({
       iikoDocId: e.iikoDocId || "",
@@ -35,10 +36,23 @@ export async function syncInvoices({ from, to }) {
       sum: Number(e.sum) || 0,
       storeId: e.storeId || "",
       storeName: e.storeName || "",
-    }))
-    .filter((e) => e.date instanceof Date && !isNaN(e.date));
+    }));
+  const data = mapped.filter((e) => e.date instanceof Date && !isNaN(e.date));
   if (data.length) await db.purchaseEntry.createMany({ data });
-  return { docCount, itemCount: data.length };
+  const out = {
+    docCount: inv.docCount || 0,
+    itemCount: data.length,
+    entriesParsed: entries.length,
+    droppedBadDate: mapped.length - data.length,
+  };
+  // Диагностика: если ничего не сохранили — покажем, что вернул iiko (сырой
+  // документ/срез), чтобы понять причину (нет накладных / другой формат полей).
+  if (!data.length) {
+    out.rawFirst = inv.rawFirst || "";
+    out.sample = inv.sample || "";
+    out.bytes = inv.bytes || 0;
+  }
+  return out;
 }
 
 // Тренд цен: читаем историю из БД (по умолчанию — последние 2 года), прогоняем

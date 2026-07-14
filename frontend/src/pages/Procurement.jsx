@@ -145,6 +145,7 @@ function TrendsTab({ notify, canEdit }) {
   const [from, setFrom] = useState(monthAgo(3));
   const [to, setTo] = useState(today());
   const [onlySignals, setOnlySignals] = useState(false);
+  const [diag, setDiag] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -162,13 +163,26 @@ function TrendsTab({ notify, canEdit }) {
 
   const sync = async () => {
     setSyncing(true);
+    setDiag(null);
     try {
       const r = await apiPost("/api/procurement/sync", { from, to });
-      notify &&
-        notify(
-          `Синхронизировано: документов ${r.docCount}, позиций ${r.itemCount}`,
-        );
-      load();
+      if (r.error) {
+        notify && notify(r.error);
+        setDiag(r);
+      } else if (r.itemCount > 0) {
+        notify &&
+          notify(
+            `Синхронизировано: документов ${r.docCount}, позиций ${r.itemCount}`,
+          );
+        load();
+      } else {
+        // Ничего не сохранили — показываем диагностику (что вернул iiko).
+        notify &&
+          notify(
+            `Накладных за период: ${r.docCount || 0}. Данных для цен нет — см. диагностику ниже.`,
+          );
+        setDiag(r);
+      }
     } catch (e) {
       notify && notify(e.message || "Ошибка синхронизации");
     } finally {
@@ -206,6 +220,79 @@ function TrendsTab({ notify, canEdit }) {
           </button>
           <div style={{ fontSize: 11.5, color: C.faint, alignSelf: "center" }}>
             Тянет приходные накладные за период в историю цен
+          </div>
+        </div>
+      )}
+
+      {diag && (
+        <div
+          className="rounded-2xl p-3"
+          style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+        >
+          <div
+            className="font-bold mb-1"
+            style={{ color: "#92400E", fontSize: 13 }}
+          >
+            Диагностика синхронизации
+          </div>
+          <div style={{ fontSize: 12, color: "#78350F", lineHeight: 1.6 }}>
+            {diag.error ? (
+              <div>{diag.error}</div>
+            ) : (
+              <>
+                Накладных получено: <b>{diag.docCount ?? 0}</b> · позиций
+                разобрано: <b>{diag.entriesParsed ?? 0}</b>
+                {diag.droppedBadDate ? (
+                  <>
+                    {" "}
+                    · отброшено из-за даты: <b>{diag.droppedBadDate}</b>
+                  </>
+                ) : null}
+                {typeof diag.bytes === "number" ? (
+                  <>
+                    {" "}
+                    · ответ iiko: <b>{diag.bytes}</b> байт
+                  </>
+                ) : null}
+              </>
+            )}
+          </div>
+          {diag.rawFirst ? (
+            <pre
+              className="mt-2 overflow-x-auto"
+              style={{
+                fontSize: 10.5,
+                background: "#Fff",
+                border: "1px solid #FDE68A",
+                borderRadius: 8,
+                padding: 8,
+                maxHeight: 220,
+                whiteSpace: "pre-wrap",
+                color: "#57430E",
+              }}
+            >
+              {diag.rawFirst}
+            </pre>
+          ) : diag.sample ? (
+            <pre
+              className="mt-2 overflow-x-auto"
+              style={{
+                fontSize: 10.5,
+                background: "#fff",
+                border: "1px solid #FDE68A",
+                borderRadius: 8,
+                padding: 8,
+                maxHeight: 220,
+                whiteSpace: "pre-wrap",
+                color: "#57430E",
+              }}
+            >
+              {diag.sample}
+            </pre>
+          ) : null}
+          <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+            Пришлите этот блок разработчику — по нему настроим разбор формата
+            накладных вашего iiko.
           </div>
         </div>
       )}
