@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { apiGet } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi } from "../components/ui.jsx";
+import { Kpi, CountUp, Skeleton, EmptyState } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
 const curMonth = () =>
@@ -58,7 +58,27 @@ export default function DashboardView({ dispatch }) {
   const go = (view) => dispatch && dispatch({ type: "SET_VIEW", view });
 
   if (loading && !data) {
-    return <div style={{ color: C.sub, fontSize: 14 }}>Загрузка сводки…</div>;
+    // Скелетон сводки вместо голого текста — заголовок, 4 KPI и блок таблицы.
+    return (
+      <div className="space-y-4">
+        <Skeleton height={22} width={220} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-2xl bg-white p-4"
+              style={{ border: `1px solid ${C.border}` }}
+            >
+              <Skeleton height={12} width={90} />
+              <div className="mt-2">
+                <Skeleton height={26} width={120} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <Skeleton height={140} radius={16} />
+      </div>
+    );
   }
   if (err && !data) {
     return <div style={{ color: C.bad, fontSize: 14 }}>{err}</div>;
@@ -98,18 +118,22 @@ export default function DashboardView({ dispatch }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <Kpi
           label="Касса за день, сум"
-          value={money(t.declared)}
+          value={<CountUp to={t.declared} format={money} />}
           tone={C.brandB}
         />
-        <Kpi label="По iiko, сум" value={money(t.iiko)} tone={C.brandA} />
+        <Kpi
+          label="По iiko, сум"
+          value={<CountUp to={t.iiko} format={money} />}
+          tone={C.brandA}
+        />
         <Kpi
           label={shortage ? "Недостача, сум" : "Расхождение, сум"}
-          value={money(Math.abs(t.discrepancy))}
+          value={<CountUp to={Math.abs(t.discrepancy)} format={money} />}
           tone={t.discrepancy !== 0 ? (shortage ? C.bad : C.ok) : C.faint}
         />
         <Kpi
           label="Расходов на согласовании"
-          value={String(data.pendingExpenses.count)}
+          value={<CountUp to={data.pendingExpenses.count} />}
           tone={data.pendingExpenses.count ? C.bad : C.faint}
         />
       </div>
@@ -118,7 +142,7 @@ export default function DashboardView({ dispatch }) {
       {data.todos && (
         <button
           onClick={() => go("todos")}
-          className="w-full rounded-2xl bg-white p-4 flex items-center gap-3 text-left"
+          className="lift w-full rounded-2xl bg-white p-4 flex items-center gap-3 text-left"
           style={{ border: `1px solid ${C.border}` }}
         >
           <div
@@ -207,91 +231,103 @@ export default function DashboardView({ dispatch }) {
             Открыть кассы <ArrowRight size={13} />
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full" style={{ fontSize: 12.5 }}>
-            <thead>
-              <tr style={{ color: C.faint, textAlign: "left" }}>
-                <th className="pb-2 pr-2 font-semibold">Филиал</th>
-                <th className="pb-2 pr-2 font-semibold">Касса</th>
-                <th className="pb-2 pr-2 font-semibold text-right">Заявлено</th>
-                <th className="pb-2 pr-2 font-semibold text-right">iiko</th>
-                <th className="pb-2 pr-2 font-semibold text-right">Расхожд.</th>
-                <th className="pb-2 font-semibold text-right">Чек-листы</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((row) => {
-                const st = CASH_STATUS[row.cashStatus] || CASH_STATUS.none;
-                const disc = row.discrepancy;
-                return (
-                  <tr
-                    key={row.branchId}
-                    style={{ borderTop: `1px solid ${C.line}` }}
-                  >
-                    <td
-                      className="py-2 pr-2"
-                      style={{ color: C.ink, fontWeight: 600 }}
+        {data.rows.length === 0 ? (
+          <EmptyState
+            icon={Wallet}
+            title="Пока нет данных по кассам"
+            hint="Как только филиалы сдадут кассу за день, здесь появится сверка с iiko."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ color: C.faint, textAlign: "left" }}>
+                  <th className="pb-2 pr-2 font-semibold">Филиал</th>
+                  <th className="pb-2 pr-2 font-semibold">Касса</th>
+                  <th className="pb-2 pr-2 font-semibold text-right">
+                    Заявлено
+                  </th>
+                  <th className="pb-2 pr-2 font-semibold text-right">iiko</th>
+                  <th className="pb-2 pr-2 font-semibold text-right">
+                    Расхожд.
+                  </th>
+                  <th className="pb-2 font-semibold text-right">Чек-листы</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((row) => {
+                  const st = CASH_STATUS[row.cashStatus] || CASH_STATUS.none;
+                  const disc = row.discrepancy;
+                  return (
+                    <tr
+                      key={row.branchId}
+                      style={{ borderTop: `1px solid ${C.line}` }}
                     >
-                      {row.branch}
-                    </td>
-                    <td className="py-2 pr-2">
-                      <span
-                        className="rounded-full px-2 py-0.5"
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          background: st.bg,
-                          color: st.fg,
-                        }}
+                      <td
+                        className="py-2 pr-2"
+                        style={{ color: C.ink, fontWeight: 600 }}
                       >
-                        {st.label}
-                      </span>
-                    </td>
-                    <td
-                      className="py-2 pr-2 text-right"
-                      style={{ color: C.ink }}
-                    >
-                      {money(row.declared)}
-                    </td>
-                    <td
-                      className="py-2 pr-2 text-right"
-                      style={{ color: C.sub }}
-                    >
-                      {money(row.iiko)}
-                    </td>
-                    <td
-                      className="py-2 pr-2 text-right"
-                      style={{
-                        color:
-                          disc === 0 ? C.faint : disc < 0 ? C.bad : "#15803D",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {disc === 0
-                        ? "—"
-                        : `${disc > 0 ? "+" : ""}${money(disc)}`}
-                    </td>
-                    <td className="py-2 text-right">
-                      {row.checklistPct == null ? (
-                        <span style={{ color: C.faint }}>—</span>
-                      ) : (
+                        {row.branch}
+                      </td>
+                      <td className="py-2 pr-2">
                         <span
+                          className="rounded-full px-2 py-0.5"
                           style={{
+                            fontSize: 11,
                             fontWeight: 700,
-                            color:
-                              row.checklistPct >= 80 ? "#15803D" : "#B45309",
+                            background: st.bg,
+                            color: st.fg,
                           }}
                         >
-                          {row.checklistPct}%
+                          {st.label}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td
+                        className="py-2 pr-2 text-right"
+                        style={{ color: C.ink }}
+                      >
+                        {money(row.declared)}
+                      </td>
+                      <td
+                        className="py-2 pr-2 text-right"
+                        style={{ color: C.sub }}
+                      >
+                        {money(row.iiko)}
+                      </td>
+                      <td
+                        className="py-2 pr-2 text-right"
+                        style={{
+                          color:
+                            disc === 0 ? C.faint : disc < 0 ? C.bad : "#15803D",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {disc === 0
+                          ? "—"
+                          : `${disc > 0 ? "+" : ""}${money(disc)}`}
+                      </td>
+                      <td className="py-2 text-right">
+                        {row.checklistPct == null ? (
+                          <span style={{ color: C.faint }}>—</span>
+                        ) : (
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color:
+                                row.checklistPct >= 80 ? "#15803D" : "#B45309",
+                            }}
+                          >
+                            {row.checklistPct}%
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Быстрые переходы */}
@@ -359,7 +395,7 @@ function PlanMonthBlock({ plan, onOpen }) {
         <>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
             <span style={{ fontSize: 24, fontWeight: 800, color: barColor }}>
-              {pct}%
+              <CountUp to={pct} />%
             </span>
             <span style={{ fontSize: 13, color: C.sub }}>
               {money(t.factRevenue)} из {money(t.planRevenue)} сум
@@ -391,6 +427,7 @@ function PlanMonthBlock({ plan, onOpen }) {
                 height: "100%",
                 background: barColor,
                 borderRadius: 99,
+                transition: "width .8s cubic-bezier(.22,.61,.36,1)",
               }}
             />
           </div>
@@ -410,7 +447,7 @@ function QuickLink({ icon: Icon, label, sub, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-xl p-3 text-left flex items-center gap-3"
+      className="lift rounded-xl p-3 text-left flex items-center gap-3"
       style={{ border: `1px solid ${C.border}`, background: "#fff" }}
     >
       <div
