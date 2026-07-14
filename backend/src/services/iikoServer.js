@@ -1271,3 +1271,161 @@ export async function pnlReport({ from, to, department }) {
     releaseKey(key);
   }
 }
+
+// ── Закупки и склад ─────────────────────────────────────────────────────────
+// Приходные накладные и остатки складов из iiko — для модуля контроля цен и
+// остатков. Даты документов iiko ждёт в формате DD.MM.YYYY.
+function ddmmyyyy(ymd) {
+  const [y, m, d] = String(ymd).slice(0, 10).split("-");
+  return `${d}.${m}.${y}`;
+}
+
+// Разбор XML-выгрузки приходных накладных (/documents/export/incomingInvoice).
+// Терпимо к обёрткам: ищем <document>…</document>, внутри — шапка и позиции.
+export function parseIncomingInvoicesXml(xml) {
+  const docs = [];
+  const docRe = /<document>([\s\S]*?)<\/document>/g;
+  let m;
+  while ((m = docRe.exec(xml))) {
+    const body = m[1];
+    const one = (tag) => {
+      const mm = body.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+      return mm ? decodeXml(mm[1].trim()) : "";
+    };
+    const items = [];
+    const itemRe = /<item>([\s\S]*?)<\/item>/g;
+    let im;
+    while ((im = itemRe.exec(body))) {
+      const ib = im[1];
+      const iv = (tag) => {
+        const mm = ib.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+        return mm ? mm[1].trim() : "";
+      };
+      const productId = iv("productId");
+      if (!productId) continue;
+      const num = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+      items.push({
+        productId,
+        amount: num(iv("amount")),
+        price: num(iv("price")),
+        sum: num(iv("sum")),
+        storeId: iv("store") || iv("storeId"),
+      });
+    }
+    docs.push({
+      iikoDocId: one("id") || one("documentNumber"),
+      docNumber: one("documentNumber"),
+      date: one("dateIncoming"),
+      supplier: one("supplier") || one("counteragentId") || "",
+      items,
+    });
+  }
+  return docs;
+}
+
+// Приходные накладные за период (from/to — YYYY-MM-DD). Возвращает плоский
+// список позиций, обогащённый именем/единицей товара (в той же сессии iiko).
+export async function incomingInvoices({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const url =
+      `${BASE}/resto/api/documents/export/incomingInvoice` +
+      `?from=${encodeURIComponent(ddmmyyyy(from))}` +
+      `&to=${encodeURIComponent(ddmmyyyy(to))}` +
+      `&key=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko invoices → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    const docs = parseIncomingInvoicesXml(text);
+    const products = await fetchAllProducts(key).catch(() => []);
+    const pById = new Map(products.map((p) => [p.id, p]));
+    const entries = [];
+    for (const d of docs) {
+      for (const it of d.items) {
+        const p = pById.get(it.productId);
+        entries.push({
+          iikoDocId: d.iikoDocId,
+          docNumber: d.docNumber,
+          date: d.date,
+          supplier: d.supplier,
+          productId: it.productId,
+          productName: p ? p.name : it.productId,
+          unit: p ? p.unit : "",
+          amount: it.amount,
+          price: it.price,
+          sum: it.sum,
+          storeId: it.storeId || "",
+        });
+      }
+    }
+    const result = { entries, docCount: docs.length };
+    if (!entries.length) result.sample = text.slice(0, 1000);
+    return result;
+  } finally {
+    releaseKey(key);
+  }
+}
+
+// Остатки складов на момент timestamp (yyyy-MM-ddTHH:mm:ss). Агрегируем по
+// товару (сумма по складам), обогащаем именем/единицей.
+export async function storeBalances({ timestamp, departmentId }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const dep = departmentId
+      ? `&department=${encodeURIComponent(departmentId)}`
+      : "";
+    const url =
+      `${BASE}/resto/api/v2/reports/balance/stores` +
+      `?timestamp=${encodeURIComponent(timestamp)}${dep}` +
+      `&key=${encodeURIComponent(key)}`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko balance/stores → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    let rows = [];
+    try {
+      const j = text ? JSON.parse(text) : [];
+      rows = Array.isArray(j) ? j : j.rows || j.data || [];
+    } catch {
+      /* оставим пустым */
+    }
+    const byProduct = new Map();
+    for (const r of rows) {
+      const pid = r.product || r.productId;
+      if (!pid) continue;
+      const cur = byProduct.get(pid) || { productId: pid, stock: 0 };
+      cur.stock += Number(r.amount) || 0;
+      byProduct.set(pid, cur);
+    }
+    const products = await fetchAllProducts(key).catch(() => []);
+    const pById = new Map(products.map((p) => [p.id, p]));
+    const out = [...byProduct.values()].map((x) => {
+      const p = pById.get(x.productId);
+      return {
+        productId: x.productId,
+        name: p ? p.name : x.productId,
+        unit: p ? p.unit : "",
+        stock: Math.round(x.stock * 1000) / 1000,
+      };
+    });
+    const result = { rows: out, raw: rows.length };
+    if (!rows.length) result.sample = text.slice(0, 800);
+    return result;
+  } finally {
+    releaseKey(key);
+  }
+}
