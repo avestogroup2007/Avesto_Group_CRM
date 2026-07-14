@@ -19,6 +19,7 @@ import {
   stockOverview,
   movementReport,
 } from "../services/procurementSync.js";
+import { sendProcurementAlerts } from "../services/procurementAlerts.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -69,7 +70,22 @@ r.post(
     if (!parsed.success) {
       return res.status(400).json({ error: "Укажите период from/to" });
     }
-    const out = await syncInvoices(parsed.data);
+    let out;
+    try {
+      out = await syncInvoices(parsed.data);
+    } catch (e) {
+      // iiko не настроен или ответил ошибкой — отдаём понятно (не 500), чтобы
+      // UI показал причину, а не «сломалось».
+      const notConfigured = e && e.name === "IikoNotConfiguredError";
+      return res.status(notConfigured ? 200 : 502).json({
+        itemCount: 0,
+        docCount: 0,
+        iikoConfigured: !notConfigured,
+        error: notConfigured
+          ? "Интеграция iiko не настроена (нет IIKO_SERVER_URL/LOGIN/PASSWORD в окружении)"
+          : e.message || "Ошибка обращения к iiko",
+      });
+    }
     await db.auditLog
       .create({
         data: {
@@ -81,6 +97,16 @@ r.post(
       })
       .catch(() => {});
     res.json(out);
+  })
+);
+
+// ── Проверить сейчас: собрать сигналы и отправить в Telegram (с дедупом) ─────
+r.post(
+  "/check-now",
+  requireRole("director", "finance", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const result = await sendProcurementAlerts();
+    res.json(result);
   })
 );
 

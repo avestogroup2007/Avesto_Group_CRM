@@ -1284,42 +1284,70 @@ function ddmmyyyy(ymd) {
 // Терпимо к обёрткам: ищем <document>…</document>, внутри — шапка и позиции.
 export function parseIncomingInvoicesXml(xml) {
   const docs = [];
-  const docRe = /<document>([\s\S]*?)<\/document>/g;
+  // Документ-накладная приходит как <document> (иногда <incomingInvoiceDto>).
+  const docRe = /<(document|incomingInvoiceDto)>([\s\S]*?)<\/\1>/g;
   let m;
   while ((m = docRe.exec(xml))) {
-    const body = m[1];
-    const one = (tag) => {
-      const mm = body.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
-      return mm ? decodeXml(mm[1].trim()) : "";
+    const body = m[2];
+    // Первое непустое значение среди нескольких возможных имён тега — разные
+    // сборки/версии iiko называют поля по-разному.
+    const oneOf = (...tags) => {
+      for (const tag of tags) {
+        const mm = body.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+        if (mm && mm[1].trim()) return decodeXml(mm[1].trim());
+      }
+      return "";
     };
     const items = [];
     const itemRe = /<item>([\s\S]*?)<\/item>/g;
     let im;
     while ((im = itemRe.exec(body))) {
       const ib = im[1];
-      const iv = (tag) => {
-        const mm = ib.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
-        return mm ? mm[1].trim() : "";
+      const iv = (...tags) => {
+        for (const tag of tags) {
+          const mm = ib.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+          if (mm && mm[1].trim()) return mm[1].trim();
+        }
+        return "";
       };
-      const productId = iv("productId");
+      const productId = iv("productId", "product");
       if (!productId) continue;
       const num = (v) => {
         const n = Number(v);
         return Number.isFinite(n) ? n : 0;
       };
+      const amount = num(iv("amount", "actualAmount", "quantity"));
+      // Цена за единицу: явная price, иначе выводим из суммы/количества.
+      const sum = num(iv("sum", "sumWithoutNds", "priceWithoutNds"));
+      let price = num(iv("price", "priceUnit"));
+      if (!price && sum && amount) price = sum / amount;
       items.push({
         productId,
-        amount: num(iv("amount")),
-        price: num(iv("price")),
-        sum: num(iv("sum")),
-        storeId: iv("store") || iv("storeId"),
+        amount,
+        price,
+        sum,
+        storeId: iv("store", "storeId"),
       });
     }
     docs.push({
-      iikoDocId: one("id") || one("documentNumber"),
-      docNumber: one("documentNumber"),
-      date: one("dateIncoming"),
-      supplier: one("supplier") || one("counteragentId") || "",
+      iikoDocId:
+        oneOf("id") ||
+        oneOf("documentNumber", "incomingDocumentNumber") ||
+        oneOf("transportInvoiceNumber"),
+      docNumber: oneOf(
+        "documentNumber",
+        "incomingDocumentNumber",
+        "transportInvoiceNumber"
+      ),
+      // Дата прихода — разные имена в разных версиях API.
+      date: oneOf(
+        "dateIncoming",
+        "incomingDate",
+        "documentDate",
+        "dateOfDocument",
+        "date"
+      ),
+      supplier: oneOf("supplier", "counteragentId", "supplierId"),
       items,
     });
   }
@@ -1368,7 +1396,16 @@ export async function incomingInvoices({ from, to }) {
       }
     }
     const result = { entries, docCount: docs.length };
-    if (!entries.length) result.sample = text.slice(0, 1000);
+    // Диагностика: если позиций нет — отдаём сырой первый документ (увидеть
+    // реальные имена полей) и общий срез ответа. Пусто — накладных за период нет.
+    if (!entries.length) {
+      const firstDoc = text.match(
+        /<(?:document|incomingInvoiceDto)>[\s\S]*?<\/(?:document|incomingInvoiceDto)>/
+      );
+      result.rawFirst = firstDoc ? firstDoc[0].slice(0, 1800) : "";
+      result.sample = text.slice(0, 1000);
+      result.bytes = text.length;
+    }
     return result;
   } finally {
     releaseKey(key);

@@ -145,6 +145,7 @@ function TrendsTab({ notify, canEdit }) {
   const [from, setFrom] = useState(monthAgo(3));
   const [to, setTo] = useState(today());
   const [onlySignals, setOnlySignals] = useState(false);
+  const [diag, setDiag] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -162,13 +163,26 @@ function TrendsTab({ notify, canEdit }) {
 
   const sync = async () => {
     setSyncing(true);
+    setDiag(null);
     try {
       const r = await apiPost("/api/procurement/sync", { from, to });
-      notify &&
-        notify(
-          `Синхронизировано: документов ${r.docCount}, позиций ${r.itemCount}`,
-        );
-      load();
+      if (r.error) {
+        notify && notify(r.error);
+        setDiag(r);
+      } else if (r.itemCount > 0) {
+        notify &&
+          notify(
+            `Синхронизировано: документов ${r.docCount}, позиций ${r.itemCount}`,
+          );
+        load();
+      } else {
+        // Ничего не сохранили — показываем диагностику (что вернул iiko).
+        notify &&
+          notify(
+            `Накладных за период: ${r.docCount || 0}. Данных для цен нет — см. диагностику ниже.`,
+          );
+        setDiag(r);
+      }
     } catch (e) {
       notify && notify(e.message || "Ошибка синхронизации");
     } finally {
@@ -206,6 +220,79 @@ function TrendsTab({ notify, canEdit }) {
           </button>
           <div style={{ fontSize: 11.5, color: C.faint, alignSelf: "center" }}>
             Тянет приходные накладные за период в историю цен
+          </div>
+        </div>
+      )}
+
+      {diag && (
+        <div
+          className="rounded-2xl p-3"
+          style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+        >
+          <div
+            className="font-bold mb-1"
+            style={{ color: "#92400E", fontSize: 13 }}
+          >
+            Диагностика синхронизации
+          </div>
+          <div style={{ fontSize: 12, color: "#78350F", lineHeight: 1.6 }}>
+            {diag.error ? (
+              <div>{diag.error}</div>
+            ) : (
+              <>
+                Накладных получено: <b>{diag.docCount ?? 0}</b> · позиций
+                разобрано: <b>{diag.entriesParsed ?? 0}</b>
+                {diag.droppedBadDate ? (
+                  <>
+                    {" "}
+                    · отброшено из-за даты: <b>{diag.droppedBadDate}</b>
+                  </>
+                ) : null}
+                {typeof diag.bytes === "number" ? (
+                  <>
+                    {" "}
+                    · ответ iiko: <b>{diag.bytes}</b> байт
+                  </>
+                ) : null}
+              </>
+            )}
+          </div>
+          {diag.rawFirst ? (
+            <pre
+              className="mt-2 overflow-x-auto"
+              style={{
+                fontSize: 10.5,
+                background: "#Fff",
+                border: "1px solid #FDE68A",
+                borderRadius: 8,
+                padding: 8,
+                maxHeight: 220,
+                whiteSpace: "pre-wrap",
+                color: "#57430E",
+              }}
+            >
+              {diag.rawFirst}
+            </pre>
+          ) : diag.sample ? (
+            <pre
+              className="mt-2 overflow-x-auto"
+              style={{
+                fontSize: 10.5,
+                background: "#fff",
+                border: "1px solid #FDE68A",
+                borderRadius: 8,
+                padding: 8,
+                maxHeight: 220,
+                whiteSpace: "pre-wrap",
+                color: "#57430E",
+              }}
+            >
+              {diag.sample}
+            </pre>
+          ) : null}
+          <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+            Пришлите этот блок разработчику — по нему настроим разбор формата
+            накладных вашего iiko.
           </div>
         </div>
       )}
@@ -613,6 +700,31 @@ function ConfigTab({ notify, canConfig }) {
   const [cfg, setCfg] = useState(null);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  const checkNow = async () => {
+    setChecking(true);
+    try {
+      const r = await apiPost("/api/procurement/check-now");
+      if (r.skipped) {
+        notify &&
+          notify(
+            r.reason === "notify_off"
+              ? "Сигналы в Telegram выключены в правилах"
+              : "Telegram не настроен на сервере",
+          );
+      } else {
+        notify &&
+          notify(
+            `Проверка выполнена: отправлено ${r.sent}, повторов пропущено ${r.duplicatesSkipped}`,
+          );
+      }
+    } catch (e) {
+      notify && notify(e.message || "Ошибка проверки");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   useEffect(() => {
     apiGet("/api/procurement/config")
@@ -738,18 +850,34 @@ function ConfigTab({ notify, canConfig }) {
       />
 
       {canConfig && (
-        <button
-          onClick={save}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
-          style={{
-            background: C.brandA,
-            fontSize: 14,
-            opacity: saving ? 0.7 : 1,
-          }}
-        >
-          <Save size={16} /> {saving ? "Сохранение…" : "Сохранить правила"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-bold text-white"
+            style={{
+              background: C.brandA,
+              fontSize: 14,
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            <Save size={16} /> {saving ? "Сохранение…" : "Сохранить правила"}
+          </button>
+          <button
+            onClick={checkNow}
+            disabled={checking}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.sub,
+              fontSize: 14,
+              opacity: checking ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={16} className={checking ? "animate-spin" : ""} />
+            {checking ? "Проверка…" : "Проверить сигналы сейчас"}
+          </button>
+        </div>
       )}
     </div>
   );

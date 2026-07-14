@@ -196,7 +196,8 @@ sysadmin/staff), `Task`/`TaskHistory`/`Comment`, `CashReport`, `MoneyTx`
 | FRONTEND_URL, COOKIE_SAMESITE=none, COOKIE_SECURE=true | кросс-домен GH Pages ↔ Render |
 | IIKO_SERVER_URL / IIKO_SERVER_LOGIN / IIKO_SERVER_PASSWORD | доступ к iiko |
 | TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID | бот и общая группа |
-| TELEGRAM_TOPIC_EXPENSES / _TASKS / _CASH / _STAFF / _REPORTS / _CHECKLIST | id тем группы |
+| TELEGRAM_TOPIC_EXPENSES / _TASKS / _CASH / _STAFF / _REPORTS / _CHECKLIST / _GOODS | id тем группы (_GOODS — сигналы закупок/склада) |
+| PROCUREMENT_CRON_SECRET | секрет крон-эндпоинта авто-проверки закупок (POST /api/procurement-cron/check) |
 | TELEGRAM_WEBHOOK_SECRET, PUBLIC_BASE_URL | вебхук бота чек-листов |
 | ANTHROPIC_API_KEY | ИИ-помощник (Claude API) |
 | BOOTSTRAP_ADMIN_LOGIN | защищённая учётка (по умолчанию sysadmin) |
