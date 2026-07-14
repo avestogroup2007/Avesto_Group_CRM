@@ -13,6 +13,7 @@ import {
   Save,
   AlertTriangle,
   Receipt,
+  Upload,
 } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -28,6 +29,19 @@ import {
 } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
+// Дата/время загрузки отчёта — в часовом поясе ресторана (Ташкент).
+const fmtImported = (v) => {
+  const d = new Date(v);
+  if (isNaN(d)) return "";
+  return d.toLocaleString("ru-RU", {
+    timeZone: "Asia/Tashkent",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 const num = (n) => (Number(n) || 0).toLocaleString("ru-RU");
 const ymd = (d) => d.toISOString().slice(0, 10);
 const today = () => ymd(new Date());
@@ -123,7 +137,7 @@ export default function Procurement({ notify, role }) {
       {tab === "trends" && <TrendsTab notify={notify} canEdit={canEdit} />}
       {tab === "stock" && <StockTab />}
       {tab === "movement" && <MovementTab />}
-      {tab === "debts" && <DebtsTab />}
+      {tab === "debts" && <DebtsTab notify={notify} />}
       {tab === "config" && <ConfigTab notify={notify} canConfig={canConfig} />}
     </div>
   );
@@ -700,10 +714,11 @@ function MovementTab() {
 }
 
 // ── Долги поставщикам ───────────────────────────────────────────────────────
-function DebtsTab() {
+function DebtsTab({ notify }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -719,11 +734,41 @@ function DebtsTab() {
     load();
   }, []);
 
+  // Загрузка отчёта iiko «Задолженность перед контрагентами» (Excel) →
+  // реальный долг по каждому поставщику. Файл читаем как base64 и шлём на сервер.
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const r = await apiPost("/api/procurement/debts-import", {
+          file: String(reader.result),
+        });
+        if (r.error) notify && notify(r.error);
+        else
+          notify &&
+            notify(
+              `Загружено: документов ${r.imported}, поставщиков ${r.suppliers}`,
+            );
+        load();
+      } catch (er) {
+        notify && notify(er.message || "Ошибка импорта");
+      } finally {
+        setImporting(false);
+      }
+    };
+    reader.onerror = () => setImporting(false);
+    reader.readAsDataURL(f);
+  };
+
   const rows = (data?.rows || []).filter((r) => r.debt > 0);
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={load}
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
@@ -735,8 +780,37 @@ function DebtsTab() {
         >
           <RefreshCw size={14} /> Обновить
         </button>
+        <label
+          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold cursor-pointer"
+          style={{
+            border: `1px solid ${C.border}`,
+            color: importing ? C.faint : "#fff",
+            background: importing ? "#F1F5F9" : C.accent,
+            fontSize: 13,
+          }}
+        >
+          <Upload size={14} />
+          {importing ? "Загрузка…" : "Загрузить отчёт (Excel)"}
+          <input
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={onFile}
+            disabled={importing}
+            style={{ display: "none" }}
+          />
+        </label>
         <div style={{ fontSize: 11.5, color: C.faint }}>
-          Взаиморасчёты с поставщиками из iiko на сегодня
+          {data?.source === "import" && data?.importedAt ? (
+            <>
+              Отчёт iiko «Задолженность перед контрагентами», загружен{" "}
+              {fmtImported(data.importedAt)}
+            </>
+          ) : (
+            <>
+              Загрузите отчёт iiko «Задолженность перед контрагентами» (Excel) —
+              покажем долг по каждому поставщику и просрочку
+            </>
+          )}
         </div>
       </div>
 
@@ -747,7 +821,11 @@ function DebtsTab() {
         <Spinner label="Загрузка задолженностей…" />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            className={`grid gap-2 ${
+              data?.source === "import" ? "grid-cols-3" : "grid-cols-2"
+            }`}
+          >
             <Kpi
               label="Всего должны, сум"
               value={<CountUp to={data?.totalDebt || 0} format={money} />}
@@ -758,6 +836,13 @@ function DebtsTab() {
               value={String(rows.length)}
               tone={C.warn}
             />
+            {data?.source === "import" && (
+              <Kpi
+                label="Просрочено, сум"
+                value={<CountUp to={data?.overdueTotal || 0} format={money} />}
+                tone={C.bad}
+              />
+            )}
           </div>
 
           {(data?.rowSample || data?.suppliersRawFirst) && rows.length > 0 ? (
@@ -843,15 +928,27 @@ function DebtsTab() {
                 <thead>
                   <tr style={{ color: C.faint, textAlign: "left" }}>
                     <th className="pb-2 pr-2 font-semibold">
-                      Счёт / контрагент
+                      {data?.source === "import"
+                        ? "Поставщик"
+                        : "Счёт / контрагент"}
                     </th>
+                    {data?.source === "import" && (
+                      <th className="pb-2 pr-2 font-semibold text-right">
+                        Док.
+                      </th>
+                    )}
+                    {data?.source === "import" && (
+                      <th className="pb-2 pr-2 font-semibold text-right">
+                        Просрочено, сум
+                      </th>
+                    )}
                     <th className="pb-2 font-semibold text-right">Долг, сум</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.slice(0, 400).map((r) => (
                     <tr
-                      key={r.supplierId}
+                      key={r.supplierId || r.name}
                       style={{ borderTop: `1px solid ${C.line}` }}
                     >
                       <td
@@ -860,6 +957,25 @@ function DebtsTab() {
                       >
                         {r.name}
                       </td>
+                      {data?.source === "import" && (
+                        <td
+                          className="py-2 pr-2 text-right"
+                          style={{ color: C.sub }}
+                        >
+                          {r.docs || 0}
+                        </td>
+                      )}
+                      {data?.source === "import" && (
+                        <td
+                          className="py-2 pr-2 text-right"
+                          style={{
+                            color: r.overdueDebt > 0 ? C.bad : C.faint,
+                            fontWeight: r.overdueDebt > 0 ? 700 : 400,
+                          }}
+                        >
+                          {r.overdueDebt > 0 ? money(r.overdueDebt) : "—"}
+                        </td>
+                      )}
                       <td
                         className="py-2 text-right"
                         style={{ color: C.bad, fontWeight: 700 }}
