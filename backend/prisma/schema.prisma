@@ -587,6 +587,27 @@ model ProcurementConfig {
   updatedById String?
 }
 
+// Импорт отчёта iiko «Задолженность перед контрагентами» (Excel): по документам
+// (накладным) — контрагент, суммы, «осталось оплатить», срок оплаты. Реальный
+// долг по каждому поставщику (баланс-API iiko этого не даёт). Каждый импорт
+// заменяет предыдущий (deleteMany + createMany).
+model SupplierDebtDoc {
+  id         String    @id @default(cuid())
+  docNumber  String    @default("")
+  docType    String    @default("")
+  supplier   String    @default("")
+  date       DateTime?
+  dueDate    DateTime? // срок оплаты (для просрочки), если задан в iiko
+  amount     Float     @default(0) // сумма документа
+  paid       Float     @default(0) // оплачено
+  remaining  Float     @default(0) // осталось оплатить = долг
+  warehouse  String    @default("")
+  importedAt DateTime  @default(now())
+
+  @@index([supplier])
+  @@index([importedAt])
+}
+
 // Журнал отправленных сигналов (дедуп): один сигнал на (товар, тип, день),
 // чтобы авто-проверка не спамила один и тот же скачок цены/нехватку остатка.
 model ProcurementAlert {

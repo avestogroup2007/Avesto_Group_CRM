@@ -21,6 +21,10 @@ import {
   supplierDebts,
 } from "../services/procurementSync.js";
 import { sendProcurementAlerts } from "../services/procurementAlerts.js";
+import {
+  importDebtWorkbook,
+  importedDebtSummary,
+} from "../services/procurementDebts.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -147,6 +151,10 @@ r.get(
 r.get(
   "/debts",
   asyncHandler(async (req, res) => {
+    // Приоритет — импортированный отчёт «Задолженность перед контрагентами»
+    // (реальный долг по каждому поставщику). Если импорта не было — баланс iiko.
+    const imported = await importedDebtSummary().catch(() => null);
+    if (imported) return res.json(imported);
     try {
       res.json(await supplierDebts());
     } catch (e) {
@@ -160,6 +168,41 @@ r.get(
           : e.message || "Ошибка обращения к iiko",
       });
     }
+  })
+);
+
+// Импорт отчёта iiko «Задолженность перед контрагентами» (Excel, base64).
+const DebtImportSchema = z.object({ file: z.string().min(10) });
+r.post(
+  "/debts-import",
+  requireRole("director", "finance", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const parsed = DebtImportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Файл не передан" });
+    }
+    // Принимаем как «data:...;base64,XX
+    // » так и чистый base64.
+    const b64 = parsed.data.file.replace(/^data:[^,]*,/, "");
+    let buffer;
+    try {
+      buffer = Buffer.from(b64, "base64");
+    } catch {
+      return res.status(400).json({ error: "Не удалось прочитать файл" });
+    }
+    const out = await importDebtWorkbook(buffer);
+    if (out.error) return res.status(400).json(out);
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "procurement_debts_import",
+          detail: `Импорт долгов: документов ${out.imported}, поставщиков ${out.suppliers}`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
+    res.json(out);
   })
 );
 
