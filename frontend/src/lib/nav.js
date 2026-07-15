@@ -16,7 +16,7 @@ import {
   Wallet,
   Banknote,
   Check,
-  Cake,
+  Blocks,
   Briefcase,
   LayoutDashboard,
   Users,
@@ -115,7 +115,7 @@ export const NAV = [
   {
     key: "cakes",
     label: "Конструктор",
-    icon: Cake,
+    icon: Blocks,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
   {
