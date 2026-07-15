@@ -114,7 +114,7 @@ export const NAV = [
   },
   {
     key: "cakes",
-    label: "Торты (конструктор)",
+    label: "Конструктор",
     icon: Cake,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
   },
@@ -289,7 +289,7 @@ export const VIEW_TITLE = {
   production: "Производство",
   checklists: "Чек-листы смены",
   staffkpi: "KPI сотрудников — дисциплина по чек-листам",
-  cakes: "Конструктор тортов",
+  cakes: "Конструктор",
   reports: "Отчёты",
   org: "Оргструктура и филиалы",
   about: "О системе",

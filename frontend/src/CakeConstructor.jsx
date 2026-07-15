@@ -161,7 +161,7 @@ export default function CakeConstructor({ s, dispatch, notify }) {
       <div className="flex items-center gap-2 mb-1">
         <Cake size={18} style={{ color: BRAND }} />
         <h3 className="font-bold" style={{ color: INK, fontSize: 16 }}>
-          Конструктор тортов
+          Конструктор
         </h3>
       </div>
       <p
