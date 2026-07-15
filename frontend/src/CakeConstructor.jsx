@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { apiGet, apiPost } from "./api.js";
 import {
-  Cake,
+  Blocks,
   Plus,
   Minus,
   Trash2,
@@ -159,7 +159,7 @@ export default function CakeConstructor({ s, dispatch, notify }) {
   return (
     <div style={box}>
       <div className="flex items-center gap-2 mb-1">
-        <Cake size={18} style={{ color: BRAND }} />
+        <Blocks size={18} style={{ color: BRAND }} />
         <h3 className="font-bold" style={{ color: INK, fontSize: 16 }}>
           Конструктор
         </h3>
