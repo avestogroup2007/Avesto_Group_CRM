@@ -399,16 +399,17 @@ export default function App({ authUser, onLogout }) {
         fontFamily: FONT,
         color: C.ink,
         // Тёплый «мешевый» градиент бренда как фон под стеклянными поверхностями.
+        // Ярче и «сочнее»: светлее база, заметнее золотое свечение по краям.
         background:
-          "radial-gradient(1100px 620px at 4% -12%, rgba(200,137,46,0.34), transparent 56%)," +
-          "radial-gradient(1000px 700px at 104% -4%, rgba(123,45,31,0.26), transparent 54%)," +
-          "radial-gradient(900px 620px at 92% 108%, rgba(230,150,60,0.22), transparent 56%)," +
-          "radial-gradient(1000px 900px at 30% 118%, rgba(124,58,237,0.12), transparent 58%)," +
-          "linear-gradient(180deg, #F4ECDF 0%, #EBE0CF 100%)",
+          "radial-gradient(1100px 640px at 4% -12%, rgba(228,169,60,0.42), transparent 56%)," +
+          "radial-gradient(1000px 700px at 104% -4%, rgba(123,45,31,0.24), transparent 54%)," +
+          "radial-gradient(940px 640px at 92% 108%, rgba(230,150,60,0.30), transparent 56%)," +
+          "radial-gradient(1000px 900px at 30% 118%, rgba(124,58,237,0.10), transparent 58%)," +
+          "linear-gradient(180deg, #FBF6EC 0%, #F1E7D4 100%)",
         backgroundAttachment: "fixed",
       }}
     >
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
         *{box-sizing:border-box} button{font-family:inherit;cursor:pointer} select{font-family:inherit}
         ::-webkit-scrollbar{height:9px;width:9px}
         ::-webkit-scrollbar-thumb{background:rgba(123,45,31,.28);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
@@ -422,6 +423,8 @@ export default function App({ authUser, onLogout }) {
         /* Жидкое стекло: матовые полупрозрачные поверхности хрома */
         .glass{background:${C.glass};-webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);border:1px solid ${C.glassBorder}}
         .glass-chrome{background:${C.glassStrong};-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%)}
+        /* Серифный «плакатный» шрифт для крупных цифр и заголовков */
+        .serif{font-family:'Fraunces','Iowan Old Style',Palatino,Georgia,serif;font-optical-sizing:auto}
         /* Карточки-контент: полупрозрачные (тёплый градиент чуть просвечивает) +
            премиальная тень и подсветка. БЕЗ backdrop-filter — иначе карточки
            создают stacking-контекст и перекрывают выпадающие списки/календари.

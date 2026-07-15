@@ -2,6 +2,12 @@
 export const FONT =
   "'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
+// Серифный «плакатный» шрифт для крупных цифр и заголовков (тёплая тема
+// «жидкое стекло»). Fraunces — тёплый характерный serif; при недоступности
+// откатывается на системные serif.
+export const SERIF =
+  "'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif";
+
 // Дизайн-токены: высокий контраст, доступность для всех поколений (Этап 3).
 // Плюс «жидкое стекло»: полупрозрачные матовые поверхности для хрома (боковое
 // меню, шапка, нижняя навигация, модалки) поверх тёплого градиентного фона.
@@ -15,15 +21,18 @@ export const C = {
   line: "#F1EBE2",
   brandA: "#7B2D1F",
   brandB: "#C8892E",
+  gold: "#C8892E",
+  goldBright: "#E4A93C",
   violet: "#7C3AED",
   ok: "#16A34A",
   warn: "#D97706",
   bad: "#DC2626",
   // Стеклянные поверхности (используются через классы .glass* в глобальном CSS).
-  glass: "rgba(255,255,255,0.58)",
-  glassStrong: "rgba(255,251,246,0.80)",
-  glassBorder: "rgba(255,255,255,0.65)",
-  glassShadow: "0 8px 32px rgba(74,38,22,0.10), 0 2px 8px rgba(74,38,22,0.06)",
+  // Тёплая тема «жидкое стекло»: поверхности заметнее и «сочнее».
+  glass: "rgba(255,255,255,0.64)",
+  glassStrong: "rgba(255,252,247,0.84)",
+  glassBorder: "rgba(255,255,255,0.80)",
+  glassShadow: "0 14px 42px rgba(74,38,22,0.13), 0 2px 8px rgba(74,38,22,0.06)",
   // Фирменный градиент для основных кнопок и акцентов.
   brandGrad: "linear-gradient(135deg, #8A3323 0%, #7B2D1F 55%, #5E2016 100%)",
 };
