@@ -222,10 +222,10 @@ export function PageHeader({ icon: Icon, title, subtitle, children }) {
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
         <h2
-          className="font-bold flex items-center gap-2"
-          style={{ color: C.ink, fontSize: 18 }}
+          className="serif font-bold flex items-center gap-2"
+          style={{ color: C.ink, fontSize: 23, letterSpacing: "-0.015em" }}
         >
-          {Icon ? <Icon size={19} style={{ color: C.brandA }} /> : null} {title}
+          {Icon ? <Icon size={20} style={{ color: C.brandA }} /> : null} {title}
         </h2>
         {subtitle ? (
           <div style={{ color: C.sub, fontSize: 12.5 }}>{subtitle}</div>
@@ -259,10 +259,17 @@ export function Kpi({ label, value, tone }) {
         </span>
       </div>
       {/* Крупные суммы с неразрывными пробелами не переносятся сами — даём
-          перенос и уменьшаем шрифт на узких экранах, чтобы не вылезали за карточку. */}
+          перенос и уменьшаем шрифт на узких экранах, чтобы не вылезали за карточку.
+          Серифный «плакатный» шрифт (как крупные годы в референсе тёплой темы). */}
       <div
-        className="font-extrabold text-2xl sm:text-3xl"
-        style={{ color: C.ink, lineHeight: 1.1, overflowWrap: "anywhere" }}
+        className="serif font-bold text-3xl sm:text-4xl"
+        style={{
+          color: C.ink,
+          lineHeight: 1.05,
+          letterSpacing: "-0.02em",
+          fontVariantNumeric: "tabular-nums",
+          overflowWrap: "anywhere",
+        }}
       >
         {value}
       </div>
