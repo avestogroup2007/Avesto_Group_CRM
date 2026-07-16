@@ -277,6 +277,8 @@ export default function DashboardView({ dispatch }) {
                             fontWeight: 700,
                             background: st.bg,
                             color: st.fg,
+                            display: "inline-block",
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {st.label}
