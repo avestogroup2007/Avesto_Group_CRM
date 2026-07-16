@@ -85,7 +85,7 @@ export const NAV = [
     key: "procurement",
     label: "Закупки и склад",
     icon: PackageSearch,
-    roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+    roles: ["director", "finance", "accountant", "sysadmin"],
   },
   {
     key: "sales",

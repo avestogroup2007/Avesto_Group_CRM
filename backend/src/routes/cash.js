@@ -201,7 +201,11 @@ r.get(
     if (from) where.date.gte = String(from);
     if (to) where.date.lte = String(to);
     // Управляющий видит кассу только своего филиала; бухгалтер/офис — все.
-    const forced = forcedBranch(req.user, { alsoFree: FINANCE_FREE });
+    // failClosed: филиальная роль без назначенного филиала не видит ничего.
+    const forced = forcedBranch(req.user, {
+      alsoFree: FINANCE_FREE,
+      failClosed: true,
+    });
     const eff = forced || branch;
     if (eff) where.branchId = String(eff);
     const items = await db.cashReport.findMany({

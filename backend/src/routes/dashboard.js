@@ -41,7 +41,10 @@ r.get(
   asyncHandler(async (req, res) => {
     await refreshOrgConfig().catch(() => {});
     const date = req.query.date ? String(req.query.date) : ymdTashkent();
-    const forced = forcedBranch(req.user, { alsoFree: FINANCE_FREE });
+    const forced = forcedBranch(req.user, {
+      alsoFree: FINANCE_FREE,
+      failClosed: true,
+    });
 
     // Филиалы в области видимости: управляющий — только свой.
     let branches = orgBranches();

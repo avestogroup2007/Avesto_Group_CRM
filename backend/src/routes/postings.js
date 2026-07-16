@@ -16,6 +16,15 @@ const r = Router();
 r.use(requireAuth);
 r.use(requireRole("director", "finance", "accountant", "sysadmin"));
 
+// Правка настроек бухгалтерии (план счетов, правила проводок) — только
+// директор/сисадмин: это чувствительная настройка (дебет/кредит), меняющая, как
+// формируются проводки. Чтение остаётся у всех офисных ролей.
+const canEditCfg = requireRole("director", "sysadmin");
+const logCfg = (req, event, detail) =>
+  db.auditLog
+    .create({ data: { userId: req.user.uid, event, detail, ip: req.ip } })
+    .catch(() => {});
+
 // BigInt → Number для JSON (суммы в пределах безопасного диапазона).
 const n = (v) => (v == null ? 0 : Number(v));
 const serP = (p) => ({ ...p, amount: n(p.amount) });
@@ -234,6 +243,7 @@ const AccountSchema = z.object({
 });
 r.post(
   "/accounts",
+  canEditCfg,
   asyncHandler(async (req, res) => {
     const parsed = AccountSchema.safeParse(req.body);
     if (!parsed.success)
@@ -249,12 +259,18 @@ r.post(
         active: d.active,
       },
     });
+    await logCfg(
+      req,
+      "posting_account_upsert",
+      `Счёт ${entry.code} «${entry.name}» (${entry.kind}), ${entry.active ? "активен" : "выключен"}`
+    );
     res.status(201).json(entry);
   })
 );
 
 r.patch(
   "/accounts/:id",
+  canEditCfg,
   asyncHandler(async (req, res) => {
     const parsed = AccountSchema.partial().safeParse(req.body);
     if (!parsed.success)
@@ -268,16 +284,28 @@ r.patch(
       .update({ where: { id: req.params.id }, data })
       .catch(() => null);
     if (!updated) return res.status(404).json({ error: "Счёт не найден" });
+    await logCfg(
+      req,
+      "posting_account_update",
+      `Счёт ${updated.code} «${updated.name}» изменён`
+    );
     res.json(updated);
   })
 );
 
 r.delete(
   "/accounts/:id",
+  canEditCfg,
   asyncHandler(async (req, res) => {
-    await db.ledgerAccount
+    const acc = await db.ledgerAccount
       .delete({ where: { id: req.params.id } })
-      .catch(() => {});
+      .catch(() => null);
+    if (acc)
+      await logCfg(
+        req,
+        "posting_account_delete",
+        `Удалён счёт ${acc.code} «${acc.name}»`
+      );
     res.json({ ok: true });
   })
 );
@@ -303,6 +331,7 @@ const RuleSchema = z.object({
 });
 r.post(
   "/rules",
+  canEditCfg,
   asyncHandler(async (req, res) => {
     const parsed = RuleSchema.safeParse(req.body);
     if (!parsed.success)
@@ -315,12 +344,18 @@ r.post(
       update: { debit: d.debit, credit: d.credit, active: d.active },
       create: d,
     });
+    await logCfg(
+      req,
+      "posting_rule_upsert",
+      `Правило ${entry.direction}/${entry.category || "—"}: Дт ${entry.debit || "—"} Кт ${entry.credit || "—"}`
+    );
     res.status(201).json(entry);
   })
 );
 
 r.patch(
   "/rules/:id",
+  canEditCfg,
   asyncHandler(async (req, res) => {
     const parsed = RuleSchema.partial().safeParse(req.body);
     if (!parsed.success)
@@ -333,16 +368,28 @@ r.patch(
       .update({ where: { id: req.params.id }, data })
       .catch(() => null);
     if (!updated) return res.status(404).json({ error: "Правило не найдено" });
+    await logCfg(
+      req,
+      "posting_rule_update",
+      `Правило ${updated.direction}/${updated.category || "—"} изменено: Дт ${updated.debit || "—"} Кт ${updated.credit || "—"}`
+    );
     res.json(updated);
   })
 );
 
 r.delete(
   "/rules/:id",
+  canEditCfg,
   asyncHandler(async (req, res) => {
-    await db.postingRule
+    const rule = await db.postingRule
       .delete({ where: { id: req.params.id } })
-      .catch(() => {});
+      .catch(() => null);
+    if (rule)
+      await logCfg(
+        req,
+        "posting_rule_delete",
+        `Удалено правило ${rule.direction}/${rule.category || "—"}`
+      );
     res.json({ ok: true });
   })
 );

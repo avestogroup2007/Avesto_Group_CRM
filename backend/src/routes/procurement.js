@@ -29,7 +29,9 @@ import {
 
 const r = Router();
 r.use(requireAuth);
-r.use(requireRole("director", "finance", "accountant", "manager", "sysadmin"));
+// «Закупки и склад» — офисная аналитика (цены, остатки, долги по всей сети),
+// не привязана к филиалу менеджера, поэтому доступ без роли «менеджер».
+r.use(requireRole("director", "finance", "accountant", "sysadmin"));
 
 const YMD = z
   .string()
