@@ -3,9 +3,17 @@
 // X-Cron-Secret. Без авторизации пользователя (у крона нет JWT), поэтому
 // защита — секрет. Пустой TODO_REMINDER_SECRET = напоминания отключены (503).
 import { Router } from "express";
+import crypto from "node:crypto";
 import { env } from "../env.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { remindOverdueTodos } from "../services/todoReminders.js";
+
+// Сравнение секретов за постоянное время — против timing-атаки.
+function secretEquals(got, want) {
+  const a = Buffer.from(String(got || ""));
+  const b = Buffer.from(String(want || ""));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 const r = Router();
 
@@ -18,7 +26,7 @@ r.post(
         .status(503)
         .json({ error: "Напоминания отключены (нет TODO_REMINDER_SECRET)" });
     }
-    if (req.get("x-cron-secret") !== secret) {
+    if (!secretEquals(req.get("x-cron-secret"), secret)) {
       return res.status(403).json({ error: "Неверный секрет" });
     }
     const result = await remindOverdueTodos();

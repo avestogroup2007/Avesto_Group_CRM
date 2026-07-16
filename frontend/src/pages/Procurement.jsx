@@ -647,7 +647,7 @@ function MovementTab({ store = "" }) {
         <NiceDate label="С" value={from} onChange={setFrom} width={140} />
         <NiceDate label="По" value={to} onChange={setTo} width={140} />
         <button
-          onClick={load}
+          onClick={() => load()}
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
           style={{
             border: `1px solid ${C.border}`,
@@ -817,7 +817,7 @@ function DebtsTab({ notify }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <button
-          onClick={load}
+          onClick={() => load()}
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
           style={{
             border: `1px solid ${C.border}`,

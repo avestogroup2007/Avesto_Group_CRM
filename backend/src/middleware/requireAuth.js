@@ -89,7 +89,8 @@ export async function requireAuth(req, res, next) {
   let payload;
   try {
     // В payload лежит только { uid, role, branchId } — ничего секретного.
-    payload = jwt.verify(token, env.JWT_SECRET);
+    // Явно фиксируем алгоритм (HMAC HS256) — не принимаем токены с другим alg.
+    payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
   } catch {
     return res.status(401).json({ error: "Сессия истекла, войдите заново" });
   }

@@ -5,18 +5,37 @@
 import ExcelJS from "exceljs";
 import { db } from "../db.js";
 
+// ExcelJS отдаёт значение ячейки не только примитивом: формула — { formula,
+// result }, форматированный текст — { richText:[…] }, ссылка — { text,
+// hyperlink }, ошибка — { error }. Разворачиваем в примитив, иначе Number(obj)
+// = NaN → 0, а String(obj) = "[object Object]".
+function cellValue(v) {
+  if (v == null || v instanceof Date) return v;
+  if (typeof v === "object") {
+    if (Array.isArray(v.richText))
+      return v.richText.map((t) => (t && t.text) || "").join("");
+    if ("result" in v) return v.result;
+    if ("text" in v) return v.text;
+    if ("error" in v) return null;
+  }
+  return v;
+}
+
 export async function parseDebtWorkbook(buffer) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
-  if (!ws) return { rows: [] };
+  if (!ws) return { rows: [], foundAmountColumn: false };
 
   // Строка заголовка — первая, где встречается «Контрагент».
   let hdr = -1;
   const col = {};
   ws.eachRow((row, rn) => {
     if (hdr >= 0) return;
-    const vals = (row.values || []).map((v) => (v == null ? "" : String(v)));
+    const vals = (row.values || []).map((v) => {
+      const u = cellValue(v);
+      return u == null ? "" : String(u);
+    });
     if (vals.some((v) => v.includes("Контрагент"))) {
       hdr = rn;
       vals.forEach((v, i) => {
@@ -25,7 +44,7 @@ export async function parseDebtWorkbook(buffer) {
       });
     }
   });
-  if (hdr < 0) return { rows: [] };
+  if (hdr < 0) return { rows: [], foundAmountColumn: false };
 
   const find = (...names) => {
     for (const n of names) if (col[n] != null) return col[n];
@@ -42,13 +61,18 @@ export async function parseDebtWorkbook(buffer) {
   const cWh = find("Склад");
 
   const num = (v) => {
-    const n = Number(v);
+    const u = cellValue(v);
+    const n = Number(u);
     return Number.isFinite(n) ? n : 0;
   };
-  const str = (v) => (v == null ? "" : String(v).trim());
+  const str = (v) => {
+    const u = cellValue(v);
+    return u == null ? "" : String(u).trim();
+  };
   const dt = (v) => {
-    if (!v) return null;
-    const d = v instanceof Date ? v : new Date(v);
+    const u = cellValue(v);
+    if (!u) return null;
+    const d = u instanceof Date ? u : new Date(u);
     return isNaN(d) ? null : d;
   };
 
@@ -69,12 +93,14 @@ export async function parseDebtWorkbook(buffer) {
       warehouse: cWh ? str(row.getCell(cWh).value) : "",
     });
   });
-  return { rows };
+  // Признак того, что колонка суммы долга («Осталось оплатить») распознана —
+  // иначе импорт молча запишет нули по всем документам.
+  return { rows, foundAmountColumn: cRem != null };
 }
 
 // Импорт: разобрать буфер и заменить прошлые данные (каждый импорт — свежий срез).
 export async function importDebtWorkbook(buffer) {
-  const { rows } = await parseDebtWorkbook(buffer);
+  const { rows, foundAmountColumn } = await parseDebtWorkbook(buffer);
   if (!rows.length) {
     return {
       imported: 0,
@@ -83,11 +109,23 @@ export async function importDebtWorkbook(buffer) {
         "В файле не найдены строки с контрагентами. Загрузите отчёт iiko «Задолженность перед контрагентами» (Excel).",
     };
   }
-  await db.supplierDebtDoc.deleteMany({});
+  // Колонка суммы долга не распознана — не затираем прошлые данные нулями.
+  if (!foundAmountColumn) {
+    return {
+      imported: 0,
+      suppliers: 0,
+      error:
+        "В файле не найдена колонка «Осталось оплатить». Проверьте, что это отчёт iiko «Задолженность перед контрагентами».",
+    };
+  }
   const importedAt = new Date();
-  await db.supplierDebtDoc.createMany({
-    data: rows.map((r) => ({ ...r, importedAt })),
-  });
+  // Замена среза атомарно: если запись упадёт, старые данные не потеряются.
+  await db.$transaction([
+    db.supplierDebtDoc.deleteMany({}),
+    db.supplierDebtDoc.createMany({
+      data: rows.map((r) => ({ ...r, importedAt })),
+    }),
+  ]);
   const suppliers = new Set(rows.map((r) => r.supplier)).size;
   return { imported: rows.length, suppliers };
 }
@@ -99,7 +137,10 @@ export async function importDebtWorkbook(buffer) {
 export async function importedDebtSummary({ warehouse = "" } = {}) {
   const all = await db.supplierDebtDoc.findMany({ take: 100000 });
   if (!all.length) return null;
+  // Просрочка — если срок оплаты РАНЬШE сегодняшнего дня. Сравниваем с началом
+  // суток, иначе документ со сроком «сегодня» ошибочно считается просроченным.
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const round2 = (n) => Math.round(n * 100) / 100;
 
   // Разбивку по складам считаем по ВСЕМ документам (независимо от фильтра),
