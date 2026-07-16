@@ -111,7 +111,9 @@ export async function stockOverview({ days = 30, storeId = "" } = {}) {
   const incomeById = new Map();
   for (const e of inv.entries) {
     // Приход учитываем только по выбранному складу (если фильтр задан).
-    if (storeId && e.storeId && e.storeId !== storeId) continue;
+    // Позиции без склада при активном фильтре исключаем — иначе они завышают
+    // расход выбранного филиала (остатки-то отфильтрованы по складу).
+    if (storeId && e.storeId !== storeId) continue;
     incomeById.set(
       e.productId,
       (incomeById.get(e.productId) || 0) + (Number(e.amount) || 0)
@@ -174,8 +176,9 @@ export async function movementReport({ from, to, storeId = "" }) {
   }
   const incomeById = new Map();
   for (const e of inv.entries) {
-    // Приход — только по выбранному складу (если фильтр задан).
-    if (storeId && e.storeId && e.storeId !== storeId) continue;
+    // Приход — только по выбранному складу (если фильтр задан). Позиции без
+    // склада при активном фильтре исключаем (иначе завышают расход филиала).
+    if (storeId && e.storeId !== storeId) continue;
     incomeById.set(
       e.productId,
       (incomeById.get(e.productId) || 0) + (Number(e.amount) || 0)

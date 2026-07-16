@@ -62,7 +62,21 @@ app.set("trust proxy", 1);
 
 // В тестах не шумим HTTP-логами.
 if (env.NODE_ENV !== "test") {
-  app.use(pinoHttp({ logger: log }));
+  app.use(
+    pinoHttp({
+      logger: log,
+      // Не пишем в лог секреты из заголовков: cookie с сессионным JWT и
+      // Authorization: Bearer <JWT>. Иначе живой токен утекает в журнал.
+      redact: {
+        paths: [
+          "req.headers.cookie",
+          "req.headers.authorization",
+          'res.headers["set-cookie"]',
+        ],
+        remove: true,
+      },
+    })
+  );
 }
 app.use(helmet()); // заголовки безопасности одной строкой
 app.use(

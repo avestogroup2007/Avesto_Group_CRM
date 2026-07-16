@@ -326,6 +326,23 @@ r.patch(
         telegramId,
         checklistBranch,
       });
+      // Журнал безопасности: изменение роли/доступа/филиала — чувствительная
+      // операция (граница доступа), фиксируем кто и что менял.
+      await db.auditLog
+        .create({
+          data: {
+            userId: req.user.uid,
+            event: "employee_access_update",
+            detail:
+              `Доступ сотрудника ${updated.displayName || updated.login || req.params.id}: ` +
+              `роль ${updated.role}, ${updated.active ? "активен" : "заблокирован"}` +
+              (checklistBranch != null
+                ? `, филиал ${checklistBranch || "—"}`
+                : ""),
+            ip: req.ip,
+          },
+        })
+        .catch(() => {});
       // Персонал: изменение доступа сотрудника в свою тему (best-effort).
       sendTelegram(
         `👤 <b>Доступ сотрудника изменён</b>\n` +

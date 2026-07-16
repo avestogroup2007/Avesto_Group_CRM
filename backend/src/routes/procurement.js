@@ -148,13 +148,30 @@ r.get(
   })
 );
 
+// Единый ответ при сбое обращения к iiko — не 500, а понятная причина, чтобы UI
+// показал текст, а не «Внутренняя ошибка сервера».
+function iikoFail(res, e, extra = {}) {
+  const notConfigured = e && e.name === "IikoNotConfiguredError";
+  return res.status(notConfigured ? 200 : 502).json({
+    ...extra,
+    iikoConfigured: !notConfigured,
+    error: notConfigured
+      ? "Интеграция iiko не настроена"
+      : e.message || "Ошибка обращения к iiko",
+  });
+}
+
 // ── Остатки и их статус ─────────────────────────────────────────────────────
 r.get(
   "/stock",
   asyncHandler(async (req, res) => {
     const days = Math.min(180, Math.max(1, Number(req.query.days) || 30));
     const store = String(req.query.store || "");
-    res.json(await stockOverview({ days, storeId: store }));
+    try {
+      res.json(await stockOverview({ days, storeId: store }));
+    } catch (e) {
+      iikoFail(res, e, { rows: [], summary: {} });
+    }
   })
 );
 
@@ -172,13 +189,17 @@ r.get(
     if (!parsed.success) {
       return res.status(400).json({ error: "Укажите период from/to" });
     }
-    res.json(
-      await movementReport({
-        from: parsed.data.from,
-        to: parsed.data.to,
-        storeId: parsed.data.store || "",
-      })
-    );
+    try {
+      res.json(
+        await movementReport({
+          from: parsed.data.from,
+          to: parsed.data.to,
+          storeId: parsed.data.store || "",
+        })
+      );
+    } catch (e) {
+      iikoFail(res, e, { rows: [], summary: {} });
+    }
   })
 );
 
@@ -226,7 +247,23 @@ r.post(
     } catch {
       return res.status(400).json({ error: "Не удалось прочитать файл" });
     }
-    const out = await importDebtWorkbook(buffer);
+    // Ограничение размера: отчёт долгов — это небольшой Excel. Крупный файл
+    // (в т.ч. «zip-бомба») отклоняем, чтобы разбор не съел память сервера.
+    if (buffer.length > 6 * 1024 * 1024) {
+      return res
+        .status(400)
+        .json({ error: "Файл слишком большой (максимум 6 МБ)" });
+    }
+    // Разбор Excel может бросить исключение на битом файле — отдаём 400, не 500.
+    let out;
+    try {
+      out = await importDebtWorkbook(buffer);
+    } catch {
+      return res.status(400).json({
+        error:
+          "Не удалось разобрать файл. Загрузите отчёт iiko «Задолженность перед контрагентами» в формате Excel (.xlsx).",
+      });
+    }
     if (out.error) return res.status(400).json(out);
     await db.auditLog
       .create({
@@ -283,6 +320,16 @@ r.put(
         ...(manual != null ? { manual } : {}),
       },
     });
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "procurement_rule_update",
+          detail: `Правило остатка «${saved.name || saved.productId}»: мин ${saved.minQty ?? "—"}, макс ${saved.maxQty ?? "—"}`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.json(saved);
   })
 );
