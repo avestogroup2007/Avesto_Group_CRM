@@ -830,9 +830,9 @@ function DebtsTab({ notify }) {
         <label
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold cursor-pointer"
           style={{
-            border: `1px solid ${C.border}`,
+            border: `1px solid ${importing ? C.border : C.brandA}`,
             color: importing ? C.faint : "#fff",
-            background: importing ? "#F1F5F9" : C.accent,
+            background: importing ? "#F1F5F9" : C.brandA,
             fontSize: 13,
           }}
         >
