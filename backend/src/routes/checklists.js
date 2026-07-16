@@ -151,7 +151,8 @@ r.get(
     await refreshOrgConfig().catch(() => {});
     // Привязанный к филиалу управляющий видит отчёт только по своему филиалу;
     // старшие роли — по выбранному (или всем, если не задан).
-    const forced = forcedBranch(req.user);
+    // Чтение отчёта: филиальная роль без назначенного филиала не видит ничего.
+    const forced = forcedBranch(req.user, { failClosed: true });
     const branchId = forced || parsed.data.branchId;
     const where = { date: { gte: from, lte: to } };
     if (branchId) where.branchId = branchId;

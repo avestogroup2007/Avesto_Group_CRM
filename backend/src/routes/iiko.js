@@ -35,7 +35,10 @@ import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
 // если он видит все филиалы. Управляющий ограничен своим филиалом; бухгалтер и
 // офис — все. Бросает 403-совместимую ошибку, если филиал не сопоставлен с iiko.
 async function forcedDepartment(user) {
-  const forced = forcedBranch(user, { alsoFree: FINANCE_FREE });
+  const forced = forcedBranch(user, {
+    alsoFree: FINANCE_FREE,
+    failClosed: true,
+  });
   if (!forced) return null;
   await refreshOrgConfig().catch(() => {});
   const b = orgBranchById(forced);

@@ -25,7 +25,10 @@ r.get(
   asyncHandler(async (req, res) => {
     const to = isYmd(req.query.to) ? String(req.query.to) : ymdShift(0);
     const from = isYmd(req.query.from) ? String(req.query.from) : ymdShift(29);
-    const forced = forcedBranch(req.user, { alsoFree: FINANCE_FREE });
+    const forced = forcedBranch(req.user, {
+      alsoFree: FINANCE_FREE,
+      failClosed: true,
+    });
 
     const where = { date: { gte: from, lte: to }, userId: { not: null } };
     if (forced) where.branchId = forced;

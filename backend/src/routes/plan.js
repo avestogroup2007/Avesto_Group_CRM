@@ -33,7 +33,10 @@ r.get(
     const month = isMonth(req.query.month)
       ? String(req.query.month)
       : ymdTashkent().slice(0, 7);
-    const forced = forcedBranch(req.user, { alsoFree: FINANCE_FREE });
+    const forced = forcedBranch(req.user, {
+      alsoFree: FINANCE_FREE,
+      failClosed: true,
+    });
 
     let branches = orgBranches();
     if (forced) branches = branches.filter((b) => String(b.id) === forced);
