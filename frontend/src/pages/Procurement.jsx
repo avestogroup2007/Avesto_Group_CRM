@@ -767,39 +767,44 @@ function DebtsTab({ notify }) {
   // Фильтр по складу (филиалу) — по названию из отчёта. Пусто — все филиалы.
   const [wh, setWh] = useState("");
 
-  // Долг напрямую из iiko (OLAP-отчёт по проводкам). Первый запуск — с
-  // диагностикой: если поля не совпали, показываем сырой ответ для настройки.
-  const pullIiko = async () => {
+  // Долг напрямую из iiko (OLAP-отчёт по проводкам). fresh — принудительно
+  // мимо кэша (кнопка «Тянуть из iiko»); notify — показывать уведомления.
+  const pullIiko = async (fresh = true, withNotify = true) => {
     setPulling(true);
     try {
-      const r = await apiGet("/api/procurement/debts-iiko");
+      const r = await apiGet(
+        `/api/procurement/debts-iiko${fresh ? "?fresh=1" : ""}`,
+      );
       if (r.error) {
-        notify && notify(r.error);
-      } else {
-        setData(r);
-        setErr("");
-        setWh("");
+        if (withNotify) notify && notify(r.error);
+        return false;
+      }
+      setData(r);
+      setErr("");
+      setWh("");
+      if (withNotify)
         notify &&
           notify(
             r.count > 0
               ? `Из iiko: поставщиков с долгом ${r.count}`
               : "Из iiko: долг по поставщикам не распознан — см. диагностику ниже",
           );
-      }
-      // Диагностику показываем всегда после тяги из iiko — по ней настраиваем
-      // разбор под конкретный сервер (сырой ответ, поля, типы контрагентов).
-      setIikoDiag(r && !r.error ? r : null);
+      // Диагностику показываем только если долг не распознан (для настройки).
+      setIikoDiag(r.count > 0 ? null : r);
+      return r.count > 0;
     } catch (e) {
-      notify && notify(e.message || "Ошибка запроса к iiko");
+      if (withNotify) notify && notify(e.message || "Ошибка запроса к iiko");
+      return false;
     } finally {
       setPulling(false);
     }
   };
 
+  // Импорт/баланс из БД (запасной источник, если тяга из iiko не удалась).
   const load = (warehouse = wh) => {
     setLoading(true);
     const q = warehouse ? `?warehouse=${encodeURIComponent(warehouse)}` : "";
-    apiGet(`/api/procurement/debts${q}`)
+    return apiGet(`/api/procurement/debts${q}`)
       .then((d) => {
         setData(d);
         setErr("");
@@ -807,8 +812,26 @@ function DebtsTab({ notify }) {
       .catch((e) => setErr(e.message || "Не удалось загрузить"))
       .finally(() => setLoading(false));
   };
+
+  // При открытии сразу тянем свежие данные из iiko (из кэша — быстро). Если
+  // iiko недоступен/пусто — показываем импорт или баланс из БД.
   useEffect(() => {
-    load();
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const ok = await pullIiko(false, false);
+      if (alive && !ok) await load();
+      if (alive) setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Смена филиала — только для импортированного отчёта (у iiko-тяги фильтра нет).
+  useEffect(() => {
+    if (data?.source === "import") load(wh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wh]);
 
@@ -848,7 +871,9 @@ function DebtsTab({ notify }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <button
-          onClick={() => load()}
+          onClick={() =>
+            data?.source === "import" ? load() : pullIiko(true, false)
+          }
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
           style={{
             border: `1px solid ${C.border}`,
@@ -859,7 +884,7 @@ function DebtsTab({ notify }) {
           <RefreshCw size={14} /> Обновить
         </button>
         <button
-          onClick={pullIiko}
+          onClick={() => pullIiko(true, true)}
           disabled={pulling}
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold text-white"
           style={{
@@ -896,6 +921,8 @@ function DebtsTab({ notify }) {
               Отчёт iiko «Задолженность перед контрагентами», загружен{" "}
               {fmtImported(data.importedAt)}
             </>
+          ) : data?.source === "iiko-olap" ? (
+            <>Долг по поставщикам из iiko (проводки) за текущий месяц</>
           ) : (
             <>
               Загрузите отчёт iiko «Задолженность перед контрагентами» (Excel) —
