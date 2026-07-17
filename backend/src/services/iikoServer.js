@@ -1726,15 +1726,12 @@ export async function supplierDebtOlap({ from, to }) {
       [/counteragent.*type/i, /тип.*контрагент/i, /counteragenttype/i],
       "Counteragent.CounteragentTypeName"
     );
+    // Мера отчёта — «Сумма прихода» (Sum.Incoming). Расход НЕ используем: отчёт
+    // iiko «Задолженность перед поставщиками» долг из него не вычитает.
     const fInc = pick(
       canAgg,
       [/sum\.?incoming/i, /сумма прихода|приход/i],
       "Sum.Incoming"
-    );
-    const fOut = pick(
-      canAgg,
-      [/sum\.?outgoing/i, /сумма расхода|расход/i],
-      "Sum.Outgoing"
     );
     const fDate =
       names.find((n) => /DateTime\.Typed/i.test(n)) ||
@@ -1746,7 +1743,7 @@ export async function supplierDebtOlap({ from, to }) {
       buildSummary: false,
       groupByRowFields: [fCon, fType].filter(Boolean),
       groupByColFields: [],
-      aggregateFields: [fInc, fOut].filter(Boolean),
+      aggregateFields: [fInc].filter(Boolean),
       filters: {
         [fDate]: {
           filterType: "DateRange",
@@ -1778,7 +1775,8 @@ export async function supplierDebtOlap({ from, to }) {
     } catch {
       data = [];
     }
-    // Долг по контрагенту: приход (кредит) − расход (дебет) по поставщикам.
+    // Долг по контрагенту = «Сумма прихода» (кредит-сторона) по поставщикам.
+    // Как в отчёте iiko: сумма по контрагенту, расход не вычитаем.
     const SUPPLIER_RE = /поставщик|supplier|vendor/i;
     const typesSeen = new Set();
     const bySup = new Map();
@@ -1790,10 +1788,7 @@ export async function supplierDebtOlap({ from, to }) {
       if (fType && type && !SUPPLIER_RE.test(type)) continue;
       matchedAny = true;
       const name = String(row[fCon] ?? "").trim() || "—";
-      const inc = Number(row[fInc] ?? 0) || 0;
-      const out = Number(row[fOut] ?? 0) || 0;
-      // Долг = сколько мы должны = приход (кредит) − расход (дебет/оплаты).
-      const debt = inc - out;
+      const debt = Number(row[fInc] ?? 0) || 0;
       bySup.set(name, (bySup.get(name) || 0) + debt);
     }
     const rows = [...bySup.entries()]
@@ -1812,14 +1807,22 @@ export async function supplierDebtOlap({ from, to }) {
         counteragent: fCon,
         type: fType,
         incoming: fInc,
-        outgoing: fOut,
         date: fDate,
       },
       rawCount: data.length,
       matchedAny,
       typesSeen: [...typesSeen].slice(0, 40),
-      sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 800) : "",
-      columnsSample: names.slice(0, 80),
+      sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 900) : "",
+      // Код поля → русское название (для сопоставления «Сумма прихода»,
+      // «Дебет/Кредит» и т.п. с реальными кодами конкретной сборки iiko).
+      columnsDetail: names
+        .filter((n) =>
+          /counteragent|account|sum|amount|дебет|кредит|тип|type|приход|расход|debit|credit/i.test(
+            n + " " + (cols[n]?.name || "")
+          )
+        )
+        .slice(0, 60)
+        .map((n) => `${n} = ${cols[n]?.name || ""}`),
     };
   } finally {
     releaseKey(key);
