@@ -762,8 +762,38 @@ function DebtsTab({ notify }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [iikoDiag, setIikoDiag] = useState(null);
   // Фильтр по складу (филиалу) — по названию из отчёта. Пусто — все филиалы.
   const [wh, setWh] = useState("");
+
+  // Долг напрямую из iiko (OLAP-отчёт по проводкам). Первый запуск — с
+  // диагностикой: если поля не совпали, показываем сырой ответ для настройки.
+  const pullIiko = async () => {
+    setPulling(true);
+    try {
+      const r = await apiGet("/api/procurement/debts-iiko");
+      if (r.error) {
+        notify && notify(r.error);
+      } else {
+        setData(r);
+        setErr("");
+        setWh("");
+        notify &&
+          notify(
+            r.count > 0
+              ? `Из iiko: поставщиков с долгом ${r.count}`
+              : "Из iiko: долг по поставщикам не распознан — см. диагностику ниже",
+          );
+      }
+      // Диагностику показываем, если долг не распознан (для настройки полей).
+      setIikoDiag(r && r.count > 0 && r.matchedAny ? null : r || null);
+    } catch (e) {
+      notify && notify(e.message || "Ошибка запроса к iiko");
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const load = (warehouse = wh) => {
     setLoading(true);
@@ -827,6 +857,19 @@ function DebtsTab({ notify }) {
         >
           <RefreshCw size={14} /> Обновить
         </button>
+        <button
+          onClick={pullIiko}
+          disabled={pulling}
+          className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold text-white"
+          style={{
+            background: C.brandA,
+            fontSize: 13,
+            opacity: pulling ? 0.7 : 1,
+          }}
+        >
+          <RefreshCw size={14} className={pulling ? "animate-spin" : ""} />
+          {pulling ? "Тянем из iiko…" : "Тянуть из iiko"}
+        </button>
         <label
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold cursor-pointer"
           style={{
@@ -860,6 +903,49 @@ function DebtsTab({ notify }) {
           )}
         </div>
       </div>
+
+      {/* Диагностика тяги из iiko (OLAP-проводки): показываем, если долг не
+          распознан — чтобы настроить разбор под конкретный сервер. */}
+      {iikoDiag && (
+        <div
+          className="rounded-2xl p-3"
+          style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+        >
+          <div
+            className="font-bold mb-1"
+            style={{ color: "#92400E", fontSize: 13 }}
+          >
+            Диагностика «Тянуть из iiko» (OLAP-проводки)
+          </div>
+          <pre
+            className="overflow-x-auto"
+            style={{
+              fontSize: 10.5,
+              background: "#fff",
+              border: "1px solid #FDE68A",
+              borderRadius: 8,
+              padding: 8,
+              maxHeight: 280,
+              whiteSpace: "pre-wrap",
+              color: "#57430E",
+            }}
+          >
+            {`Выбранные поля: ${JSON.stringify(iikoDiag.fields || {})}
+Строк в ответе: ${iikoDiag.rawCount ?? "—"}, распознано долгов: ${iikoDiag.count ?? 0}
+Счета в ответе: ${(iikoDiag.accountsSeen || []).join(", ") || "—"}
+
+Пример строки:
+${iikoDiag.sampleRow || "—"}
+
+Доступные колонки:
+${(iikoDiag.columnsSample || []).join(", ") || "—"}`}
+          </pre>
+          <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+            Пришлите этот блок разработчику — по нему настроим точный разбор
+            долга по поставщикам из iiko.
+          </div>
+        </div>
+      )}
 
       {/* Фильтр по филиалу (складу) — из отчёта, по названию склада */}
       {data?.source === "import" && (data?.byWarehouse || []).length > 0 && (
