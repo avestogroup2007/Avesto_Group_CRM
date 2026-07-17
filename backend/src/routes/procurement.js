@@ -20,7 +20,7 @@ import {
   movementReport,
   supplierDebts,
 } from "../services/procurementSync.js";
-import { procurementStores } from "../services/iikoServer.js";
+import { procurementStores, supplierDebtOlap } from "../services/iikoServer.js";
 import { sendProcurementAlerts } from "../services/procurementAlerts.js";
 import {
   importDebtWorkbook,
@@ -226,6 +226,27 @@ r.get(
           ? "Интеграция iiko не настроена"
           : e.message || "Ошибка обращения к iiko",
       });
+    }
+  })
+);
+
+// Долг по поставщикам напрямую из iiko (OLAP-отчёт по проводкам). period from/to;
+// по умолчанию — с начала прошлого года по сегодня (чтобы поймать весь остаток).
+r.get(
+  "/debts-iiko",
+  requireRole("director", "finance", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Tashkent",
+    });
+    const defFrom = `${new Date().getFullYear() - 1}-01-01`;
+    const from = YMD_RE.test(String(req.query.from)) ? req.query.from : defFrom;
+    const to = YMD_RE.test(String(req.query.to)) ? req.query.to : today;
+    try {
+      res.json(await supplierDebtOlap({ from, to }));
+    } catch (e) {
+      iikoFail(res, e, { rows: [], totalDebt: 0 });
     }
   })
 );

@@ -1674,3 +1674,151 @@ export async function supplierBalances({ timestamp }) {
     releaseKey(key);
   }
 }
+
+// Долг по каждому поставщику из OLAP-отчёта проводок iiko (в интерфейсе iiko это
+// «OLAP Отчёт по проводкам» с форматом «Задолженность перед поставщиками»). В
+// отличие от balance/counteragents (там остаток по счёту, контрагент пуст), здесь
+// проводки детализированы по контрагенту. Названия полей OLAP TRANSACTIONS у
+// разных сборок iiko отличаются, поэтому сначала узнаём доступные колонки, а в
+// ответе отдаём диагностику (какие поля выбраны, образец строки) — чтобы точно
+// настроить разбор под конкретный сервер.
+export async function supplierDebtOlap({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    // 1) Доступные колонки отчёта проводок.
+    let cols = {};
+    try {
+      const cRes = await fetchT(
+        `${BASE}/resto/api/v2/reports/olap/columns?reportType=TRANSACTIONS&key=${encodeURIComponent(key)}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const cText = await cRes.text();
+      if (cRes.status === 401) invalidateKey(key);
+      cols = cText ? JSON.parse(cText) : {};
+    } catch {
+      cols = {};
+    }
+    const names = Object.keys(cols || {});
+    const canGroup = (n) => cols[n]?.groupingAllowed ?? true;
+    const canAgg = (n) => cols[n]?.aggregationAllowed ?? false;
+    const pick = (allow, res, fallback) => {
+      for (const re of res) {
+        const hit = names.find((n) => allow(n) && re.test(n));
+        if (hit) return hit;
+      }
+      for (const re of res) {
+        const hit = names.find((n) => re.test(n));
+        if (hit) return hit;
+      }
+      return fallback;
+    };
+    const fCon = pick(
+      canGroup,
+      [/counteragent.*name/i, /контрагент/i],
+      "Counteragent.Name"
+    );
+    const fAcc = pick(
+      canGroup,
+      [/account.*name/i, /^account$/i, /счёт|счет/i],
+      "Account.Name"
+    );
+    const fInc = pick(
+      canAgg,
+      [/sum\.?incoming/i, /приход|дебет/i],
+      "Sum.Incoming"
+    );
+    const fOut = pick(
+      canAgg,
+      [/sum\.?outgoing/i, /расход|кредит/i],
+      "Sum.Outgoing"
+    );
+    const fDate =
+      names.find((n) => /DateTime\.Typed/i.test(n)) ||
+      names.find((n) => /date/i.test(n)) ||
+      "DateTime.Typed";
+
+    const body = {
+      reportType: "TRANSACTIONS",
+      buildSummary: false,
+      groupByRowFields: [fCon, fAcc].filter(Boolean),
+      groupByColFields: [],
+      aggregateFields: [fInc, fOut].filter(Boolean),
+      filters: {
+        [fDate]: {
+          filterType: "DateRange",
+          periodType: "CUSTOM",
+          from: `${from}T00:00:00.000`,
+          to: `${to}T00:00:00.000`,
+        },
+      },
+    };
+    const res = await fetchT(
+      `${BASE}/resto/api/v2/reports/olap?key=${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko olap transactions → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    let data = [];
+    try {
+      const j = JSON.parse(text);
+      data = Array.isArray(j) ? j : j.data || j.rows || [];
+    } catch {
+      data = [];
+    }
+    // Долг по контрагенту: кредитовое сальдо по счетам расчётов с поставщиками.
+    const SUPPLIER_RE = /поставщик|кредитор|supplier|payable|creditor/i;
+    const accountsSeen = new Set();
+    const bySup = new Map();
+    let matchedAny = false;
+    for (const row of data) {
+      const acct = String(row[fAcc] ?? "").trim();
+      if (acct) accountsSeen.add(acct);
+      // Ограничиваем счетами взаиморасчётов с поставщиками, если имя счёта есть.
+      if (fAcc && acct && !SUPPLIER_RE.test(acct)) continue;
+      matchedAny = true;
+      const name = String(row[fCon] ?? "").trim() || "—";
+      const inc = Number(row[fInc] ?? 0) || 0;
+      const out = Number(row[fOut] ?? 0) || 0;
+      // Долг = сколько мы должны = кредит − дебет. Знак проверяем по диагностике.
+      const debt = out - inc;
+      bySup.set(name, (bySup.get(name) || 0) + debt);
+    }
+    const rows = [...bySup.entries()]
+      .map(([name, debt]) => ({ name, debt: Math.round(debt * 100) / 100 }))
+      .filter((x) => x.debt > 0)
+      .sort((a, b) => b.debt - a.debt);
+    const totalDebt =
+      Math.round(rows.reduce((s, r) => s + r.debt, 0) * 100) / 100;
+    return {
+      source: "iiko-olap",
+      rows,
+      totalDebt,
+      count: rows.length,
+      // Диагностика для настройки под конкретный iiko:
+      fields: {
+        counteragent: fCon,
+        account: fAcc,
+        incoming: fInc,
+        outgoing: fOut,
+        date: fDate,
+      },
+      rawCount: data.length,
+      matchedAny,
+      accountsSeen: [...accountsSeen].slice(0, 40),
+      sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 800) : "",
+      columnsSample: names.slice(0, 80),
+    };
+  } finally {
+    releaseKey(key);
+  }
+}
