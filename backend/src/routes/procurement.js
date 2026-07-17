@@ -240,7 +240,9 @@ r.get(
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "Asia/Tashkent",
     });
-    const defFrom = `${new Date().getFullYear() - 1}-01-01`;
+    // По умолчанию берём широкий период (нетто приход−расход за годы даёт
+    // текущий остаток; полностью оплаченные поставщики схлопываются в 0).
+    const defFrom = `${new Date().getFullYear() - 5}-01-01`;
     const from = YMD_RE.test(String(req.query.from)) ? req.query.from : defFrom;
     const to = YMD_RE.test(String(req.query.to)) ? req.query.to : today;
     try {

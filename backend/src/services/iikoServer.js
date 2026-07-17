@@ -1713,24 +1713,27 @@ export async function supplierDebtOlap({ from, to }) {
       }
       return fallback;
     };
+    // Отчёт iiko «Задолженность перед поставщиками» группирует по: Контрагент +
+    // Тип контрагента (=Поставщик) + Дебет/Кредит, мера «Сумма прихода»
+    // (Sum.Incoming). Долг = приход (кредит) − расход (дебет).
     const fCon = pick(
       canGroup,
       [/counteragent.*name/i, /контрагент/i],
       "Counteragent.Name"
     );
-    const fAcc = pick(
+    const fType = pick(
       canGroup,
-      [/account.*name/i, /^account$/i, /счёт|счет/i],
-      "Account.Name"
+      [/counteragent.*type/i, /тип.*контрагент/i, /counteragenttype/i],
+      "Counteragent.CounteragentTypeName"
     );
     const fInc = pick(
       canAgg,
-      [/sum\.?incoming/i, /приход|дебет/i],
+      [/sum\.?incoming/i, /сумма прихода|приход/i],
       "Sum.Incoming"
     );
     const fOut = pick(
       canAgg,
-      [/sum\.?outgoing/i, /расход|кредит/i],
+      [/sum\.?outgoing/i, /сумма расхода|расход/i],
       "Sum.Outgoing"
     );
     const fDate =
@@ -1741,7 +1744,7 @@ export async function supplierDebtOlap({ from, to }) {
     const body = {
       reportType: "TRANSACTIONS",
       buildSummary: false,
-      groupByRowFields: [fCon, fAcc].filter(Boolean),
+      groupByRowFields: [fCon, fType].filter(Boolean),
       groupByColFields: [],
       aggregateFields: [fInc, fOut].filter(Boolean),
       filters: {
@@ -1775,22 +1778,22 @@ export async function supplierDebtOlap({ from, to }) {
     } catch {
       data = [];
     }
-    // Долг по контрагенту: кредитовое сальдо по счетам расчётов с поставщиками.
-    const SUPPLIER_RE = /поставщик|кредитор|supplier|payable|creditor/i;
-    const accountsSeen = new Set();
+    // Долг по контрагенту: приход (кредит) − расход (дебет) по поставщикам.
+    const SUPPLIER_RE = /поставщик|supplier|vendor/i;
+    const typesSeen = new Set();
     const bySup = new Map();
     let matchedAny = false;
     for (const row of data) {
-      const acct = String(row[fAcc] ?? "").trim();
-      if (acct) accountsSeen.add(acct);
-      // Ограничиваем счетами взаиморасчётов с поставщиками, если имя счёта есть.
-      if (fAcc && acct && !SUPPLIER_RE.test(acct)) continue;
+      const type = String(row[fType] ?? "").trim();
+      if (type) typesSeen.add(type);
+      // Оставляем только поставщиков (по типу контрагента), если тип известен.
+      if (fType && type && !SUPPLIER_RE.test(type)) continue;
       matchedAny = true;
       const name = String(row[fCon] ?? "").trim() || "—";
       const inc = Number(row[fInc] ?? 0) || 0;
       const out = Number(row[fOut] ?? 0) || 0;
-      // Долг = сколько мы должны = кредит − дебет. Знак проверяем по диагностике.
-      const debt = out - inc;
+      // Долг = сколько мы должны = приход (кредит) − расход (дебет/оплаты).
+      const debt = inc - out;
       bySup.set(name, (bySup.get(name) || 0) + debt);
     }
     const rows = [...bySup.entries()]
@@ -1807,14 +1810,14 @@ export async function supplierDebtOlap({ from, to }) {
       // Диагностика для настройки под конкретный iiko:
       fields: {
         counteragent: fCon,
-        account: fAcc,
+        type: fType,
         incoming: fInc,
         outgoing: fOut,
         date: fDate,
       },
       rawCount: data.length,
       matchedAny,
-      accountsSeen: [...accountsSeen].slice(0, 40),
+      typesSeen: [...typesSeen].slice(0, 40),
       sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 800) : "",
       columnsSample: names.slice(0, 80),
     };

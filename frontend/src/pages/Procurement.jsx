@@ -932,7 +932,7 @@ function DebtsTab({ notify }) {
           >
             {`Выбранные поля: ${JSON.stringify(iikoDiag.fields || {})}
 Строк в ответе: ${iikoDiag.rawCount ?? "—"}, распознано долгов: ${iikoDiag.count ?? 0}
-Счета в ответе: ${(iikoDiag.accountsSeen || []).join(", ") || "—"}
+Типы контрагентов в ответе: ${(iikoDiag.typesSeen || []).join(", ") || "—"}
 
 Пример строки:
 ${iikoDiag.sampleRow || "—"}
