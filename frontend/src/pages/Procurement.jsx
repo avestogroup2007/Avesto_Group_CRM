@@ -786,8 +786,9 @@ function DebtsTab({ notify }) {
               : "Из iiko: долг по поставщикам не распознан — см. диагностику ниже",
           );
       }
-      // Диагностику показываем, если долг не распознан (для настройки полей).
-      setIikoDiag(r && r.count > 0 && r.matchedAny ? null : r || null);
+      // Диагностику показываем всегда после тяги из iiko — по ней настраиваем
+      // разбор под конкретный сервер (сырой ответ, поля, типы контрагентов).
+      setIikoDiag(r && !r.error ? r : null);
     } catch (e) {
       notify && notify(e.message || "Ошибка запроса к iiko");
     } finally {
@@ -937,8 +938,8 @@ function DebtsTab({ notify }) {
 Пример строки:
 ${iikoDiag.sampleRow || "—"}
 
-Доступные колонки:
-${(iikoDiag.columnsSample || []).join(", ") || "—"}`}
+Поля (код = название):
+${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`}
           </pre>
           <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
             Пришлите этот блок разработчику — по нему настроим точный разбор
@@ -1160,7 +1161,7 @@ ${(iikoDiag.columnsSample || []).join(", ") || "—"}`}
                 <thead>
                   <tr style={{ color: C.faint, textAlign: "left" }}>
                     <th className="pb-2 pr-2 font-semibold">
-                      {data?.source === "import"
+                      {data?.source === "import" || data?.source === "iiko-olap"
                         ? "Поставщик"
                         : "Счёт / контрагент"}
                     </th>
