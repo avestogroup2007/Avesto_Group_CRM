@@ -769,6 +769,9 @@ function DebtsTab({ notify }) {
   const [wh, setWh] = useState("");
   // Фильтр по торговому предприятию (для тяги из iiko). Пусто — вся сеть.
   const [dept, setDept] = useState("");
+  // Период долга (для тяги из iiko). По умолчанию — текущий месяц.
+  const [dfrom, setDfrom] = useState(firstOfMonth());
+  const [dto, setDto] = useState(today());
   // Исключённые поставщики (гибкий отчёт) — не учитываются в итоге.
   const [excluded, setExcluded] = useState(() => new Set());
 
@@ -778,12 +781,16 @@ function DebtsTab({ notify }) {
     fresh = true,
     withNotify = true,
     department = dept,
+    from = dfrom,
+    to = dto,
   ) => {
     setPulling(true);
     try {
       const params = new URLSearchParams();
       if (fresh) params.set("fresh", "1");
       if (department) params.set("department", department);
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
       const qs = params.toString();
       const r = await apiGet(
         `/api/procurement/debts-iiko${qs ? `?${qs}` : ""}`,
@@ -961,7 +968,9 @@ function DebtsTab({ notify }) {
               {fmtImported(data.importedAt)}
             </>
           ) : data?.source === "iiko-olap" ? (
-            <>Долг по поставщикам из iiko (проводки) за текущий месяц</>
+            <>
+              Долг по поставщикам из iiko (проводки) за период {dfrom} — {dto}
+            </>
           ) : (
             <>
               Загрузите отчёт iiko «Задолженность перед контрагентами» (Excel) —
@@ -970,6 +979,69 @@ function DebtsTab({ notify }) {
           )}
         </div>
       </div>
+
+      {/* Выбор периода долга (для тяги из iiko) */}
+      {isOlap && (
+        <div
+          className="rounded-2xl bg-white p-3 flex flex-wrap items-end gap-2"
+          style={{ border: `1px solid ${C.border}` }}
+        >
+          <NiceDate
+            label="С"
+            value={dfrom}
+            onChange={(v) => {
+              setDfrom(v);
+              pullIiko(false, false, dept, v, dto);
+            }}
+            width={140}
+          />
+          <NiceDate
+            label="По"
+            value={dto}
+            onChange={(v) => {
+              setDto(v);
+              pullIiko(false, false, dept, dfrom, v);
+            }}
+            width={140}
+          />
+          {[
+            { label: "Этот месяц", from: firstOfMonth(), to: today() },
+            {
+              label: "Прошлый месяц",
+              ...(() => {
+                const d = new Date();
+                const first = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+                const last = new Date(d.getFullYear(), d.getMonth(), 0);
+                return { from: ymd(first), to: ymd(last) };
+              })(),
+            },
+            {
+              label: "Этот год",
+              from: `${new Date().getFullYear()}-01-01`,
+              to: today(),
+            },
+          ].map((p) => (
+            <button
+              key={p.label}
+              onClick={() => {
+                setDfrom(p.from);
+                setDto(p.to);
+                pullIiko(false, false, dept, p.from, p.to);
+              }}
+              className="rounded-xl px-3 py-2 font-semibold"
+              style={{
+                border: `1px solid ${
+                  dfrom === p.from && dto === p.to ? C.brandA : C.border
+                }`,
+                color: dfrom === p.from && dto === p.to ? C.brandA : C.sub,
+                fontSize: 12.5,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Диагностика тяги из iiko (OLAP-проводки): по кнопке «Поля iiko» или
           автоматически, если долг не распознан — для настройки под сервер. */}
