@@ -1775,19 +1775,21 @@ export async function supplierDebtOlap({ from, to }) {
     } catch {
       data = [];
     }
-    // Долг по контрагенту = «Сумма прихода» (кредит-сторона) по поставщикам.
-    // Как в отчёте iiko: сумма по контрагенту, расход не вычитаем.
-    const SUPPLIER_RE = /поставщик|supplier|vendor/i;
+    // Долг по контрагенту = «Сумма прихода» по поставщикам (как в отчёте iiko:
+    // сумма по контрагенту, расход не вычитаем). Тип — ровно «Поставщик»
+    // (SUPPLIER): INTERNAL_SUPPLIER/EMPLOYEE/CLIENT/NONE не берём. Сводные строки
+    // без контрагента (Counteragent.Name = null, тип NONE) пропускаем.
+    const SUPPLIER_RE = /^(supplier|поставщик)$/i;
     const typesSeen = new Set();
     const bySup = new Map();
     let matchedAny = false;
     for (const row of data) {
       const type = String(row[fType] ?? "").trim();
       if (type) typesSeen.add(type);
-      // Оставляем только поставщиков (по типу контрагента), если тип известен.
-      if (fType && type && !SUPPLIER_RE.test(type)) continue;
+      if (fType && !SUPPLIER_RE.test(type)) continue;
+      const name = String(row[fCon] ?? "").trim();
+      if (!name) continue;
       matchedAny = true;
-      const name = String(row[fCon] ?? "").trim() || "—";
       const debt = Number(row[fInc] ?? 0) || 0;
       bySup.set(name, (bySup.get(name) || 0) + debt);
     }
