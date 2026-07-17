@@ -766,14 +766,26 @@ function DebtsTab({ notify }) {
   const [iikoDiag, setIikoDiag] = useState(null);
   // Фильтр по складу (филиалу) — по названию из отчёта. Пусто — все филиалы.
   const [wh, setWh] = useState("");
+  // Фильтр по торговому предприятию (для тяги из iiko). Пусто — вся сеть.
+  const [dept, setDept] = useState("");
+  // Исключённые поставщики (гибкий отчёт) — не учитываются в итоге.
+  const [excluded, setExcluded] = useState(() => new Set());
 
   // Долг напрямую из iiko (OLAP-отчёт по проводкам). fresh — принудительно
   // мимо кэша (кнопка «Тянуть из iiko»); notify — показывать уведомления.
-  const pullIiko = async (fresh = true, withNotify = true) => {
+  const pullIiko = async (
+    fresh = true,
+    withNotify = true,
+    department = dept,
+  ) => {
     setPulling(true);
     try {
+      const params = new URLSearchParams();
+      if (fresh) params.set("fresh", "1");
+      if (department) params.set("department", department);
+      const qs = params.toString();
       const r = await apiGet(
-        `/api/procurement/debts-iiko${fresh ? "?fresh=1" : ""}`,
+        `/api/procurement/debts-iiko${qs ? `?${qs}` : ""}`,
       );
       if (r.error) {
         if (withNotify) notify && notify(r.error);
@@ -865,7 +877,18 @@ function DebtsTab({ notify }) {
     reader.readAsDataURL(f);
   };
 
-  const rows = (data?.rows || []).filter((r) => r.debt > 0);
+  const allRows = (data?.rows || []).filter((r) => r.debt > 0);
+  // «Гибкий отчёт»: исключённые поставщики видны, но не входят в итог.
+  const rows = allRows.filter((r) => !excluded.has(r.name));
+  const shownTotal = rows.reduce((s, r) => s + (r.debt || 0), 0);
+  const isOlap = data?.source === "iiko-olap";
+  const toggleExcluded = (name) =>
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
 
   return (
     <div className="space-y-3">
@@ -996,6 +1019,43 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
         </div>
       )}
 
+      {/* Фильтр по торговому предприятию (филиалу) — для тяги из iiko */}
+      {isOlap && (data?.enterprises || []).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span style={{ fontSize: 12.5, color: C.faint, fontWeight: 600 }}>
+            Филиал:
+          </span>
+          <NiceSelect
+            value={dept}
+            onChange={(v) => {
+              setDept(v);
+              pullIiko(false, false, v);
+            }}
+            options={[
+              { value: "", label: "Вся сеть" },
+              ...(data?.byEnterprise || []).map((e) => ({
+                value: e.name,
+                label: `${e.name} · ${money(e.debt)} сум`,
+              })),
+            ]}
+            width={320}
+          />
+          {excluded.size > 0 && (
+            <button
+              onClick={() => setExcluded(new Set())}
+              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-semibold"
+              style={{
+                border: `1px solid ${C.border}`,
+                color: C.sub,
+                fontSize: 12,
+              }}
+            >
+              Скрыто поставщиков: {excluded.size} · показать всех
+            </button>
+          )}
+        </div>
+      )}
+
       {data?.error && <ErrBox text={data.error} />}
       {err && <ErrBox text={err} />}
 
@@ -1009,8 +1069,17 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
             }`}
           >
             <Kpi
-              label="Всего должны, сум"
-              value={<CountUp to={data?.totalDebt || 0} format={money} />}
+              label={
+                excluded.size > 0
+                  ? "Всего должны (без скрытых), сум"
+                  : "Всего должны, сум"
+              }
+              value={
+                <CountUp
+                  to={excluded.size > 0 ? shownTotal : data?.totalDebt || 0}
+                  format={money}
+                />
+              }
               tone={C.bad}
             />
             <Kpi
@@ -1138,7 +1207,7 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
             </div>
           ) : null}
 
-          {rows.length === 0 ? (
+          {allRows.length === 0 ? (
             <>
               <EmptyState
                 icon={Receipt}
@@ -1206,44 +1275,73 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 400).map((r) => (
-                    <tr
-                      key={r.supplierId || r.name}
-                      style={{ borderTop: `1px solid ${C.line}` }}
-                    >
-                      <td
-                        className="py-2 pr-2"
-                        style={{ color: C.ink, fontWeight: 600 }}
+                  {allRows.slice(0, 400).map((r) => {
+                    const off = excluded.has(r.name);
+                    return (
+                      <tr
+                        key={r.supplierId || r.name}
+                        style={{
+                          borderTop: `1px solid ${C.line}`,
+                          opacity: off ? 0.45 : 1,
+                        }}
                       >
-                        {r.name}
-                      </td>
-                      {data?.source === "import" && (
                         <td
-                          className="py-2 pr-2 text-right"
-                          style={{ color: C.sub }}
+                          className="py-2 pr-2"
+                          style={{ color: C.ink, fontWeight: 600 }}
                         >
-                          {r.docs || 0}
+                          <button
+                            onClick={() => toggleExcluded(r.name)}
+                            title={off ? "Вернуть в отчёт" : "Скрыть из отчёта"}
+                            style={{
+                              marginRight: 8,
+                              color: off ? C.ok : C.faint,
+                              fontSize: 15,
+                              lineHeight: 1,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {off ? "+" : "×"}
+                          </button>
+                          <span
+                            style={{
+                              textDecoration: off ? "line-through" : "none",
+                            }}
+                          >
+                            {r.name}
+                          </span>
                         </td>
-                      )}
-                      {data?.source === "import" && (
+                        {data?.source === "import" && (
+                          <td
+                            className="py-2 pr-2 text-right"
+                            style={{ color: C.sub }}
+                          >
+                            {r.docs || 0}
+                          </td>
+                        )}
+                        {data?.source === "import" && (
+                          <td
+                            className="py-2 pr-2 text-right"
+                            style={{
+                              color: r.overdueDebt > 0 ? C.bad : C.faint,
+                              fontWeight: r.overdueDebt > 0 ? 700 : 400,
+                            }}
+                          >
+                            {r.overdueDebt > 0 ? money(r.overdueDebt) : "—"}
+                          </td>
+                        )}
                         <td
-                          className="py-2 pr-2 text-right"
+                          className="py-2 text-right"
                           style={{
-                            color: r.overdueDebt > 0 ? C.bad : C.faint,
-                            fontWeight: r.overdueDebt > 0 ? 700 : 400,
+                            color: C.bad,
+                            fontWeight: 700,
+                            textDecoration: off ? "line-through" : "none",
                           }}
                         >
-                          {r.overdueDebt > 0 ? money(r.overdueDebt) : "—"}
+                          {money(r.debt)}
                         </td>
-                      )}
-                      <td
-                        className="py-2 text-right"
-                        style={{ color: C.bad, fontWeight: 700 }}
-                      >
-                        {money(r.debt)}
-                      </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
