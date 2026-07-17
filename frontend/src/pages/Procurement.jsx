@@ -764,6 +764,7 @@ function DebtsTab({ notify }) {
   const [importing, setImporting] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [iikoDiag, setIikoDiag] = useState(null);
+  const [showDiag, setShowDiag] = useState(false);
   // Фильтр по складу (филиалу) — по названию из отчёта. Пусто — все филиалы.
   const [wh, setWh] = useState("");
   // Фильтр по торговому предприятию (для тяги из iiko). Пусто — вся сеть.
@@ -801,8 +802,9 @@ function DebtsTab({ notify }) {
               ? `Из iiko: поставщиков с долгом ${r.count}`
               : "Из iiko: долг по поставщикам не распознан — см. диагностику ниже",
           );
-      // Диагностику показываем только если долг не распознан (для настройки).
-      setIikoDiag(r.count > 0 ? null : r);
+      // Диагностику храним всегда (для настройки полей по кнопке «Поля iiko»);
+      // сама панель показывается, если долг не распознан или включён показ.
+      setIikoDiag(r);
       return r.count > 0;
     } catch (e) {
       if (withNotify) notify && notify(e.message || "Ошибка запроса к iiko");
@@ -919,6 +921,20 @@ function DebtsTab({ notify }) {
           <RefreshCw size={14} className={pulling ? "animate-spin" : ""} />
           {pulling ? "Тянем из iiko…" : "Тянуть из iiko"}
         </button>
+        {iikoDiag && (
+          <button
+            onClick={() => setShowDiag((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.sub,
+              fontSize: 13,
+            }}
+            title="Показать поля iiko — для настройки фильтра по филиалу"
+          >
+            {showDiag ? "Скрыть поля iiko" : "Поля iiko"}
+          </button>
+        )}
         <label
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-semibold cursor-pointer"
           style={{
@@ -955,9 +971,9 @@ function DebtsTab({ notify }) {
         </div>
       </div>
 
-      {/* Диагностика тяги из iiko (OLAP-проводки): показываем, если долг не
-          распознан — чтобы настроить разбор под конкретный сервер. */}
-      {iikoDiag && (
+      {/* Диагностика тяги из iiko (OLAP-проводки): по кнопке «Поля iiko» или
+          автоматически, если долг не распознан — для настройки под сервер. */}
+      {iikoDiag && (showDiag || iikoDiag.count === 0) && (
         <div
           className="rounded-2xl p-3"
           style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
@@ -1289,26 +1305,31 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
                           className="py-2 pr-2"
                           style={{ color: C.ink, fontWeight: 600 }}
                         >
-                          <button
-                            onClick={() => toggleExcluded(r.name)}
-                            title={off ? "Вернуть в отчёт" : "Скрыть из отчёта"}
-                            style={{
-                              marginRight: 8,
-                              color: off ? C.ok : C.faint,
-                              fontSize: 15,
-                              lineHeight: 1,
-                              fontWeight: 700,
-                            }}
+                          <label
+                            className="inline-flex items-center gap-2"
+                            style={{ cursor: "pointer" }}
                           >
-                            {off ? "+" : "×"}
-                          </button>
-                          <span
-                            style={{
-                              textDecoration: off ? "line-through" : "none",
-                            }}
-                          >
-                            {r.name}
-                          </span>
+                            <input
+                              type="checkbox"
+                              checked={!off}
+                              onChange={() => toggleExcluded(r.name)}
+                              title={
+                                off ? "Включить в отчёт" : "Убрать из отчёта"
+                              }
+                              style={{
+                                width: 16,
+                                height: 16,
+                                accentColor: C.brandA,
+                              }}
+                            />
+                            <span
+                              style={{
+                                textDecoration: off ? "line-through" : "none",
+                              }}
+                            >
+                              {r.name}
+                            </span>
+                          </label>
                         </td>
                         {data?.source === "import" && (
                           <td

@@ -1862,15 +1862,9 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       matchedAny,
       typesSeen: [...typesSeen].slice(0, 40),
       sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 900) : "",
-      // Код поля → русское название (для сопоставления полей с кодами сборки).
-      columnsDetail: names
-        .filter((n) =>
-          /counteragent|account|sum|amount|дебет|кредит|тип|type|приход|расход|debit|credit|предприят|department|подразделен/i.test(
-            n + " " + (cols[n]?.name || "")
-          )
-        )
-        .slice(0, 70)
-        .map((n) => `${n} = ${cols[n]?.name || ""}`),
+      // Полный список полей отчёта (код = русское название) — чтобы точно
+      // сопоставить «Торговое предприятие», «Сумма прихода» и т.п. с кодами.
+      columnsDetail: names.map((n) => `${n} = ${cols[n]?.name || ""}`),
     };
   } finally {
     releaseKey(key);
