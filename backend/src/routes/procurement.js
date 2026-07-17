@@ -246,15 +246,16 @@ r.get(
     const defFrom = `${today.slice(0, 8)}01`;
     const from = YMD_RE.test(String(req.query.from)) ? req.query.from : defFrom;
     const to = YMD_RE.test(String(req.query.to)) ? req.query.to : today;
+    const department = String(req.query.department || "");
     // Кэшируем на 5 минут: OLAP-запрос тяжёлый, а страница «Долги» открывается
     // часто. Явное «Тянуть из iiko» можно сделать со сбросом (fresh=1).
     const fresh = String(req.query.fresh || "") === "1";
     try {
-      const key = `debts-olap:${from}:${to}`;
+      const key = `debts-olap:${from}:${to}:${department}`;
       const out = fresh
-        ? await supplierDebtOlap({ from, to })
+        ? await supplierDebtOlap({ from, to, department })
         : await cached(key, 5 * 60 * 1000, () =>
-            supplierDebtOlap({ from, to })
+            supplierDebtOlap({ from, to, department })
           );
       if (fresh) cacheSet(key, out, 5 * 60 * 1000);
       res.json(out);

@@ -1682,7 +1682,7 @@ export async function supplierBalances({ timestamp }) {
 // разных сборок iiko отличаются, поэтому сначала узнаём доступные колонки, а в
 // ответе отдаём диагностику (какие поля выбраны, образец строки) — чтобы точно
 // настроить разбор под конкретный сервер.
-export async function supplierDebtOlap({ from, to }) {
+export async function supplierDebtOlap({ from, to, department = "" }) {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await acquireKey();
   try {
@@ -1737,44 +1737,77 @@ export async function supplierDebtOlap({ from, to }) {
       names.find((n) => /DateTime\.Typed/i.test(n)) ||
       names.find((n) => /date/i.test(n)) ||
       "DateTime.Typed";
+    // Торговое предприятие (юрлицо/филиал) — определяем по русскому названию
+    // колонки. Может отсутствовать в некоторых сборках — тогда разбивки по
+    // предприятиям не будет (долг по всей сети).
+    const fEnt =
+      names.find(
+        (n) =>
+          canGroup(n) &&
+          /торгов\w* предприят|^торговое предприятие$|предприятие|юрлиц/i.test(
+            cols[n]?.name || ""
+          )
+      ) ||
+      names.find(
+        (n) => canGroup(n) && /department|conception|corporation/i.test(n)
+      ) ||
+      null;
 
-    const body = {
-      reportType: "TRANSACTIONS",
-      buildSummary: false,
-      groupByRowFields: [fCon, fType].filter(Boolean),
-      groupByColFields: [],
-      aggregateFields: [fInc].filter(Boolean),
-      filters: {
-        [fDate]: {
-          filterType: "DateRange",
-          periodType: "CUSTOM",
-          from: `${from}T00:00:00.000`,
-          to: `${to}T00:00:00.000`,
+    // Один запрос OLAP-проводок с заданной группировкой (для фолбэка без
+    // предприятия, если поле не принимается конкретной сборкой).
+    const runTx = async (groupBy) => {
+      const body = {
+        reportType: "TRANSACTIONS",
+        buildSummary: false,
+        groupByRowFields: groupBy.filter(Boolean),
+        groupByColFields: [],
+        aggregateFields: [fInc].filter(Boolean),
+        filters: {
+          [fDate]: {
+            filterType: "DateRange",
+            periodType: "CUSTOM",
+            from: `${from}T00:00:00.000`,
+            to: `${to}T00:00:00.000`,
+          },
         },
-      },
-    };
-    const res = await fetchT(
-      `${BASE}/resto/api/v2/reports/olap?key=${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }
-    );
-    const text = await res.text();
-    if (res.status === 401) invalidateKey(key);
-    if (!res.ok) {
-      throw new Error(
-        `iiko olap transactions → ${res.status} ${text.slice(0, 300)}`.trim()
+      };
+      const res = await fetchT(
+        `${BASE}/resto/api/v2/reports/olap?key=${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
       );
-    }
+      const text = await res.text();
+      if (res.status === 401) invalidateKey(key);
+      if (!res.ok) {
+        throw new Error(
+          `iiko olap transactions → ${res.status} ${text.slice(0, 300)}`.trim()
+        );
+      }
+      try {
+        const j = JSON.parse(text);
+        return Array.isArray(j) ? j : j.data || j.rows || [];
+      } catch {
+        return [];
+      }
+    };
+
     let data = [];
+    let usedEnt = fEnt;
     try {
-      const j = JSON.parse(text);
-      data = Array.isArray(j) ? j : j.data || j.rows || [];
-    } catch {
-      data = [];
+      data = await runTx([fCon, fType, fEnt]);
+    } catch (e) {
+      if (fEnt) {
+        // Поле предприятия не принято — повторяем без него (долг по всей сети).
+        usedEnt = null;
+        data = await runTx([fCon, fType]);
+      } else {
+        throw e;
+      }
     }
+
     // Долг по контрагенту = «Сумма прихода» по поставщикам (как в отчёте iiko:
     // сумма по контрагенту, расход не вычитаем). Тип — ровно «Поставщик»
     // (SUPPLIER): INTERNAL_SUPPLIER/EMPLOYEE/CLIENT/NONE не берём. Сводные строки
@@ -1782,6 +1815,7 @@ export async function supplierDebtOlap({ from, to }) {
     const SUPPLIER_RE = /^(supplier|поставщик)$/i;
     const typesSeen = new Set();
     const bySup = new Map();
+    const byEnt = new Map();
     let matchedAny = false;
     for (const row of data) {
       const type = String(row[fType] ?? "").trim();
@@ -1789,8 +1823,13 @@ export async function supplierDebtOlap({ from, to }) {
       if (fType && !SUPPLIER_RE.test(type)) continue;
       const name = String(row[fCon] ?? "").trim();
       if (!name) continue;
-      matchedAny = true;
+      const ent = usedEnt ? String(row[usedEnt] ?? "").trim() : "";
       const debt = Number(row[fInc] ?? 0) || 0;
+      // Разбивка по предприятию — по ВСЕМ (для селектора и сводки).
+      if (ent) byEnt.set(ent, (byEnt.get(ent) || 0) + debt);
+      // Фильтр по предприятию (если задан) — в основной список только его.
+      if (department && ent !== department) continue;
+      matchedAny = true;
       bySup.set(name, (bySup.get(name) || 0) + debt);
     }
     const rows = [...bySup.entries()]
@@ -1799,31 +1838,38 @@ export async function supplierDebtOlap({ from, to }) {
       .sort((a, b) => b.debt - a.debt);
     const totalDebt =
       Math.round(rows.reduce((s, r) => s + r.debt, 0) * 100) / 100;
+    const byEnterprise = [...byEnt.entries()]
+      .map(([name, debt]) => ({ name, debt: Math.round(debt * 100) / 100 }))
+      .filter((x) => x.debt > 0)
+      .sort((a, b) => b.debt - a.debt);
     return {
       source: "iiko-olap",
       rows,
       totalDebt,
       count: rows.length,
+      department: department || "",
+      enterprises: byEnterprise.map((x) => x.name),
+      byEnterprise,
       // Диагностика для настройки под конкретный iiko:
       fields: {
         counteragent: fCon,
         type: fType,
         incoming: fInc,
         date: fDate,
+        enterprise: usedEnt || "",
       },
       rawCount: data.length,
       matchedAny,
       typesSeen: [...typesSeen].slice(0, 40),
       sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 900) : "",
-      // Код поля → русское название (для сопоставления «Сумма прихода»,
-      // «Дебет/Кредит» и т.п. с реальными кодами конкретной сборки iiko).
+      // Код поля → русское название (для сопоставления полей с кодами сборки).
       columnsDetail: names
         .filter((n) =>
-          /counteragent|account|sum|amount|дебет|кредит|тип|type|приход|расход|debit|credit/i.test(
+          /counteragent|account|sum|amount|дебет|кредит|тип|type|приход|расход|debit|credit|предприят|department|подразделен/i.test(
             n + " " + (cols[n]?.name || "")
           )
         )
-        .slice(0, 60)
+        .slice(0, 70)
         .map((n) => `${n} = ${cols[n]?.name || ""}`),
     };
   } finally {
