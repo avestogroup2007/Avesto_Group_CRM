@@ -21,6 +21,7 @@ import {
   supplierDebts,
 } from "../services/procurementSync.js";
 import { procurementStores, supplierDebtOlap } from "../services/iikoServer.js";
+import { cached, cacheSet } from "../services/cache.js";
 import { sendProcurementAlerts } from "../services/procurementAlerts.js";
 import {
   importDebtWorkbook,
@@ -245,8 +246,18 @@ r.get(
     const defFrom = `${today.slice(0, 8)}01`;
     const from = YMD_RE.test(String(req.query.from)) ? req.query.from : defFrom;
     const to = YMD_RE.test(String(req.query.to)) ? req.query.to : today;
+    // Кэшируем на 5 минут: OLAP-запрос тяжёлый, а страница «Долги» открывается
+    // часто. Явное «Тянуть из iiko» можно сделать со сбросом (fresh=1).
+    const fresh = String(req.query.fresh || "") === "1";
     try {
-      res.json(await supplierDebtOlap({ from, to }));
+      const key = `debts-olap:${from}:${to}`;
+      const out = fresh
+        ? await supplierDebtOlap({ from, to })
+        : await cached(key, 5 * 60 * 1000, () =>
+            supplierDebtOlap({ from, to })
+          );
+      if (fresh) cacheSet(key, out, 5 * 60 * 1000);
+      res.json(out);
     } catch (e) {
       iikoFail(res, e, { rows: [], totalDebt: 0 });
     }
