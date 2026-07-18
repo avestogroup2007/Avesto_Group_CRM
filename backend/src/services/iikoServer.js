@@ -1822,6 +1822,12 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
     const bySup = new Map();
     const byEnt = new Map();
     let matchedAny = false;
+    // Диагностика: сколько строк-поставщиков вообще несут заполненный филиал
+    // (Department). Если 0 — разбивка по филиалам невозможна в принципе (долг
+    // висит на юрлице/счёте, а не на торговом предприятии).
+    let supplierRows = 0;
+    let supplierRowsWithEnt = 0;
+    let sampleSupplierRow = "";
     for (const row of data) {
       const type = String(row[fType] ?? "").trim();
       if (type) typesSeen.add(type);
@@ -1830,6 +1836,10 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       if (!name) continue;
       const ent = usedEnt ? String(row[usedEnt] ?? "").trim() : "";
       const debt = Number(row[fInc] ?? 0) || 0;
+      supplierRows += 1;
+      if (ent) supplierRowsWithEnt += 1;
+      if (!sampleSupplierRow)
+        sampleSupplierRow = JSON.stringify(row).slice(0, 900);
       // Разбивка по предприятию — по ВСЕМ (для селектора и сводки).
       if (ent) byEnt.set(ent, (byEnt.get(ent) || 0) + debt);
       // Фильтр по предприятию (если задан) — в основной список только его.
@@ -1867,6 +1877,11 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       matchedAny,
       typesSeen: [...typesSeen].slice(0, 40),
       sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 900) : "",
+      // Строки-поставщики: сколько всего и у скольких заполнен филиал.
+      // supplierRowsWithEnt === 0 → разбивка по филиалам невозможна.
+      supplierRows,
+      supplierRowsWithEnt,
+      sampleSupplierRow,
       // Полный список полей отчёта (код = русское название) — чтобы точно
       // сопоставить «Торговое предприятие», «Сумма прихода» и т.п. с кодами.
       columnsDetail: names.map((n) => `${n} = ${cols[n]?.name || ""}`),
