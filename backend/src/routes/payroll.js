@@ -29,7 +29,12 @@ r.get(
   asyncHandler(async (req, res) => {
     const month = isMonth(req.query.month)
       ? String(req.query.month)
-      : new Date().toISOString().slice(0, 7);
+      : // Текущий месяц по Asia/Tashkent, а не UTC: иначе в первые часы 1-го
+        // числа (когда в UTC ещё прошлый месяц) ведомость открывалась бы за
+        // предыдущий месяц.
+        new Date()
+          .toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" })
+          .slice(0, 7);
     const cfg = await refreshPayrollConfig(true);
     const rates = cfg.rates || {};
 

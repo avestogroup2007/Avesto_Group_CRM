@@ -62,7 +62,14 @@ export async function parseDebtWorkbook(buffer) {
 
   const num = (v) => {
     const u = cellValue(v);
-    const n = Number(u);
+    if (typeof u === "number") return Number.isFinite(u) ? u : 0;
+    // Текстовая сумма может прийти с разделителями групп и запятой-десятичной
+    // («1 234 567,89», «1 234 567.89») — убираем пробелы/апострофы и приводим
+    // десятичную запятую к точке, иначе Number(...) даст NaN → 0.
+    const s = String(u ?? "")
+      .replace(/[\s']/g, "")
+      .replace(",", ".");
+    const n = Number(s);
     return Number.isFinite(n) ? n : 0;
   };
   const str = (v) => {
@@ -72,7 +79,17 @@ export async function parseDebtWorkbook(buffer) {
   const dt = (v) => {
     const u = cellValue(v);
     if (!u) return null;
-    const d = u instanceof Date ? u : new Date(u);
+    if (u instanceof Date) return isNaN(u) ? null : u;
+    // Текстовая дата из iiko-выгрузки часто в формате ДД.ММ.ГГГГ (иногда с
+    // временем) — new Date("18.07.2026") невалиден, разбираем вручную, иначе
+    // документ никогда не попадёт в «просрочено».
+    const s = String(u).trim();
+    const m = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/);
+    if (m) {
+      const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+      return isNaN(d) ? null : d;
+    }
+    const d = new Date(s);
     return isNaN(d) ? null : d;
   };
 

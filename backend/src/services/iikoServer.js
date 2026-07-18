@@ -1771,8 +1771,11 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
           [fDate]: {
             filterType: "DateRange",
             periodType: "CUSTOM",
-            from: `${from}T00:00:00.000`,
-            to: `${to}T00:00:00.000`,
+            // Верхняя граница OLAP не включается — берём начало следующего дня,
+            // иначе проводки за день `to` теряются, а при from==to (один день /
+            // 1-е число месяца) отчёт пуст. Как в runOlap.
+            from: dayStart(from),
+            to: nextDayStart(to),
           },
         },
       };
