@@ -14,6 +14,14 @@ import { refreshModules, moduleEnabled } from "../services/modules.js";
 const r = Router();
 r.use(requireAuth);
 
+// Правка шаблонов чек-листов меняет, что и как отмечает персонал — пишем в
+// журнал безопасности (как остальные конфигурационные поверхности).
+async function logTpl(req, event, detail) {
+  await db.auditLog
+    .create({ data: { userId: req.user.uid, event, detail, ip: req.ip } })
+    .catch(() => {});
+}
+
 const ItemSchema = z.object({
   text: z.string().min(1).max(200),
   needPhoto: z.boolean().default(false),
@@ -84,6 +92,11 @@ r.post(
         .json({ error: "Модуль выключен — обратитесь к владельцу системы" });
     }
     const created = await db.checklistTemplate.create({ data: parsed.data });
+    await logTpl(
+      req,
+      "checklist_template_create",
+      `Создан шаблон чек-листа «${created.title}» (${created.kind}${created.position ? `, ${created.position}` : ""})`
+    );
     res.status(201).json(created);
   })
 );
@@ -122,6 +135,11 @@ r.patch(
       .update({ where: { id: req.params.id }, data: parsed.data })
       .catch(() => null);
     if (!updated) return res.status(404).json({ error: "Чек-лист не найден" });
+    await logTpl(
+      req,
+      "checklist_template_update",
+      `Изменён шаблон чек-листа «${updated.title}» (${updated.kind})`
+    );
     res.json(updated);
   })
 );
@@ -134,6 +152,11 @@ r.delete(
       .delete({ where: { id: req.params.id } })
       .catch(() => null);
     if (!deleted) return res.status(404).json({ error: "Чек-лист не найден" });
+    await logTpl(
+      req,
+      "checklist_template_delete",
+      `Удалён шаблон чек-листа «${deleted.title}» (${deleted.kind})`
+    );
     res.json({ ok: true });
   })
 );

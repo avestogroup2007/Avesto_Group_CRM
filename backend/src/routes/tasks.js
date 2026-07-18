@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { forcedBranch } from "../util/branchScope.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -79,6 +80,15 @@ r.post(
       return res.status(400).json({ error: "Неверный формат задачи" });
     }
     const d = parsed.data;
+    // Пользователь, привязанный к филиалу (управляющий/персонал), может
+    // создавать задачи только по своему филиалу — офисные роли (директор/
+    // финансы/сисадмин) не ограничены (forcedBranch у них null).
+    const forced = forcedBranch(req.user);
+    if (forced && d.branchId !== forced) {
+      return res
+        .status(403)
+        .json({ error: "Задачи можно создавать только по своему филиалу" });
+    }
     // Несуществующий филиал — понятная 400, а не 500 от нарушения FK.
     const branch = await db.branch.findUnique({ where: { id: d.branchId } });
     if (!branch) {

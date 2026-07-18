@@ -2153,7 +2153,7 @@ function MoneyView({ s, me, branchScope }) {
                                 fontSize: 11,
                               }}
                             >
-                              {t.amount.toLocaleString("ru-RU")}
+                              {Number(t.amount || 0).toLocaleString("ru-RU")}
                               {curBadge(t.currency)}
                             </span>
                           ) : null}

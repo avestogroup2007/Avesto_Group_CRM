@@ -202,9 +202,11 @@ r.post(
 // Список сотрудников из iiko (для импорта в справочник CRM). Пока только
 // чтение/предпросмотр: { employees: [...], count }. Возвращает ФИО, должность,
 // подразделения и признак «уволен» — источник правды по кадрам это iiko.
+// Только офисные роли: список сотрудников с должностями/контактами — по всей
+// сети, поэтому управляющему филиала (manager) не отдаём (утечка чужих кадров).
 r.get(
   "/employees",
-  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  requireRole("director", "finance", "accountant", "sysadmin"),
   handleIiko(async (req, res) => {
     res.json(await listEmployees());
   })
@@ -215,7 +217,7 @@ r.get(
 // Доступ — офисные роли и управляющий.
 r.get(
   "/production/refs",
-  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  requireRole("director", "finance", "accountant", "sysadmin"),
   handleIiko(async (req, res) => {
     res.json(await productionRefs());
   })
@@ -226,7 +228,7 @@ r.get(
 // Тело: { from, to }. Кэш как у остальных отчётов.
 r.post(
   "/production/report",
-  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  requireRole("director", "finance", "accountant", "sysadmin"),
   handleIiko(async (req, res) => {
     const { from, to } = req.body || {};
     if (!from || !to) {
@@ -244,9 +246,12 @@ r.post(
 // { date, storeId, items:[{productId, amount}], number?, comment?, dryRun? }.
 // dryRun:true — только предпросмотр XML (в iiko ничего не пишется). Реальное
 // проведение (dryRun:false) меняет остатки в iiko — фиксируем в журнале.
+// Только офисные роли: storeId приходит из запроса, а сопоставления склад→
+// филиал в системе нет, поэтому управляющего филиала (manager) не пускаем —
+// иначе он смог бы провести акт в склад ЧУЖОГО филиала (запись в остатки iiko).
 r.post(
   "/production/act",
-  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  requireRole("director", "finance", "accountant", "sysadmin"),
   handleIiko(async (req, res) => {
     const { date, storeId, items, number, comment, dryRun } = req.body || {};
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) {
@@ -295,6 +300,18 @@ r.post(
   requireRole("director", "sysadmin"),
   handleIiko(async (req, res) => {
     const result = await syncEmployeesToDb();
+    // Массовое заведение/блокировка учёток — изменение границ доступа, пишем
+    // в журнал безопасности (best-effort).
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "iiko_employees_sync",
+          detail: `Синхронизация кадров iiko: всего ${result.total}, новых ${result.created}, обновлено ${result.updated}, заблокировано ${result.blocked}`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     // Персонал: сводка синхронизации в свою тему (best-effort).
     sendTelegram(
       `👥 <b>Синхронизация с iiko</b>\n` +

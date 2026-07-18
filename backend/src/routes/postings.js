@@ -467,6 +467,18 @@ r.post(
         createdById: req.user.uid,
       },
     });
+    // Ручная проводка напрямую влияет на оборотно-сальдовую ведомость —
+    // фиксируем создание в журнале (как удаление и правку правил).
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "posting_create",
+          detail: `Создана проводка ${created.debit}/${created.credit} на ${created.amount} (${created.date})`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.status(201).json(serP(created));
   })
 );
@@ -507,6 +519,16 @@ r.patch(
       .update({ where: { id: req.params.id }, data })
       .catch(() => null);
     if (!updated) return res.status(404).json({ error: "Проводка не найдена" });
+    await db.auditLog
+      .create({
+        data: {
+          userId: req.user.uid,
+          event: "posting_update",
+          detail: `Изменена проводка ${updated.debit}/${updated.credit} на ${updated.amount} (${updated.date})`,
+          ip: req.ip,
+        },
+      })
+      .catch(() => {});
     res.json(serP(updated));
   })
 );
