@@ -43,7 +43,11 @@ export default function FoodCostView({ notify, role }) {
   const canEdit = role === "director" || role === "sysadmin";
   const [period, setPeriod] = useState("month");
   const [data, setData] = useState(null);
-  const [cfg, setCfg] = useState({ defaultPct: 30, groupPct: {}, dishCost: {} });
+  const [cfg, setCfg] = useState({
+    defaultPct: 30,
+    groupPct: {},
+    dishCost: {},
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -106,6 +110,7 @@ export default function FoodCostView({ notify, role }) {
       "Группа",
       "Продано",
       "Выручка",
+      "Прод. цена/ед",
       "Себестоимость",
       "ФК %",
       "Маржа",
@@ -113,7 +118,16 @@ export default function FoodCostView({ notify, role }) {
     const lines = [head.map(cell).join(";")];
     for (const r of data.rows)
       lines.push(
-        [r.name, r.group, r.qty, r.revenue, r.cost, r.foodCostPct, r.margin]
+        [
+          r.name,
+          r.group,
+          r.qty,
+          r.revenue,
+          r.sellPrice,
+          r.cost,
+          r.foodCostPct,
+          r.margin,
+        ]
           .map(cell)
           .join(";"),
       );
@@ -140,54 +154,58 @@ export default function FoodCostView({ notify, role }) {
 
   const header = (
     <PageHeader icon={Percent} title="Себестоимость (food cost)">
-        <div className="flex gap-1">
-          {PERIODS.map(([k, lbl]) => (
-            <button
-              key={k}
-              onClick={() => setPeriod(k)}
-              className="rounded-lg px-2.5 py-1 font-semibold"
-              style={{
-                fontSize: 12,
-                border: `1px solid ${period === k ? C.brandA : C.border}`,
-                color: period === k ? C.brandA : C.sub,
-                background: period === k ? "#F5F3FF" : "#fff",
-              }}
-            >
-              {lbl}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-1">
+        {PERIODS.map(([k, lbl]) => (
+          <button
+            key={k}
+            onClick={() => setPeriod(k)}
+            className="rounded-lg px-2.5 py-1 font-semibold"
+            style={{
+              fontSize: 12,
+              border: `1px solid ${period === k ? C.brandA : C.border}`,
+              color: period === k ? C.brandA : C.sub,
+              background: period === k ? "#F5F3FF" : "#fff",
+            }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={exportCsv}
+        disabled={!data || !data.rows?.length}
+        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold"
+        style={{
+          border: `1px solid ${C.border}`,
+          color: C.sub,
+          fontSize: 12,
+          opacity: data && data.rows?.length ? 1 : 0.5,
+        }}
+      >
+        <Download size={13} /> CSV
+      </button>
+      <button
+        onClick={() => load(period)}
+        className="p-2 rounded-lg"
+        style={{ border: `1px solid ${C.border}`, color: C.sub }}
+        title="Обновить"
+      >
+        <RefreshCw size={14} />
+      </button>
+      {canEdit && (
         <button
-          onClick={exportCsv}
-          disabled={!data || !data.rows?.length}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold"
+          onClick={save}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-white"
           style={{
-            border: `1px solid ${C.border}`,
-            color: C.sub,
-            fontSize: 12,
-            opacity: data && data.rows?.length ? 1 : 0.5,
+            background: C.brandA,
+            fontSize: 13,
+            opacity: saving ? 0.6 : 1,
           }}
         >
-          <Download size={13} /> CSV
+          <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
         </button>
-        <button
-          onClick={() => load(period)}
-          className="p-2 rounded-lg"
-          style={{ border: `1px solid ${C.border}`, color: C.sub }}
-          title="Обновить"
-        >
-          <RefreshCw size={14} />
-        </button>
-        {canEdit && (
-          <button
-            onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-bold text-white"
-            style={{ background: C.brandA, fontSize: 13, opacity: saving ? 0.6 : 1 }}
-          >
-            <Save size={14} /> {saving ? "Сохраняем…" : "Сохранить"}
-          </button>
-        )}
+      )}
     </PageHeader>
   );
 
@@ -197,9 +215,7 @@ export default function FoodCostView({ notify, role }) {
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <span style={{ fontSize: 12.5, color: C.sub }}>
-            ФК% по умолчанию
-          </span>
+          <span style={{ fontSize: 12.5, color: C.sub }}>ФК% по умолчанию</span>
           {canEdit ? (
             <input
               value={cfg.defaultPct}
@@ -215,8 +231,9 @@ export default function FoodCostView({ notify, role }) {
           )}
         </div>
         <span style={{ fontSize: 11.5, color: C.faint }}>
-          Себестоимость с тех.картой iiko подставится автоматически позже; пока
-          цена за единицу задаётся вручную в строке.
+          «Прод. цена/ед» берётся из iiko (выручка ÷ продано). «Себест./ед» —
+          себестоимость единицы: с тех.картой iiko подставится автоматически
+          позже, пока задаётся вручную; где пусто — считается по ФК%.
         </span>
       </div>
 
@@ -225,7 +242,11 @@ export default function FoodCostView({ notify, role }) {
       ) : err ? (
         <div
           className="rounded-2xl bg-white p-5"
-          style={{ border: `1px solid ${C.border}`, color: C.sub, fontSize: 13 }}
+          style={{
+            border: `1px solid ${C.border}`,
+            color: C.sub,
+            fontSize: 13,
+          }}
         >
           {/iiko/i.test(err)
             ? "Интеграция iiko не настроена. Себестоимость считается по продажам из iiko — подключите интеграцию в админке."
@@ -234,9 +255,21 @@ export default function FoodCostView({ notify, role }) {
       ) : !data ? null : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Kpi label="Выручка, сум" value={money(data.totals.revenue)} tone={C.brandB} />
-            <Kpi label="Себестоимость, сум" value={money(data.totals.cost)} tone={C.bad} />
-            <Kpi label="Маржа, сум" value={money(data.totals.margin)} tone={C.ok} />
+            <Kpi
+              label="Выручка, сум"
+              value={money(data.totals.revenue)}
+              tone={C.brandB}
+            />
+            <Kpi
+              label="Себестоимость, сум"
+              value={money(data.totals.cost)}
+              tone={C.bad}
+            />
+            <Kpi
+              label="Маржа, сум"
+              value={money(data.totals.margin)}
+              tone={C.ok}
+            />
             <Kpi
               label="Food cost, %"
               value={`${data.totals.foodCostPct}%`}
@@ -257,15 +290,32 @@ export default function FoodCostView({ notify, role }) {
                 <table className="w-full" style={{ fontSize: 12.5 }}>
                   <thead>
                     <tr style={{ color: C.faint, textAlign: "right" }}>
-                      <th className="pb-2 pr-2 font-semibold" style={{ textAlign: "left" }}>
+                      <th
+                        className="pb-2 pr-2 font-semibold"
+                        style={{ textAlign: "left" }}
+                      >
                         Блюдо
                       </th>
-                      <th className="pb-2 pr-2 font-semibold" style={{ textAlign: "left" }}>
+                      <th
+                        className="pb-2 pr-2 font-semibold"
+                        style={{ textAlign: "left" }}
+                      >
                         Группа
                       </th>
                       <th className="pb-2 pr-2 font-semibold">Продано</th>
                       <th className="pb-2 pr-2 font-semibold">Выручка</th>
-                      <th className="pb-2 pr-2 font-semibold">Цена/ед</th>
+                      <th
+                        className="pb-2 pr-2 font-semibold"
+                        title="Продажная цена за единицу из iiko: выручка ÷ продано"
+                      >
+                        Прод. цена/ед
+                      </th>
+                      <th
+                        className="pb-2 pr-2 font-semibold"
+                        title="Себестоимость единицы блюда; пусто — считается по ФК%"
+                      >
+                        Себест./ед
+                      </th>
                       <th className="pb-2 pr-2 font-semibold">Себест.</th>
                       <th className="pb-2 pr-2 font-semibold">ФК%</th>
                       <th className="pb-2 font-semibold">Маржа</th>
@@ -273,25 +323,46 @@ export default function FoodCostView({ notify, role }) {
                   </thead>
                   <tbody>
                     {data.rows.map((r) => (
-                      <tr key={r.name} style={{ borderTop: `1px solid ${C.line}` }}>
-                        <td className="py-1.5 pr-2" style={{ color: C.ink, fontWeight: 600 }}>
+                      <tr
+                        key={r.name}
+                        style={{ borderTop: `1px solid ${C.line}` }}
+                      >
+                        <td
+                          className="py-1.5 pr-2"
+                          style={{ color: C.ink, fontWeight: 600 }}
+                        >
                           {r.name}
                         </td>
                         <td className="py-1.5 pr-2" style={{ color: C.faint }}>
                           {r.group || "—"}
                         </td>
-                        <td className="py-1.5 pr-2 text-right" style={{ color: C.sub }}>
+                        <td
+                          className="py-1.5 pr-2 text-right"
+                          style={{ color: C.sub }}
+                        >
                           {money(r.qty)}
                         </td>
-                        <td className="py-1.5 pr-2 text-right" style={{ color: C.sub }}>
+                        <td
+                          className="py-1.5 pr-2 text-right"
+                          style={{ color: C.sub }}
+                        >
                           {money(r.revenue)}
+                        </td>
+                        <td
+                          className="py-1.5 pr-2 text-right"
+                          style={{ color: C.ink, fontWeight: 600 }}
+                          title="Продажная цена за единицу из iiko"
+                        >
+                          {r.qty > 0 ? money(r.sellPrice) : "—"}
                         </td>
                         <td className="py-1.5 pr-2 text-right">
                           {canEdit ? (
                             <input
                               value={cfg.dishCost?.[r.name] ?? ""}
                               placeholder={r.source === "dish" ? "" : "—"}
-                              onChange={(e) => setDishCost(r.name, e.target.value)}
+                              onChange={(e) =>
+                                setDishCost(r.name, e.target.value)
+                              }
                               style={inp}
                               inputMode="numeric"
                               title="Себестоимость единицы блюда; пусто — считается по ФК%"
@@ -306,12 +377,18 @@ export default function FoodCostView({ notify, role }) {
                             </span>
                           )}
                         </td>
-                        <td className="py-1.5 pr-2 text-right" style={{ color: C.ink }}>
+                        <td
+                          className="py-1.5 pr-2 text-right"
+                          style={{ color: C.ink }}
+                        >
                           {money(r.cost)}
                         </td>
                         <td
                           className="py-1.5 pr-2 text-right"
-                          style={{ color: pctColor(r.foodCostPct), fontWeight: 700 }}
+                          style={{
+                            color: pctColor(r.foodCostPct),
+                            fontWeight: 700,
+                          }}
                         >
                           {r.foodCostPct}%
                         </td>

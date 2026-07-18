@@ -1737,19 +1737,24 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       names.find((n) => /DateTime\.Typed/i.test(n)) ||
       names.find((n) => /date/i.test(n)) ||
       "DateTime.Typed";
-    // Торговое предприятие (юрлицо/филиал) — определяем по русскому названию
-    // колонки. Может отсутствовать в некоторых сборках — тогда разбивки по
-    // предприятиям не будет (долг по всей сети).
+    // Торговое предприятие (филиал) — на стандартной сборке iiko это поле с кодом
+    // «Department» (русское название «Торговое предприятие»), значения вида
+    // «Aeroport», «Navruzi Цех». Сначала берём точный код, затем — по русскому
+    // названию колонки, затем — прочие варианты (concept/corporation). Может
+    // отсутствовать в некоторых сборках — тогда разбивки не будет (долг по сети).
     const fEnt =
+      (canGroup("Department") && names.includes("Department")
+        ? "Department"
+        : null) ||
       names.find(
         (n) =>
           canGroup(n) &&
-          /торгов\w* предприят|^торговое предприятие$|предприятие|юрлиц/i.test(
+          /торгов\w* предприят|^торговое предприятие$|предприятие/i.test(
             cols[n]?.name || ""
           )
       ) ||
       names.find(
-        (n) => canGroup(n) && /department|conception|corporation/i.test(n)
+        (n) => canGroup(n) && /^department$|conception|corporation/i.test(n)
       ) ||
       null;
 
@@ -1817,6 +1822,12 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
     const bySup = new Map();
     const byEnt = new Map();
     let matchedAny = false;
+    // Диагностика: сколько строк-поставщиков вообще несут заполненный филиал
+    // (Department). Если 0 — разбивка по филиалам невозможна в принципе (долг
+    // висит на юрлице/счёте, а не на торговом предприятии).
+    let supplierRows = 0;
+    let supplierRowsWithEnt = 0;
+    let sampleSupplierRow = "";
     for (const row of data) {
       const type = String(row[fType] ?? "").trim();
       if (type) typesSeen.add(type);
@@ -1825,6 +1836,10 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       if (!name) continue;
       const ent = usedEnt ? String(row[usedEnt] ?? "").trim() : "";
       const debt = Number(row[fInc] ?? 0) || 0;
+      supplierRows += 1;
+      if (ent) supplierRowsWithEnt += 1;
+      if (!sampleSupplierRow)
+        sampleSupplierRow = JSON.stringify(row).slice(0, 900);
       // Разбивка по предприятию — по ВСЕМ (для селектора и сводки).
       if (ent) byEnt.set(ent, (byEnt.get(ent) || 0) + debt);
       // Фильтр по предприятию (если задан) — в основной список только его.
@@ -1862,6 +1877,11 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       matchedAny,
       typesSeen: [...typesSeen].slice(0, 40),
       sampleRow: data[0] ? JSON.stringify(data[0]).slice(0, 900) : "",
+      // Строки-поставщики: сколько всего и у скольких заполнен филиал.
+      // supplierRowsWithEnt === 0 → разбивка по филиалам невозможна.
+      supplierRows,
+      supplierRowsWithEnt,
+      sampleSupplierRow,
       // Полный список полей отчёта (код = русское название) — чтобы точно
       // сопоставить «Торговое предприятие», «Сумма прихода» и т.п. с кодами.
       columnsDetail: names.map((n) => `${n} = ${cols[n]?.name || ""}`),

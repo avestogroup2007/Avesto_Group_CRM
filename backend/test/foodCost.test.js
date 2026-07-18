@@ -74,6 +74,15 @@ test("расчёт: приоритет цены (блюдо → группа →
   assert.equal(byName["Плов"].cost, 30000);
   assert.equal(byName["Плов"].source, "dish");
   assert.equal(byName["Плов"].foodCostPct, 30);
+  // Продажная цена за единицу из iiko = выручка ÷ продано (100000 / 10).
+  assert.equal(byName["Плов"].sellPrice, 10000);
+  assert.equal(byName["Лимонад"].sellPrice, 2500);
+  // Нулевое количество не должно ронять расчёт (деление на ноль → 0).
+  assert.equal(
+    computeFoodCost([{ name: "X", revenue: 100, qty: 0 }], {}).rows[0]
+      .sellPrice,
+    0
+  );
   assert.equal(byName["Лимонад"].cost, 20000);
   assert.equal(byName["Лимонад"].source, "group");
   assert.equal(byName["Десерт"].cost, 35000);
