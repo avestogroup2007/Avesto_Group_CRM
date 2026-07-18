@@ -103,11 +103,16 @@ export function computeFoodCost(dishes, config) {
     }
     cost = Math.round(cost);
     const foodCostPct = revenue > 0 ? (cost / revenue) * 100 : 0;
+    // Продажная цена за единицу — прямо из iiko (выручка ÷ количество). Это
+    // фактическая средняя цена продажи блюда за период (со скидками, т.к.
+    // revenue = DishDiscountSumInt), считать вручную не нужно.
+    const sellPrice = qty > 0 ? Math.round(revenue / qty) : 0;
     return {
       name,
       group,
       qty,
       revenue,
+      sellPrice,
       cost,
       margin: revenue - cost,
       foodCostPct: Math.round(foodCostPct * 10) / 10,
