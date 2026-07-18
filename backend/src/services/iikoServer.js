@@ -1737,19 +1737,24 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       names.find((n) => /DateTime\.Typed/i.test(n)) ||
       names.find((n) => /date/i.test(n)) ||
       "DateTime.Typed";
-    // Торговое предприятие (юрлицо/филиал) — определяем по русскому названию
-    // колонки. Может отсутствовать в некоторых сборках — тогда разбивки по
-    // предприятиям не будет (долг по всей сети).
+    // Торговое предприятие (филиал) — на стандартной сборке iiko это поле с кодом
+    // «Department» (русское название «Торговое предприятие»), значения вида
+    // «Aeroport», «Navruzi Цех». Сначала берём точный код, затем — по русскому
+    // названию колонки, затем — прочие варианты (concept/corporation). Может
+    // отсутствовать в некоторых сборках — тогда разбивки не будет (долг по сети).
     const fEnt =
+      (canGroup("Department") && names.includes("Department")
+        ? "Department"
+        : null) ||
       names.find(
         (n) =>
           canGroup(n) &&
-          /торгов\w* предприят|^торговое предприятие$|предприятие|юрлиц/i.test(
+          /торгов\w* предприят|^торговое предприятие$|предприятие/i.test(
             cols[n]?.name || ""
           )
       ) ||
       names.find(
-        (n) => canGroup(n) && /department|conception|corporation/i.test(n)
+        (n) => canGroup(n) && /^department$|conception|corporation/i.test(n)
       ) ||
       null;
 
