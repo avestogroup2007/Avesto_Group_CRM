@@ -49,6 +49,7 @@ const DdsView = lazy(() => import("./pages/Dds.jsx"));
 const PayrollView = lazy(() => import("./pages/Payroll.jsx"));
 const FoodCostView = lazy(() => import("./pages/FoodCost.jsx"));
 const ProcurementView = lazy(() => import("./pages/Procurement.jsx"));
+const CvmView = lazy(() => import("./pages/Cvm.jsx"));
 const PlanView = lazy(() => import("./pages/Plan.jsx"));
 const SetupWizard = lazy(() => import("./components/SetupWizard.jsx"));
 const TodoManagerView = lazy(() => import("./pages/TodoManager.jsx"));
@@ -629,6 +630,11 @@ export default function App({ authUser, onLogout }) {
                   { roles: NAV.find((n) => n.key === "procurement").roles },
                   me.role,
                 ) && <ProcurementView notify={notify} role={me.role} />}
+              {s.view === "cvm" &&
+                navAllowed(
+                  { roles: NAV.find((n) => n.key === "cvm").roles },
+                  me.role,
+                ) && <CvmView notify={notify} role={me.role} />}
               {s.view === "todos" && <TodoManagerView notify={notify} />}
               {s.view === "create" && (
                 <CreatePage me={me} s={s} dispatch={dispatch} notify={notify} />

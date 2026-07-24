@@ -35,6 +35,16 @@ const EnvSchema = z.object({
   IIKO_SERVER_URL: z.string().url().optional(), // https://host:port
   IIKO_SERVER_LOGIN: z.string().min(1).optional(), // логин пользователя iikoOffice
   IIKO_SERVER_PASSWORD: z.string().min(1).optional(), // пароль (SHA1 считает сервер)
+  // iiko Лояльность (iikoCloud API, api-ru.iiko.services) — ОТДЕЛЬНЫЙ ключ от
+  // отчётного iikoServer. Нужен для CVM-обогащения клиентов (баланс/имя по
+  // телефону). Секреты — только в окружении хостинга. Не заданы → синхронизация
+  // лояльности вернёт 503 «не настроено», модуль CVM работает на импорте/ручном.
+  IIKO_LOYALTY_API_URL: z
+    .string()
+    .url()
+    .default("https://api-ru.iiko.services"),
+  IIKO_LOYALTY_API_LOGIN: z.string().min(1).optional(), // apiLogin (транспорт-токен)
+  IIKO_LOYALTY_ORG_ID: z.string().min(1).optional(), // organizationId
   // Telegram-уведомления. Токен бота и id чата задаются ТОЛЬКО в окружении
   // хостинга (Render). Если не заданы — уведомления просто не отправляются,
   // остальная система работает как обычно. Токен получают у @BotFather,
