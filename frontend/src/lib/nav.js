@@ -24,6 +24,7 @@ import {
   Target,
   ListTodo,
   PackageSearch,
+  HeartHandshake,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -98,6 +99,12 @@ export const NAV = [
     label: "Планы и цели (план-факт)",
     icon: Target,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
+    key: "cvm",
+    label: "CVM — клиенты",
+    icon: HeartHandshake,
+    roles: ["director", "finance", "accountant", "sysadmin"],
   },
   {
     key: "production",
@@ -195,7 +202,7 @@ export const NAV_GROUPS = [
     key: "analytics",
     label: "Аналитика",
     icon: BarChart3,
-    items: ["analytics", "sales", "plan", "reports"],
+    items: ["analytics", "sales", "plan", "cvm", "reports"],
   },
   {
     key: "staff",
@@ -285,6 +292,7 @@ export const VIEW_TITLE = {
   foodcost: "Себестоимость — food cost и маржа",
   procurement: "Закупки и склад — цены, остатки, движение",
   plan: "Планы и цели — план-факт по филиалам",
+  cvm: "CVM — ценность клиента, сегменты и кампании",
   sales: "Аналитика продаж",
   production: "Производство",
   checklists: "Чек-листы смены",

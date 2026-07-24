@@ -608,6 +608,64 @@ model SupplierDebtDoc {
   @@index([importedAt])
 }
 
+// ── CVM: управление ценностью клиента (Customer Value Management) ────────────
+// Клиент/гость с агрегатами покупок для RFM/LTV/оттока. Источник: iiko
+// лояльность (source=iiko, ключ externalId = id гостя) или ручной/Excel-импорт
+// (source=manual/import, ключ — нормализованный phone). Модуль гейтится флагом
+// `cvm` (Back Office). Персональные данные — только офисным ролям.
+model Customer {
+  id           String    @id @default(cuid())
+  source       String    @default("manual") // manual | import | iiko
+  externalId   String? // id гостя в iiko (ключ синхронизации лояльности)
+  name         String    @default("")
+  phone        String    @default("") // нормализованный телефон (ключ дедупа)
+  email        String    @default("")
+  branchId     String? // «домашний» филиал (org id)
+  branchName   String    @default("")
+  consent      Boolean   @default(false) // согласие на маркетинговые рассылки
+  firstOrderAt DateTime? // первая покупка (для «новых»)
+  lastOrderAt  DateTime? // последняя покупка (Recency)
+  orders       Int       @default(0) // число покупок (Frequency)
+  totalSpent   BigInt    @default(0) // сумма покупок, сум (Monetary)
+  note         String    @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([phone])
+  @@index([externalId])
+  @@index([lastOrderAt])
+  @@index([branchId])
+  @@index([source])
+}
+
+// Кампания CVM: целевое предложение по RFM-сегменту с рассылкой (Telegram/др.).
+// audience/sentCount фиксируются на момент отправки (история не зависит от
+// последующих изменений базы клиентов).
+model CvmCampaign {
+  id          String    @id @default(cuid())
+  name        String
+  segment     String // код RFM-сегмента (champions|loyal|at_risk|...) или "all"
+  offer       String    @default("") // текст предложения/оффера
+  channel     String    @default("telegram") // telegram | sms | manual
+  status      String    @default("draft") // draft | sent
+  audience    Int       @default(0) // размер аудитории на момент отправки
+  sentCount   Int       @default(0) // фактически отправлено
+  createdById String?
+  createdAt   DateTime  @default(now())
+  sentAt      DateTime?
+
+  @@index([status])
+  @@index([segment])
+}
+
+// Конфигурация CVM (одна строка, id=1, JSON): окно оттока (дней), пороги RFM.
+model CvmConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
 // Журнал отправленных сигналов (дедуп): один сигнал на (товар, тип, день),
 // чтобы авто-проверка не спамила один и тот же скачок цены/нехватку остатка.
 model ProcurementAlert {
