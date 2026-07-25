@@ -898,17 +898,23 @@ export function buildProductionXml({
         `</item>`
     )
     .join("");
-  // Акт приготовления в iiko — документ списания (AbstractProductsWriteoffDocument),
-  // которому обязателен склад НА УРОВНЕ ДОКУМЕНТА (<storeId>). Без него iiko
-  // отвечает «Argument for @NotNull parameter 'store' … must not be null».
-  // Склад в позициях оставляем для сборок, где он читается там.
+  // Акт приготовления в iiko — документ семейства «списание»
+  // (AbstractProductsWriteoffDocument), которому обязателен склад НА УРОВНЕ
+  // ДОКУМЕНТА. Иначе iiko отвечает «Argument for @NotNull parameter 'store' …
+  // must not be null» — даже когда склад указан в каждой позиции.
+  //
+  // В API документов списания это поле называется <defaultStoreId>; часть
+  // сборок дополнительно понимает <storeId>. Отправляем ОБА: лишнее поле iiko
+  // игнорирует, а недостающее как раз и роняло проведение.
+  const store = escXml(storeId);
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<document>` +
     (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
     `<dateIncoming>${dt}</dateIncoming>` +
     `<status>${status}</status>` +
-    `<storeId>${escXml(storeId)}</storeId>` +
+    `<defaultStoreId>${store}</defaultStoreId>` +
+    `<storeId>${store}</storeId>` +
     (comment ? `<comment>${escXml(comment)}</comment>` : "") +
     `<items>${rows}</items>` +
     `</document>`
