@@ -608,6 +608,116 @@ model SupplierDebtDoc {
   @@index([importedAt])
 }
 
+// ── Производство: автогенерация документов iiko (ТЗ разд. 14.1) ─────────────
+// Производственный отдел (Сборка, Покрытие, Украшение…). Назван
+// ProductionDepartment, а не Department, чтобы не путать с отделами задач
+// (DeptConfig) — это разные сущности с разным смыслом.
+model ProductionDepartment {
+  id       String  @id @default(cuid())
+  code     String  @unique // "SBORKA", "POKRYTIE"…
+  name     String
+  active   Boolean @default(true)
+  // Telegram-тема/чат для уведомлений о недостаче (ТЗ 5.4), пусто = общий канал
+  telegramTopic String @default("")
+
+  tasks     ProductionTask[]
+  phaseMaps PhaseWarehouseMap[]
+}
+
+// Справочник «фаза (+категория продукции) → склад/отдел» — вариант Б из ТЗ 3.1.
+// Используется, когда iiko не отдаёт склад приготовления прямо из техкарты
+// (вариант А); category = null — правило по умолчанию для фазы.
+model PhaseWarehouseMap {
+  id            String  @id @default(cuid())
+  phase         String // RAW|CLEAN|SEMI|ASSEMBLY|COATING|CUTTING|DECOR|FINISHED
+  category      String? // категория/группа номенклатуры, null = дефолт фазы
+  warehouseId   String // id склада в iiko
+  warehouseName String  @default("")
+  departmentId  String
+  department    ProductionDepartment @relation(fields: [departmentId], references: [id])
+
+  @@unique([phase, category])
+  @@index([departmentId])
+}
+
+// Задание на производство узла (ГП или отдельного ПФ). До-задание (ТЗ 5.4) —
+// это отдельная запись со ссылкой parentTaskId: у него свой исполнитель и своё
+// время, а вся история по узлу видна списком.
+model ProductionTask {
+  id           String    @id @default(cuid())
+  nodeCode     String // код изделия/ПФ в номенклатуре iiko
+  nodeName     String
+  phase        String    @default("SEMI")
+  planQty      Decimal   @db.Decimal(18, 4)
+  unit         String    @default("")
+  deliveryDate DateTime
+  shift        String    @default("")
+  source       String    @default("MANUAL") // AUTO_ORDER | AUTO_STOCK | MANUAL
+  status       String    @default("NEW") // NEW|PREVIEW|IN_PROGRESS|DONE|ERROR
+  warehouseId  String    @default("")
+  // Партия: все узлы одного расчёта делят batchId — по нему собирается дерево
+  // задания целиком и работает идемпотентность повторного запуска (ТЗ 8).
+  batchId      String
+  // Заказ-источник (Exrod и т.п.) — для идемпотентности и связи с заказом.
+  orderRef     String?
+  parentTaskId String? // до-задание → исходное задание
+  parentTask   ProductionTask?  @relation("Retry", fields: [parentTaskId], references: [id])
+  retries      ProductionTask[] @relation("Retry")
+  departmentId String?
+  department   ProductionDepartment? @relation(fields: [departmentId], references: [id])
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  facts     ProductionFact[]
+  documents GeneratedDocument[]
+
+  @@index([status])
+  @@index([departmentId, status])
+  @@index([batchId])
+  @@index([nodeCode])
+  @@index([deliveryDate])
+}
+
+// Факт выполнения, введённый отделом. Запись НЕИЗМЕНЯЕМАЯ (ТЗ 6, 13.1):
+// коррекция не переписывает оригинал, а добавляется новой записью со ссылкой
+// correctionOf на исправляемую.
+model ProductionFact {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         ProductionTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  qty          Decimal  @db.Decimal(18, 4)
+  reportedById String
+  reportedAt   DateTime @default(now())
+  correctionOf String? // id исправляемого факта (ТЗ 13.2)
+  note         String   @default("")
+
+  @@index([taskId])
+  @@index([correctionOf])
+}
+
+// Документ, созданный в iiko по факту. Хранится для журнала и отката (ТЗ 6).
+model GeneratedDocument {
+  id            String   @id @default(cuid())
+  taskId        String
+  task          ProductionTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  factId        String?
+  iikoDocId     String   @default("")
+  docType       String // TRANSFER | PRODUCTION_ACT | DISASSEMBLY_ACT
+  warehouseFrom String   @default("")
+  warehouseTo   String   @default("")
+  productCode   String   @default("")
+  productName   String   @default("")
+  qty           Decimal  @db.Decimal(18, 4)
+  status        String   @default("created") // created | error | reverted
+  error         String   @default("")
+  createdAt     DateTime @default(now())
+
+  @@index([taskId])
+  @@index([factId])
+  @@index([docType])
+}
+
 // ── CVM: управление ценностью клиента (Customer Value Management) ────────────
 // Клиент/гость с агрегатами покупок для RFM/LTV/оттока. Источник: iiko
 // лояльность (source=iiko, ключ externalId = id гостя) или ручной/Excel-импорт
