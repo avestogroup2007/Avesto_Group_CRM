@@ -906,17 +906,22 @@ export function buildProductionXml({
   // В API документов списания это поле называется <defaultStoreId>; часть
   // сборок дополнительно понимает <storeId>. Отправляем ОБА: лишнее поле iiko
   // игнорирует, а недостающее как раз и роняло проведение.
+  //
+  // ПОРЯДОК ЭЛЕМЕНТОВ значим: документы iiko разбираются JAXB, и при заданном
+  // propOrder элементы «не на своём месте» могут молча не примениться — тогда
+  // склад снова оказывается null. Поэтому идём строго в порядке документации
+  // iiko: items → dateIncoming → documentNumber → status → склад.
   const store = escXml(storeId);
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<document>` +
-    (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
-    `<dateIncoming>${dt}</dateIncoming>` +
-    `<status>${status}</status>` +
-    `<defaultStoreId>${store}</defaultStoreId>` +
-    `<storeId>${store}</storeId>` +
-    (comment ? `<comment>${escXml(comment)}</comment>` : "") +
     `<items>${rows}</items>` +
+    `<dateIncoming>${dt}</dateIncoming>` +
+    (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
+    `<status>${status}</status>` +
+    (comment ? `<comment>${escXml(comment)}</comment>` : "") +
+    `<storeId>${store}</storeId>` +
+    `<defaultStoreId>${store}</defaultStoreId>` +
     `</document>`
   );
 }

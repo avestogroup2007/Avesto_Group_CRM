@@ -53,13 +53,14 @@ test("сборка акта: склад задан и на документе, �
   // Склад документа обязателен — без него iiko отвергает акт (store must not be null).
   // В API документов списания поле называется defaultStoreId; storeId шлём
   // дополнительно для сборок, которые понимают его.
+  assert.match(xml, /<defaultStoreId>store-guid-1<\/defaultStoreId>/);
+  assert.match(xml, /<document><items>/); // порядок как в документации iiko
+  // Порядок элементов документа: items → dateIncoming → documentNumber →
+  // status → storeId. JAXB при заданном propOrder может игнорировать поля не
+  // на своём месте, поэтому порядок закреплён тестом.
   assert.match(
     xml,
-    /<document>[\s\S]*<defaultStoreId>store-guid-1<\/defaultStoreId>[\s\S]*<items>/
-  );
-  assert.match(
-    xml,
-    /<document>[\s\S]*<storeId>store-guid-1<\/storeId>[\s\S]*<items>/
+    /<items>[\s\S]*<\/items><dateIncoming>[\s\S]*<documentNumber>A-1<\/documentNumber><status>[\s\S]*<storeId>store-guid-1<\/storeId>/
   );
   assert.match(
     xml,
