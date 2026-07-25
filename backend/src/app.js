@@ -37,6 +37,7 @@ import foodCostRoutes from "./routes/foodCost.js";
 import planRoutes from "./routes/plan.js";
 import procurementRoutes from "./routes/procurement.js";
 import cvmRoutes from "./routes/cvm.js";
+import productionRoutes from "./routes/production.js";
 import todoRoutes from "./routes/todos.js";
 import todosCronRoutes from "./routes/todosCron.js";
 import procurementCronRoutes from "./routes/procurementCron.js";
@@ -176,6 +177,7 @@ app.use("/api/food-cost", foodCostRoutes);
 app.use("/api/plan", planRoutes);
 app.use("/api/procurement", procurementRoutes);
 app.use("/api/cvm", cvmRoutes);
+app.use("/api/production", productionRoutes);
 app.use("/api/todos", todoRoutes);
 // Крон-напоминания — свой секрет в заголовке, без пользовательской авторизации.
 app.use("/api/todos-cron", todosCronRoutes);

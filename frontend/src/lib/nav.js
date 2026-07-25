@@ -25,6 +25,7 @@ import {
   ListTodo,
   PackageSearch,
   HeartHandshake,
+  Factory,
 } from "lucide-react";
 
 /* ------------------------- навигация и шапка ------------------------------- */
@@ -99,6 +100,12 @@ export const NAV = [
     label: "Планы и цели (план-факт)",
     icon: Target,
     roles: ["director", "finance", "manager", "accountant", "sysadmin"],
+  },
+  {
+    key: "prodtasks",
+    label: "Производство — задания",
+    icon: Factory,
+    roles: ["director", "finance", "accountant", "sysadmin", "manager"],
   },
   {
     key: "cvm",
@@ -214,7 +221,7 @@ export const NAV_GROUPS = [
     key: "ops",
     label: "Производство",
     icon: ListChecks,
-    items: ["production", "cakes"],
+    items: ["prodtasks", "production", "cakes"],
   },
   {
     key: "company",
@@ -295,6 +302,7 @@ export const VIEW_TITLE = {
   cvm: "CVM — ценность клиента, сегменты и кампании",
   sales: "Аналитика продаж",
   production: "Производство",
+  prodtasks: "Производство — задания, мониторы отделов, конструктор",
   checklists: "Чек-листы смены",
   staffkpi: "KPI сотрудников — дисциплина по чек-листам",
   cakes: "Конструктор",

@@ -567,6 +567,81 @@ export async function productionRefs() {
 // Список складов iiko (id + название) для фильтра «по филиалам» в модуле
 // «Закупки и склад». В сети iiko склад = единица филиала (у каждого филиала
 // свой склад). Best-effort: если iiko не настроен — пустой список.
+// ── Техкарты (assembly charts) для производственного движка ─────────────────
+// Забираем ВСЕ карты одним запросом и строим индекс productId → карта. Это
+// принципиально: дерево из 460 узлов при запросе «по карте на узел» дало бы
+// сотни вызовов iiko (та же N+1-проблема, что и в синхронизации сотрудников).
+// Ответ разных сборок отличается по обёртке — читаем мягко, по нескольким
+// возможным именам полей.
+function normalizeChart(a) {
+  const items =
+    a.items || a.preparedCharts || a.assemblyChartItems || a.components || [];
+  const components = (Array.isArray(items) ? items : [])
+    .map((it) => ({
+      code: it.productId || it.product || it.id || "",
+      name: it.productName || it.name || "",
+      // amountIn — закладка компонента; в части сборок это просто amount.
+      qty: Number(it.amountIn ?? it.amount ?? it.norm ?? 0) || 0,
+      unit: it.measureUnit || it.unit || "",
+    }))
+    .filter((c) => c.code && c.qty > 0);
+  const outQty =
+    Number(a.assembledAmount ?? a.amountOut ?? a.outputAmount ?? 0) || 0;
+  return {
+    code: a.assembledProductId || a.productId || a.id || "",
+    name: a.assembledProductName || a.productName || a.name || "",
+    output: outQty,
+    components,
+    // Один вход и несколько выходов — признак акта разбора (ТЗ 4.5).
+    disassembly: Array.isArray(a.outputProducts) && a.outputProducts.length > 1,
+  };
+}
+
+export async function assemblyCharts({ date } = {}) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const d =
+      date ||
+      new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
+    const res = await fetch(
+      `${BASE}/resto/api/v2/assemblyCharts/getAll?key=${encodeURIComponent(
+        key
+      )}&date=${encodeURIComponent(d)}&includePreparedCharts=true`,
+      { headers: { Accept: "application/json" } }
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko assemblyCharts → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    let arr = [];
+    try {
+      const j = JSON.parse(text);
+      arr = Array.isArray(j)
+        ? j
+        : j.assemblyCharts || j.preparedCharts || j.response || [];
+    } catch {
+      arr = [];
+    }
+    const charts = {};
+    for (const a of Array.isArray(arr) ? arr : []) {
+      const c = normalizeChart(a);
+      if (c.code && c.components.length) charts[c.code] = c;
+    }
+    return {
+      charts,
+      count: Object.keys(charts).length,
+      // Диагностика под конкретную сборку iiko (как в «Поля iiko» для долгов).
+      sample: Object.keys(charts).length ? "" : text.slice(0, 1200),
+    };
+  } finally {
+    releaseKey(key);
+  }
+}
+
 export async function procurementStores() {
   if (!iikoConfigured()) throw new IikoNotConfiguredError();
   const key = await acquireKey();
@@ -823,19 +898,30 @@ export function buildProductionXml({
         `</item>`
     )
     .join("");
-  // Акт приготовления в iiko — документ списания (AbstractProductsWriteoffDocument),
-  // которому обязателен склад НА УРОВНЕ ДОКУМЕНТА (<storeId>). Без него iiko
-  // отвечает «Argument for @NotNull parameter 'store' … must not be null».
-  // Склад в позициях оставляем для сборок, где он читается там.
+  // Акт приготовления в iiko — документ семейства «списание»
+  // (AbstractProductsWriteoffDocument), которому обязателен склад НА УРОВНЕ
+  // ДОКУМЕНТА. Иначе iiko отвечает «Argument for @NotNull parameter 'store' …
+  // must not be null» — даже когда склад указан в каждой позиции.
+  //
+  // В API документов списания это поле называется <defaultStoreId>; часть
+  // сборок дополнительно понимает <storeId>. Отправляем ОБА: лишнее поле iiko
+  // игнорирует, а недостающее как раз и роняло проведение.
+  //
+  // ПОРЯДОК ЭЛЕМЕНТОВ значим: документы iiko разбираются JAXB, и при заданном
+  // propOrder элементы «не на своём месте» могут молча не примениться — тогда
+  // склад снова оказывается null. Поэтому идём строго в порядке документации
+  // iiko: items → dateIncoming → documentNumber → status → склад.
+  const store = escXml(storeId);
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<document>` +
-    (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
-    `<dateIncoming>${dt}</dateIncoming>` +
-    `<status>${status}</status>` +
-    `<storeId>${escXml(storeId)}</storeId>` +
-    (comment ? `<comment>${escXml(comment)}</comment>` : "") +
     `<items>${rows}</items>` +
+    `<dateIncoming>${dt}</dateIncoming>` +
+    (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
+    `<status>${status}</status>` +
+    (comment ? `<comment>${escXml(comment)}</comment>` : "") +
+    `<storeId>${store}</storeId>` +
+    `<defaultStoreId>${store}</defaultStoreId>` +
     `</document>`
   );
 }
@@ -868,9 +954,15 @@ export async function createProduction({
     );
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(
+      // К ошибке прикладываем ОТПРАВЛЕННЫЙ XML: схемы документов у разных
+      // сборок iikoChain отличаются именами полей, и без исходного запроса
+      // причину («какого поля не хватило») приходится угадывать.
+      const e = new Error(
         `iiko production → ${res.status} ${text.slice(0, 500)}`.trim()
       );
+      e.sentXml = xml;
+      e.iikoResponse = text.slice(0, 2000);
+      throw e;
     }
     // Ответ iiko — XML с результатом. valid=false + errorMessage при ошибке.
     const valid = !/<valid>\s*false\s*<\/valid>/i.test(text);
@@ -1505,6 +1597,50 @@ export async function storeBalances({ timestamp, departmentId, storeId }) {
     const result = { rows: out, raw: rows.length, storesSeen: [...storesSeen] };
     if (!rows.length) result.sample = text.slice(0, 800);
     return result;
+  } finally {
+    releaseKey(key);
+  }
+}
+
+// Матрица остатков «склад × товар» одним запросом: ключ `${storeId}|${productId}`
+// → количество. Производственному движку нужен остаток именно на складе фазы, а
+// не суммарный по сети; при этом опрашивать iiko по складу на каждый узел
+// дерева (460 узлов) недопустимо — поэтому забираем всё разом и индексируем.
+export async function storeBalanceMatrix({ timestamp } = {}) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const ts =
+      timestamp ||
+      new Date().toISOString().slice(0, 19).replace("T", " ").slice(0, 19);
+    const res = await fetch(
+      `${BASE}/resto/api/v2/reports/balance/stores` +
+        `?key=${encodeURIComponent(key)}&timestamp=${encodeURIComponent(ts)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko balance/stores → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    let rows = [];
+    try {
+      const j = text ? JSON.parse(text) : [];
+      rows = Array.isArray(j) ? j : j.rows || j.data || [];
+    } catch {
+      rows = [];
+    }
+    const matrix = new Map();
+    for (const r of rows) {
+      const st = r.store || r.storeId || "";
+      const pid = r.product || r.productId;
+      if (!pid) continue;
+      const k = `${st}|${pid}`;
+      matrix.set(k, (matrix.get(k) || 0) + (Number(r.amount) || 0));
+    }
+    return { matrix, rows: rows.length };
   } finally {
     releaseKey(key);
   }

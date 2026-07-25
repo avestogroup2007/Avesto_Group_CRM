@@ -35,7 +35,11 @@ function authHeaders(extra) {
 async function parseError(res) {
   try {
     const data = await res.json();
-    return data.error || `Ошибка ${res.status}`;
+    const msg = data.error || `Ошибка ${res.status}`;
+    // Для документов iiko сервер прикладывает отправленный XML — показываем его
+    // в тексте ошибки: по нему сразу видно, какого поля не хватило конкретной
+    // сборке iikoChain (схемы у версий отличаются).
+    return data.sentXml ? `${msg}\n\nОтправлено в iiko:\n${data.sentXml}` : msg;
   } catch {
     return `Ошибка ${res.status}`;
   }

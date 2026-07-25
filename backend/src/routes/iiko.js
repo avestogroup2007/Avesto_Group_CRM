@@ -79,10 +79,14 @@ function handleIiko(fn) {
         return res.status(e.statusCode).json({ error: e.message });
       }
       // Показываем реальную причину от iiko — помогает при настройке
-      // (неверный логин/пароль, недоступный сервер и т.п.).
-      return res
-        .status(502)
-        .json({ error: e.message || "Ошибка запроса к iiko" });
+      // (неверный логин/пароль, недоступный сервер и т.п.). Для документов
+      // дополнительно отдаём отправленный XML: по нему сразу видно, какого
+      // поля не хватило конкретной сборке iikoChain.
+      return res.status(502).json({
+        error: e.message || "Ошибка запроса к iiko",
+        ...(e.sentXml ? { sentXml: e.sentXml } : {}),
+        ...(e.iikoResponse ? { iikoResponse: e.iikoResponse } : {}),
+      });
     }
   });
 }
