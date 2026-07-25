@@ -308,47 +308,47 @@ function ActTab() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-              <table
-                style={{ width: "100%", borderCollapse: "collapse" }}
-                className="mb-2"
-              >
-                <thead>
-                  <tr>
-                    <th style={th}>Блюдо / заготовка</th>
-                    <th style={{ ...th, width: 140 }}>Кол-во (порций)</th>
-                    <th style={{ ...th, width: 40 }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr key={it.id}>
-                      <td style={td}>
-                        {it.name}
-                        {it.num ? (
-                          <span style={{ color: FAINT }}> · {it.num}</span>
-                        ) : null}
-                      </td>
-                      <td style={td}>
-                        <input
-                          value={it.amount}
-                          onChange={(e) => setAmount(it.id, e.target.value)}
-                          inputMode="decimal"
-                          style={{ ...inp, padding: "5px 9px" }}
-                        />
-                      </td>
-                      <td style={td}>
-                        <button
-                          onClick={() => removeItem(it.id)}
-                          title="Убрать"
-                          style={{ color: BAD, fontWeight: 700, padding: 4 }}
-                        >
-                          ✕
-                        </button>
-                      </td>
+                <table
+                  style={{ width: "100%", borderCollapse: "collapse" }}
+                  className="mb-2"
+                >
+                  <thead>
+                    <tr>
+                      <th style={th}>Блюдо / заготовка</th>
+                      <th style={{ ...th, width: 140 }}>Кол-во (порций)</th>
+                      <th style={{ ...th, width: 40 }}></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr key={it.id}>
+                        <td style={td}>
+                          {it.name}
+                          {it.num ? (
+                            <span style={{ color: FAINT }}> · {it.num}</span>
+                          ) : null}
+                        </td>
+                        <td style={td}>
+                          <input
+                            value={it.amount}
+                            onChange={(e) => setAmount(it.id, e.target.value)}
+                            inputMode="decimal"
+                            style={{ ...inp, padding: "5px 9px" }}
+                          />
+                        </td>
+                        <td style={td}>
+                          <button
+                            onClick={() => removeItem(it.id)}
+                            title="Убрать"
+                            style={{ color: BAD, fontWeight: 700, padding: 4 }}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
@@ -430,7 +430,16 @@ function ActTab() {
                 ) : (
                   <>
                     <b>Не удалось провести.</b>
-                    {result.error ? ` ${result.error}` : ""}
+                    {/* Ошибка может содержать отправленный XML — сохраняем
+                        переносы, иначе диагностику невозможно прочитать. */}
+                    {result.error ? (
+                      <span style={{ whiteSpace: "pre-wrap" }}>
+                        {" "}
+                        {result.error}
+                      </span>
+                    ) : (
+                      ""
+                    )}
                   </>
                 )}
                 {result.response && (
@@ -727,8 +736,7 @@ function ReportTab() {
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <span style={{ fontSize: 13, color: SUB }}>
                 Актов за период: <b>{data.docCount}</b> · позиций:{" "}
-                <b>{items.length}</b> · количество:{" "}
-                <b>{fmtQty(totalAmount)}</b>
+                <b>{items.length}</b> · количество: <b>{fmtQty(totalAmount)}</b>
               </span>
               <select
                 value={dept}

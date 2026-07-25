@@ -949,9 +949,15 @@ export async function createProduction({
     );
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(
+      // К ошибке прикладываем ОТПРАВЛЕННЫЙ XML: схемы документов у разных
+      // сборок iikoChain отличаются именами полей, и без исходного запроса
+      // причину («какого поля не хватило») приходится угадывать.
+      const e = new Error(
         `iiko production → ${res.status} ${text.slice(0, 500)}`.trim()
       );
+      e.sentXml = xml;
+      e.iikoResponse = text.slice(0, 2000);
+      throw e;
     }
     // Ответ iiko — XML с результатом. valid=false + errorMessage при ошибке.
     const valid = !/<valid>\s*false\s*<\/valid>/i.test(text);

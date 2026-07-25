@@ -165,6 +165,68 @@ r.post(
   })
 );
 
+// Ручное задание (ТЗ 5.1, источник «Ручные»): сотрудник ставит задание на
+// производство или пополнение запаса без разворота дерева. Не требует ни
+// техкарт, ни настроенной iiko — используется и для планового пополнения ПФ,
+// и для проверки работы мониторов до полной настройки интеграции.
+const ManualSchema = z.object({
+  nodeCode: z.string().min(1).max(200),
+  nodeName: z.string().min(1).max(300),
+  phase: z.string().min(1).max(40).default("SEMI"),
+  planQty: z.number().positive().max(1_000_000),
+  unit: z.string().max(40).optional(),
+  deliveryDate: z.coerce.date(),
+  shift: z.string().max(40).optional(),
+  departmentId: z.string().min(1).nullable().optional(),
+  warehouseId: z.string().max(100).optional(),
+});
+
+r.post(
+  "/tasks/manual",
+  CAN_PLAN,
+  asyncHandler(async (req, res) => {
+    const parsed = ManualSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ error: "Неверные параметры задания" });
+    const d = parsed.data;
+    // Склад можно не указывать явно — подставим из справочника «фаза → склад».
+    let warehouseId = d.warehouseId || "";
+    let departmentId = d.departmentId || null;
+    if (!warehouseId || !departmentId) {
+      const map = await db.phaseWarehouseMap
+        .findFirst({ where: { phase: d.phase, category: null } })
+        .catch(() => null);
+      if (map) {
+        warehouseId = warehouseId || map.warehouseId;
+        departmentId = departmentId || map.departmentId;
+      }
+    }
+    const task = await db.productionTask.create({
+      data: {
+        nodeCode: d.nodeCode,
+        nodeName: d.nodeName,
+        phase: d.phase,
+        planQty: d.planQty,
+        unit: d.unit || "",
+        deliveryDate: d.deliveryDate,
+        shift: d.shift || "",
+        source: "MANUAL",
+        status: "IN_PROGRESS",
+        warehouseId,
+        batchId: `m_${Date.now().toString(36)}`,
+        departmentId,
+        createdById: req.user.uid,
+      },
+    });
+    await logProd(
+      req,
+      "production_task_manual",
+      `Ручное задание «${task.nodeName}» ×${d.planQty}`
+    );
+    res.status(201).json(task);
+  })
+);
+
 // Список заданий: общий вид или монитор отдела (ТЗ 5.4).
 r.get(
   "/tasks",

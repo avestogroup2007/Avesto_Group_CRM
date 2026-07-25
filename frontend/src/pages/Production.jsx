@@ -549,8 +549,177 @@ function TaskTable({ tasks, onPick }) {
   );
 }
 
+// Панель быстрой настройки: завести отдел и поставить ручное задание (ТЗ 5.1,
+// источник «Ручные»). Нужна и в работе — для планового пополнения запаса ПФ, —
+// и чтобы проверить монитор отдела до полной настройки iiko.
+function SetupPanel({ notify, departments, onDepartments, onTasks }) {
+  const [depName, setDepName] = useState("");
+  const [depCode, setDepCode] = useState("");
+  const [task, setTask] = useState({
+    nodeName: "",
+    nodeCode: "",
+    planQty: "",
+    unit: "кг",
+    phase: "SEMI",
+    departmentId: "",
+    deliveryDate: today(),
+  });
+  const [busy, setBusy] = useState(false);
+
+  const inp = {
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: "5px 8px",
+    fontSize: 12.5,
+  };
+
+  const addDep = async () => {
+    if (!depName.trim() || !depCode.trim()) {
+      notify && notify("Укажите код и название отдела");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiPost("/api/production/departments", {
+        code: depCode.trim().toUpperCase(),
+        name: depName.trim(),
+      });
+      setDepName("");
+      setDepCode("");
+      onDepartments();
+      notify && notify("Отдел создан");
+    } catch (e) {
+      notify && notify(e.message || "Не удалось создать отдел");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addTask = async () => {
+    if (!task.nodeName.trim() || !(Number(task.planQty) > 0)) {
+      notify && notify("Укажите название работы и количество");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiPost("/api/production/tasks/manual", {
+        nodeCode: task.nodeCode.trim() || task.nodeName.trim(),
+        nodeName: task.nodeName.trim(),
+        phase: task.phase,
+        planQty: Number(task.planQty),
+        unit: task.unit,
+        deliveryDate: task.deliveryDate,
+        departmentId: task.departmentId || null,
+      });
+      setTask({ ...task, nodeName: "", nodeCode: "", planQty: "" });
+      onTasks();
+      notify && notify("Задание создано — оно появилось в списке ниже");
+    } catch (e) {
+      notify && notify(e.message || "Не удалось создать задание");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Box>
+      <div style={{ fontWeight: 700, color: C.ink, marginBottom: 8 }}>
+        Отдел
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={depName}
+          onChange={(e) => setDepName(e.target.value)}
+          placeholder="Название (напр. Сборка)"
+          style={{ ...inp, width: 220 }}
+        />
+        <input
+          value={depCode}
+          onChange={(e) => setDepCode(e.target.value)}
+          placeholder="Код (SBORKA)"
+          style={{ ...inp, width: 150 }}
+        />
+        <button
+          onClick={addDep}
+          disabled={busy}
+          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-semibold"
+          style={{
+            border: `1px solid ${C.border}`,
+            color: C.sub,
+            fontSize: 12.5,
+          }}
+        >
+          <Plus size={13} /> Добавить отдел
+        </button>
+      </div>
+
+      <div
+        style={{
+          fontWeight: 700,
+          color: C.ink,
+          marginTop: 14,
+          marginBottom: 8,
+        }}
+      >
+        Ручное задание — что сотрудник должен сделать
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={task.nodeName}
+          onChange={(e) => setTask({ ...task, nodeName: e.target.value })}
+          placeholder="Что производим (напр. ПФ МЕЛАНЖ)"
+          style={{ ...inp, width: 260 }}
+        />
+        <input
+          value={task.planQty}
+          onChange={(e) =>
+            setTask({ ...task, planQty: e.target.value.replace(/[^\d.]/g, "") })
+          }
+          placeholder="Сколько"
+          inputMode="decimal"
+          style={{ ...inp, width: 100, textAlign: "right" }}
+        />
+        <input
+          value={task.unit}
+          onChange={(e) => setTask({ ...task, unit: e.target.value })}
+          placeholder="Ед."
+          style={{ ...inp, width: 80 }}
+        />
+        <NiceSelect
+          value={task.departmentId}
+          onChange={(v) => setTask({ ...task, departmentId: v })}
+          options={[
+            { value: "", label: "Без отдела" },
+            ...departments.map((d) => ({ value: d.id, label: d.name })),
+          ]}
+          width={200}
+        />
+        <NiceDate
+          value={task.deliveryDate}
+          onChange={(v) => setTask({ ...task, deliveryDate: v })}
+        />
+        <button
+          onClick={addTask}
+          disabled={busy}
+          className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-bold text-white"
+          style={{ background: C.brandA, fontSize: 12.5 }}
+        >
+          <Plus size={13} /> Поставить задание
+        </button>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6 }}>
+        Ручное задание не требует техкарты — сотрудник сразу увидит его в списке
+        и сможет отчитаться о выполненном объёме.
+      </div>
+    </Box>
+  );
+}
+
 // ── Монитор отдела: план, состав, ввод факта (ТЗ 5.4) ──────────────────────
-function MonitorTab({ notify }) {
+function MonitorTab({ notify, role }) {
+  const canPlan = ["director", "finance", "accountant", "sysadmin"].includes(
+    role,
+  );
   const [departments, setDepartments] = useState([]);
   const [dep, setDep] = useState("");
   const [tasks, setTasks] = useState([]);
@@ -558,12 +727,17 @@ function MonitorTab({ notify }) {
   const [fact, setFact] = useState("");
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
 
-  useEffect(() => {
+  const loadDeps = useCallback(() => {
     apiGet("/api/production/departments")
       .then((d) => setDepartments(d.departments || []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadDeps();
+  }, [loadDeps]);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -641,7 +815,29 @@ function MonitorTab({ notify }) {
         <span style={{ fontSize: 11.5, color: C.faint }}>
           В очереди: {tasks.length}
         </span>
+        {canPlan && (
+          <button
+            onClick={() => setSetupOpen((v) => !v)}
+            className="rounded-lg px-3 py-1.5 font-semibold"
+            style={{
+              border: `1px solid ${C.border}`,
+              color: C.sub,
+              fontSize: 12,
+            }}
+          >
+            {setupOpen ? "Скрыть" : "Отдел / ручное задание"}
+          </button>
+        )}
       </div>
+
+      {canPlan && setupOpen && (
+        <SetupPanel
+          notify={notify}
+          departments={departments}
+          onDepartments={loadDeps}
+          onTasks={loadTasks}
+        />
+      )}
 
       <Box>
         <div style={{ fontWeight: 700, color: C.ink, marginBottom: 8 }}>
@@ -649,7 +845,8 @@ function MonitorTab({ notify }) {
         </div>
         {tasks.length === 0 ? (
           <div style={{ color: C.faint, fontSize: 13 }}>
-            Заданий нет — всё выполнено.
+            Заданий нет. Создайте задание расчётом на вкладке «Задания» или
+            вручную — кнопка «Отдел / ручное задание» выше.
           </div>
         ) : (
           <TaskTable

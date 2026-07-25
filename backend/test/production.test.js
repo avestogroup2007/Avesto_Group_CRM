@@ -275,6 +275,46 @@ test("предпросмотр факта (dryRun) не пишет докуме�
   assert.equal(facts, 0);
 });
 
+test("ручное задание создаётся без iiko и попадает в монитор отдела", async () => {
+  await setModule(true);
+  const res = await fetch(`${base}/api/production/tasks/manual`, {
+    method: "POST",
+    headers: jsonAuth(directorToken),
+    body: JSON.stringify({
+      nodeCode: "TEST_MANUAL",
+      nodeName: "ПФ ТЕСТ РУЧНОЕ",
+      phase: "SEMI",
+      planQty: 12,
+      unit: "кг",
+      deliveryDate: new Date().toISOString().slice(0, 10),
+    }),
+  });
+  assert.equal(res.status, 201);
+  const task = await res.json();
+  assert.equal(task.nodeName, "ПФ ТЕСТ РУЧНОЕ");
+  assert.equal(task.status, "IN_PROGRESS");
+
+  // Задание видно в общем списке — значит попадёт и на монитор отдела.
+  const list = await fetch(`${base}/api/production/tasks`, {
+    headers: auth(directorToken),
+  });
+  const d = await list.json();
+  const found = d.tasks.find((t) => t.id === task.id);
+  assert.ok(found, "ручное задание должно быть в списке");
+  assert.equal(found.planQty, 12);
+  assert.equal(found.left, 12);
+
+  // И по нему сразу можно отчитаться о выполненном объёме.
+  const fact = await fetch(`${base}/api/production/tasks/${task.id}/fact`, {
+    method: "POST",
+    headers: jsonAuth(directorToken),
+    body: JSON.stringify({ qty: 12 }),
+  });
+  assert.equal(fact.status, 200);
+  const fd = await fact.json();
+  assert.equal(fd.shortfall, 0);
+});
+
 test("effectiveFactTotal: цепочка коррекций учитывается один раз", () => {
   const facts = [
     { id: "a", qty: 500, correctionOf: null },
