@@ -748,6 +748,42 @@ export function parseProductionDocsXml(text) {
   return docs;
 }
 
+// Образец реального акта приготовления ИЗ iiko (сырой XML выгрузки).
+// Импорт документов у разных сборок iikoChain отличается именами полей, и
+// подбирать их вслепую нельзя. Выгрузка — парная операция к импорту: iiko сама
+// отдаёт документ в том формате, который считает правильным. По этому образцу
+// точно видно, как называется поле склада на уровне документа.
+export async function productionSample({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/v2/documents/export/productionDocument?key=${encodeURIComponent(
+        key
+      )}&dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}`,
+      { headers: { Accept: "application/xml" } }
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    // Первый документ целиком — этого достаточно, чтобы увидеть схему.
+    const m = text.match(/<document>[\s\S]*?<\/document>/);
+    return {
+      from,
+      to,
+      found: Boolean(m),
+      sample: m ? m[0].slice(0, 4000) : text.slice(0, 4000),
+      totalLength: text.length,
+    };
+  } finally {
+    releaseKey(key);
+  }
+}
+
 // Отчёт производства за период: читает проведённые акты приготовления из iiko
 // и агрегирует «какой товар и сколько произведено», с отделом (папкой) товара.
 export async function productionReport({ from, to }) {

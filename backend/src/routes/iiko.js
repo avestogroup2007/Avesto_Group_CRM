@@ -15,6 +15,7 @@ import {
   productionRefs,
   createProduction,
   productionReport,
+  productionSample,
   foodCostSales,
 } from "../services/iikoServer.js";
 import {
@@ -243,6 +244,28 @@ r.post(
         productionReport({ from, to })
       )
     );
+  })
+);
+
+// Образец РЕАЛЬНОГО акта приготовления из iiko (сырой XML выгрузки).
+// Нужен, когда импорт отвергается («store must not be null» и т.п.): по
+// выгрузке видно точные имена полей конкретной сборки iikoChain, а не
+// предполагаемые. Ничего не пишет.
+r.get(
+  "/production/sample",
+  requireRole("director", "finance", "accountant", "sysadmin"),
+  handleIiko(async (req, res) => {
+    const to =
+      String(req.query.to || "") ||
+      new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
+    // По умолчанию смотрим на месяц назад — там наверняка есть проведённые акты.
+    const from =
+      String(req.query.from || "") ||
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(
+        "en-CA",
+        { timeZone: "Asia/Tashkent" }
+      );
+    res.json(await productionSample({ from, to }));
   })
 );
 
