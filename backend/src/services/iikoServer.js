@@ -939,14 +939,18 @@ export function buildProductionXml({
   // ДОКУМЕНТА. Иначе iiko отвечает «Argument for @NotNull parameter 'store' …
   // must not be null» — даже когда склад указан в каждой позиции.
   //
-  // В API документов списания это поле называется <defaultStoreId>; часть
-  // сборок дополнительно понимает <storeId>. Отправляем ОБА: лишнее поле iiko
-  // игнорирует, а недостающее как раз и роняло проведение.
+  // Имя поля склада на уровне документа у разных сборок iikoChain отличается,
+  // а схема нигде не зафиксирована. Проверено на боевой базе:
+  //   <storeId>        — не читается;
+  //   <defaultStoreId> — не читается, но и НЕ вызывает ошибку разбора.
+  // Второе важнее первого: раз незнакомый элемент просто игнорируется, значит
+  // безопасно отправить сразу все правдоподобные имена — сработает то, которое
+  // сборка понимает. Добавляем <store>: именно так называется параметр в тексте
+  // ошибки iiko (@NotNull parameter 'store').
   //
   // ПОРЯДОК ЭЛЕМЕНТОВ значим: документы iiko разбираются JAXB, и при заданном
-  // propOrder элементы «не на своём месте» могут молча не примениться — тогда
-  // склад снова оказывается null. Поэтому идём строго в порядке документации
-  // iiko: items → dateIncoming → documentNumber → status → склад.
+  // propOrder элементы «не на своём месте» могут молча не примениться. Идём
+  // в порядке документации iiko: items → dateIncoming → documentNumber → status.
   const store = escXml(storeId);
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
@@ -956,6 +960,7 @@ export function buildProductionXml({
     (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
     `<status>${status}</status>` +
     (comment ? `<comment>${escXml(comment)}</comment>` : "") +
+    `<store>${store}</store>` +
     `<storeId>${store}</storeId>` +
     `<defaultStoreId>${store}</defaultStoreId>` +
     `</document>`
