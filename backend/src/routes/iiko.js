@@ -365,13 +365,15 @@ r.patch(
   "/employees/:id",
   requireRole("director", "sysadmin"),
   asyncHandler(async (req, res) => {
-    const { role, active, telegramId, checklistBranch } = req.body || {};
+    const { role, active, telegramId, checklistBranch, allBranches } =
+      req.body || {};
     try {
       const updated = await updateEmployeeAccess(req.params.id, {
         role,
         active,
         telegramId,
         checklistBranch,
+        allBranches,
       });
       // Журнал безопасности: изменение роли/доступа/филиала — чувствительная
       // операция (граница доступа), фиксируем кто и что менял.
@@ -385,6 +387,9 @@ r.patch(
               `роль ${updated.role}, ${updated.active ? "активен" : "заблокирован"}` +
               (checklistBranch != null
                 ? `, филиал ${checklistBranch || "—"}`
+                : "") +
+              (allBranches !== undefined
+                ? `, надзор за всеми филиалами: ${allBranches ? "да" : "нет"}`
                 : ""),
             ip: req.ip,
           },

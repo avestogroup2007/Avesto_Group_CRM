@@ -21,6 +21,10 @@ export const NO_BRANCH = "__no_branch_assigned__";
 // смены) не используем — иначе сотрудник без филиала не смог бы работать.
 export function forcedBranch(user, opts = {}) {
   if (!user || BRANCH_FREE_ROLES.has(user.role)) return null;
+  // Надзор за всеми филиалами: филиальная роль с этим флагом видит данные по
+  // всей сети (продажи/аналитика/производство/чек-листы). Доступ к деньгам это
+  // НЕ открывает — денежные маршруты закрыты для нефинансовых ролей отдельно.
+  if (user.allBranches) return null;
   if (Array.isArray(opts.alsoFree) && opts.alsoFree.includes(user.role))
     return null;
   const b = user.assignedBranch;

@@ -42,6 +42,7 @@ async function freshState(uid) {
         role: true,
         branchId: true,
         checklistBranch: true,
+        allBranches: true,
       },
     });
   } catch {
@@ -60,6 +61,7 @@ async function freshState(uid) {
       role: null,
       branchId: null,
       assignedBranch: null,
+      allBranches: false,
     };
   }
   const ok = Boolean(user && user.active && !user.iikoDeleted);
@@ -71,6 +73,8 @@ async function freshState(uid) {
     // Рабочий филиал сотрудника (id из конфигурации организации, строкой) —
     // для серверного ограничения данных по филиалу у привязанных сотрудников.
     assignedBranch: user ? user.checklistBranch : null,
+    // Надзор за всеми филиалами (операционные данные без денег).
+    allBranches: user ? Boolean(user.allBranches) : false,
   };
   // Эвикция по TTL при переполнении (без сброса всего кэша — иначе стампид).
   if (freshCache.size > 2000) {
@@ -113,6 +117,7 @@ export async function requireAuth(req, res, next) {
     role: state.role,
     branchId: state.branchId,
     assignedBranch: state.assignedBranch,
+    allBranches: state.allBranches,
   };
   next();
 }

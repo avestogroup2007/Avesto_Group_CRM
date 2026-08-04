@@ -151,6 +151,7 @@ const EMP_SELECT = {
   mustChangePassword: true,
   telegramId: true,
   checklistBranch: true,
+  allBranches: true,
 };
 
 // Настройка прав синхронизированного сотрудника: роль, активность и привязка к
@@ -158,7 +159,7 @@ const EMP_SELECT = {
 // из iiko (source=iiko) — демо/ручные не трогаем.
 export async function updateEmployeeAccess(
   id,
-  { role, active, telegramId, checklistBranch }
+  { role, active, telegramId, checklistBranch, allBranches }
 ) {
   const existing = await db.user.findUnique({ where: { id } });
   if (!existing || existing.source !== "iiko") {
@@ -194,6 +195,12 @@ export async function updateEmployeeAccess(
       throw new Error("Филиал — некорректный id");
     }
     data.checklistBranch = b || null;
+  }
+  // Надзор за всеми филиалами: даёт обзор операционных данных по всей сети без
+  // денег. Разрешаем только для филиальных ролей (управляющий/персонал) — у
+  // офисных ролей и так полный обзор, флаг им не нужен.
+  if (allBranches !== undefined) {
+    data.allBranches = Boolean(allBranches);
   }
   try {
     const updated = await db.user.update({
