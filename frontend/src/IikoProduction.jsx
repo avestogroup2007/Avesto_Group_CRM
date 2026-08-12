@@ -32,6 +32,8 @@ function ActTab() {
   const [result, setResult] = useState(null); // {ok,error,response,documentNumber}
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState("");
+  // Образец реального акта из iiko — точная схема полей для импорта.
+  const [sample, setSample] = useState(null);
 
   const load = async () => {
     setState({ kind: "loading" });
@@ -40,6 +42,16 @@ function ActTab() {
       setState({ kind: "ok", data });
     } catch (e) {
       setState({ kind: "error", msg: e.message || "Ошибка запроса к iiko" });
+    }
+  };
+
+  const loadSample = async () => {
+    setSample({ loading: true });
+    try {
+      const r = await apiGet("/api/iiko/production/sample");
+      setSample(r);
+    } catch (e) {
+      setSample({ error: e.message || "Не удалось выгрузить образец" });
     }
   };
 
@@ -208,6 +220,49 @@ function ActTab() {
         >
           {state.kind === "loading" ? "Загрузка…" : "Загрузить из iiko"}
         </button>
+      </div>
+
+      {/* Диагностика схемы: выгружаем РЕАЛЬНЫЙ акт из iiko и смотрим, как в
+          этой сборке называются поля (в т.ч. склад на уровне документа). */}
+      <div className="mt-2">
+        <button
+          onClick={loadSample}
+          className="rounded-xl px-3 py-1.5 font-semibold"
+          style={{ border: `1px solid ${BORDER}`, color: SUB, fontSize: 12.5 }}
+        >
+          Показать образец акта из iiko
+        </button>
+        {sample && (
+          <div className="mt-2" style={{ fontSize: 12 }}>
+            {sample.loading ? (
+              <span style={{ color: FAINT }}>Выгружаем…</span>
+            ) : sample.error ? (
+              <span style={{ color: BAD }}>{sample.error}</span>
+            ) : (
+              <>
+                <div style={{ color: FAINT, marginBottom: 4 }}>
+                  {sample.found
+                    ? "Реальный акт из iiko — по нему видно точные имена полей:"
+                    : "Готовых актов за период не найдено; ответ iiko целиком:"}
+                </div>
+                <pre
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    color: FAINT,
+                    background: "#fff",
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 8,
+                    padding: 8,
+                    maxHeight: 260,
+                    overflow: "auto",
+                  }}
+                >
+                  {sample.sample}
+                </pre>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {state.kind === "error" && (

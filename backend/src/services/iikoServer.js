@@ -748,6 +748,42 @@ export function parseProductionDocsXml(text) {
   return docs;
 }
 
+// Образец реального акта приготовления ИЗ iiko (сырой XML выгрузки).
+// Импорт документов у разных сборок iikoChain отличается именами полей, и
+// подбирать их вслепую нельзя. Выгрузка — парная операция к импорту: iiko сама
+// отдаёт документ в том формате, который считает правильным. По этому образцу
+// точно видно, как называется поле склада на уровне документа.
+export async function productionSample({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/v2/documents/export/productionDocument?key=${encodeURIComponent(
+        key
+      )}&dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}`,
+      { headers: { Accept: "application/xml" } }
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(
+        `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
+      );
+    }
+    // Первый документ целиком — этого достаточно, чтобы увидеть схему.
+    const m = text.match(/<document>[\s\S]*?<\/document>/);
+    return {
+      from,
+      to,
+      found: Boolean(m),
+      sample: m ? m[0].slice(0, 4000) : text.slice(0, 4000),
+      totalLength: text.length,
+    };
+  } finally {
+    releaseKey(key);
+  }
+}
+
 // Отчёт производства за период: читает проведённые акты приготовления из iiko
 // и агрегирует «какой товар и сколько произведено», с отделом (папкой) товара.
 export async function productionReport({ from, to }) {
@@ -903,14 +939,18 @@ export function buildProductionXml({
   // ДОКУМЕНТА. Иначе iiko отвечает «Argument for @NotNull parameter 'store' …
   // must not be null» — даже когда склад указан в каждой позиции.
   //
-  // В API документов списания это поле называется <defaultStoreId>; часть
-  // сборок дополнительно понимает <storeId>. Отправляем ОБА: лишнее поле iiko
-  // игнорирует, а недостающее как раз и роняло проведение.
+  // Имя поля склада на уровне документа у разных сборок iikoChain отличается,
+  // а схема нигде не зафиксирована. Проверено на боевой базе:
+  //   <storeId>        — не читается;
+  //   <defaultStoreId> — не читается, но и НЕ вызывает ошибку разбора.
+  // Второе важнее первого: раз незнакомый элемент просто игнорируется, значит
+  // безопасно отправить сразу все правдоподобные имена — сработает то, которое
+  // сборка понимает. Добавляем <store>: именно так называется параметр в тексте
+  // ошибки iiko (@NotNull parameter 'store').
   //
   // ПОРЯДОК ЭЛЕМЕНТОВ значим: документы iiko разбираются JAXB, и при заданном
-  // propOrder элементы «не на своём месте» могут молча не примениться — тогда
-  // склад снова оказывается null. Поэтому идём строго в порядке документации
-  // iiko: items → dateIncoming → documentNumber → status → склад.
+  // propOrder элементы «не на своём месте» могут молча не примениться. Идём
+  // в порядке документации iiko: items → dateIncoming → documentNumber → status.
   const store = escXml(storeId);
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
@@ -920,6 +960,7 @@ export function buildProductionXml({
     (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
     `<status>${status}</status>` +
     (comment ? `<comment>${escXml(comment)}</comment>` : "") +
+    `<store>${store}</store>` +
     `<storeId>${store}</storeId>` +
     `<defaultStoreId>${store}</defaultStoreId>` +
     `</document>`

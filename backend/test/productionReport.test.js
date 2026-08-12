@@ -54,6 +54,9 @@ test("сборка акта: склад задан и на документе, �
   // В API документов списания поле называется defaultStoreId; storeId шлём
   // дополнительно для сборок, которые понимают его.
   assert.match(xml, /<defaultStoreId>store-guid-1<\/defaultStoreId>/);
+  // <store> — имя параметра из текста ошибки iiko; шлём все варианты сразу,
+  // т.к. незнакомые элементы сборка молча игнорирует.
+  assert.match(xml, /<store>store-guid-1<\/store>/);
   assert.match(xml, /<document><items>/); // порядок как в документации iiko
   // Порядок элементов документа: items → dateIncoming → documentNumber →
   // status → storeId. JAXB при заданном propOrder может игнорировать поля не

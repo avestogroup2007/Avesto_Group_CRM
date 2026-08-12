@@ -289,6 +289,20 @@ function TgLinkCell({ u, patch }) {
         onChange={(v) => patch(u.id, { checklistBranch: v })}
         options={branchOpts}
       />
+      {/* Надзор за всей сетью без денег: продажи/аналитика по всем филиалам.
+          Для старшего бармена/бригадира, контролирующего все точки. */}
+      <label
+        className="flex items-center gap-1.5"
+        style={{ fontSize: 11.5, color: C.sub, cursor: "pointer" }}
+        title="Видит аналитику и отчёты продаж по всем филиалам (без доступа к деньгам)"
+      >
+        <input
+          type="checkbox"
+          checked={Boolean(u.allBranches)}
+          onChange={(e) => patch(u.id, { allBranches: e.target.checked })}
+        />
+        Надзор за всеми филиалами
+      </label>
     </div>
   );
 }
@@ -1776,7 +1790,10 @@ function AdminDepartments({ s, dispatch, notify }) {
                 {cat}
               </span>
               <ChevronRight size={16} color={C.faint} className="shrink-0" />
-              <div className="shrink-0" style={{ width: 150, maxWidth: "48vw" }}>
+              <div
+                className="shrink-0"
+                style={{ width: 150, maxWidth: "48vw" }}
+              >
                 <Select
                   value={s.catDept[cat]}
                   onChange={(v) =>

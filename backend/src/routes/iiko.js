@@ -15,6 +15,7 @@ import {
   productionRefs,
   createProduction,
   productionReport,
+  productionSample,
   foodCostSales,
 } from "../services/iikoServer.js";
 import {
@@ -246,6 +247,28 @@ r.post(
   })
 );
 
+// Образец РЕАЛЬНОГО акта приготовления из iiko (сырой XML выгрузки).
+// Нужен, когда импорт отвергается («store must not be null» и т.п.): по
+// выгрузке видно точные имена полей конкретной сборки iikoChain, а не
+// предполагаемые. Ничего не пишет.
+r.get(
+  "/production/sample",
+  requireRole("director", "finance", "accountant", "sysadmin"),
+  handleIiko(async (req, res) => {
+    const to =
+      String(req.query.to || "") ||
+      new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" });
+    // По умолчанию смотрим на месяц назад — там наверняка есть проведённые акты.
+    const from =
+      String(req.query.from || "") ||
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(
+        "en-CA",
+        { timeZone: "Asia/Tashkent" }
+      );
+    res.json(await productionSample({ from, to }));
+  })
+);
+
 // Создание «Акта приготовления» в iiko. Тело:
 // { date, storeId, items:[{productId, amount}], number?, comment?, dryRun? }.
 // dryRun:true — только предпросмотр XML (в iiko ничего не пишется). Реальное
@@ -342,13 +365,15 @@ r.patch(
   "/employees/:id",
   requireRole("director", "sysadmin"),
   asyncHandler(async (req, res) => {
-    const { role, active, telegramId, checklistBranch } = req.body || {};
+    const { role, active, telegramId, checklistBranch, allBranches } =
+      req.body || {};
     try {
       const updated = await updateEmployeeAccess(req.params.id, {
         role,
         active,
         telegramId,
         checklistBranch,
+        allBranches,
       });
       // Журнал безопасности: изменение роли/доступа/филиала — чувствительная
       // операция (граница доступа), фиксируем кто и что менял.
@@ -362,6 +387,9 @@ r.patch(
               `роль ${updated.role}, ${updated.active ? "активен" : "заблокирован"}` +
               (checklistBranch != null
                 ? `, филиал ${checklistBranch || "—"}`
+                : "") +
+              (allBranches !== undefined
+                ? `, надзор за всеми филиалами: ${allBranches ? "да" : "нет"}`
                 : ""),
             ip: req.ip,
           },
