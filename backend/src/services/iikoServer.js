@@ -1006,15 +1006,161 @@ export async function createProduction({
       throw e;
     }
     // Ответ iiko — XML с результатом. valid=false + errorMessage при ошибке.
-    const valid = !/<valid>\s*false\s*<\/valid>/i.test(text);
-    const errMatch = text.match(/<errorMessage>([\s\S]*?)<\/errorMessage>/i);
-    const idMatch = text.match(/<documentNumber>([\s\S]*?)<\/documentNumber>/i);
+    return parseImportResult(text, xml);
+  } finally {
+    releaseKey(key);
+  }
+}
+
+// Строит XML внутреннего перемещения (transfer) для импорта в iiko.
+// Как и в акте приготовления, имя поля склада у разных сборок iikoChain
+// отличается, а незнакомые элементы разбор просто игнорирует — поэтому шлём
+// сразу все правдоподобные варианты (storeFromId/storeFrom, storeToId/storeTo).
+export function buildTransferXml({
+  date,
+  fromStoreId,
+  toStoreId,
+  items,
+  number = "",
+  comment = "",
+  status = "PROCESSED",
+}) {
+  const dt = `${date}T12:00:00`;
+  const rows = (items || [])
+    .map(
+      (it) =>
+        `<item>` +
+        `<productId>${escXml(it.productId)}</productId>` +
+        `<amount>${Number(it.amount)}</amount>` +
+        `</item>`
+    )
+    .join("");
+  const from = escXml(fromStoreId);
+  const to = escXml(toStoreId);
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<document>` +
+    `<items>${rows}</items>` +
+    `<dateIncoming>${dt}</dateIncoming>` +
+    (number ? `<documentNumber>${escXml(number)}</documentNumber>` : "") +
+    `<status>${status}</status>` +
+    (comment ? `<comment>${escXml(comment)}</comment>` : "") +
+    `<storeFromId>${from}</storeFromId>` +
+    `<storeFrom>${from}</storeFrom>` +
+    `<storeToId>${to}</storeToId>` +
+    `<storeTo>${to}</storeTo>` +
+    `</document>`
+  );
+}
+
+// Разбирает ответ iiko на импорт документа: valid/errorMessage/documentNumber.
+function parseImportResult(text, xml) {
+  const valid = !/<valid>\s*false\s*<\/valid>/i.test(text);
+  const errMatch = text.match(/<errorMessage>([\s\S]*?)<\/errorMessage>/i);
+  const idMatch = text.match(/<documentNumber>([\s\S]*?)<\/documentNumber>/i);
+  return {
+    ok: valid,
+    documentNumber: idMatch ? decodeXml(idMatch[1].trim()) : "",
+    error: errMatch ? decodeXml(errMatch[1].trim()) : "",
+    response: text.slice(0, 2000),
+    xml,
+  };
+}
+
+// Создаёт внутреннее перемещение в iiko. dryRun — только XML, без записи.
+//
+// Путь импорта перемещений у разных версий iikoChain разный: в одних сборках
+// это XML на /documents/import/transfer, в новых — JSON на /v2/documents/transfer.
+// Ни одна из них не обязана существовать. Поэтому пробуем XML, и только если
+// сборка отвечает «нет такого метода» (404/405) — повторяем через v2 JSON.
+// Ошибку ВАЛИДАЦИИ (400) не переспрашиваем: метод есть, данные не подошли.
+export async function createTransfer({
+  date,
+  fromStoreId,
+  toStoreId,
+  items,
+  number = "",
+  comment = "",
+  dryRun = false,
+}) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const xml = buildTransferXml({
+    date,
+    fromStoreId,
+    toStoreId,
+    items,
+    number,
+    comment,
+  });
+  if (dryRun) return { dryRun: true, xml };
+  const key = await acquireKey();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/documents/import/transfer?key=${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/xml" },
+        body: xml,
+      }
+    );
+    const text = await res.text();
+    if (res.ok) return parseImportResult(text, xml);
+    if (res.status !== 404 && res.status !== 405) {
+      const e = new Error(
+        `iiko transfer → ${res.status} ${text.slice(0, 500)}`.trim()
+      );
+      e.sentXml = xml;
+      e.iikoResponse = text.slice(0, 2000);
+      throw e;
+    }
+    // Сборка не знает XML-импорт перемещений — пробуем JSON v2.
+    const body = JSON.stringify({
+      documentNumber: number || undefined,
+      dateIncoming: `${date}T12:00:00`,
+      status: "PROCESSED",
+      comment: comment || undefined,
+      storeFromId: fromStoreId,
+      storeToId: toStoreId,
+      items: (items || []).map((it) => ({
+        productId: it.productId,
+        amount: Number(it.amount),
+      })),
+    });
+    const res2 = await fetch(
+      `${BASE}/resto/api/v2/documents/transfer?key=${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }
+    );
+    const text2 = await res2.text();
+    if (!res2.ok) {
+      const e = new Error(
+        res2.status === 404 || res2.status === 405
+          ? "Эта сборка iiko не принимает перемещения через API — проведите документ вручную в iiko"
+          : `iiko transfer v2 → ${res2.status} ${text2.slice(0, 500)}`.trim()
+      );
+      e.sentXml = body;
+      e.iikoResponse = text2.slice(0, 2000);
+      throw e;
+    }
+    // JSON-ответ v2: {"result":"SUCCESS"} либо описание ошибки.
+    let ok = true;
+    let error = "";
+    try {
+      const j = JSON.parse(text2);
+      ok = !j || j.result !== "ERROR";
+      error = j?.errorMessage || j?.message || "";
+    } catch {
+      /* не JSON — считаем успехом, тело покажем в журнале */
+    }
     return {
-      ok: valid,
-      documentNumber: idMatch ? decodeXml(idMatch[1].trim()) : "",
-      error: errMatch ? decodeXml(errMatch[1].trim()) : "",
-      response: text.slice(0, 2000),
-      xml,
+      ok,
+      documentNumber: number,
+      error,
+      response: text2.slice(0, 2000),
+      xml: body,
     };
   } finally {
     releaseKey(key);

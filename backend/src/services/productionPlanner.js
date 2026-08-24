@@ -21,6 +21,8 @@ import {
   PHASE_LABEL,
 } from "./productionEngine.js";
 import { cached } from "./cache.js";
+import { refreshProductionConfig } from "./productionConfig.js";
+import { postDocumentsForFact } from "./productionPosting.js";
 import { sendTelegram, topicFor } from "./telegram.js";
 
 // Контекст расчёта: техкарты + остатки + справочники. Кэшируем на 3 минуты —
@@ -303,13 +305,37 @@ export async function submitFact({
         productCode: d.code || "",
         productName: d.name || "",
         qty: d.qty,
-        // Без связи с iiko документ не проведён — помечаем явно, чтобы его
-        // было видно в журнале и можно было достроить позже.
-        status: ctxError ? "error" : "created",
+        // Документ рассчитан и записан; проведение в iiko — отдельный шаг
+        // (productionPosting.js). Без связи с iiko он остаётся в очереди
+        // с пояснением и уходит повторной отправкой, когда связь вернётся.
+        status: "pending",
         error: ctxError,
       },
     });
     created.push(row);
+  }
+
+  // Автопроведение в iiko, если включено в настройках модуля. Ошибка проведения
+  // НЕ откатывает факт: факт — первичный учёт отдела, он уже случился. Документ
+  // остаётся в журнале со статусом «ошибка» и текстом ответа iiko, его можно
+  // отправить повторно, когда причина устранена (ТЗ 8).
+  let posted = null;
+  if (!ctxError) {
+    const cfg = await refreshProductionConfig().catch(() => null);
+    if (cfg?.autoPost) {
+      posted = await postDocumentsForFact(fact.id, { config: cfg }).catch(
+        (e) => {
+          log.warn({ err: e.message }, "production: автопроведение не удалось");
+          return null;
+        }
+      );
+    }
+  }
+  if (posted) {
+    const byId = new Map(posted.map((p) => [p.id, p]));
+    for (let i = 0; i < created.length; i += 1) {
+      created[i] = byId.get(created[i].id) || created[i];
+    }
   }
 
   // Пересчёт остатка задания и до-задание при недостаче (ТЗ 5.4).
