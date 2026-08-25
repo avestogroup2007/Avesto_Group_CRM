@@ -217,3 +217,82 @@ export function cvmSummary(customers, now, churnDays = 60) {
     bySegment,
   };
 }
+
+// ── Эффективность кампании (ROI) ────────────────────────────────────────────
+// Считается по СНИМКУ метрик участников на момент запуска (CvmCampaignMember)
+// и текущим метрикам тех же клиентов. Снимок обязателен: текущие orders и
+// totalSpent включают всю историю, и без точки отсчёта прирост не выделить.
+//
+// Ключевой момент — КОНТРОЛЬНАЯ ГРУППА. Прирост выручки у получателей сам по
+// себе ничего не доказывает: часть покупок случилась бы и без кампании. Поэтому
+// на запуске снимок берётся и с клиентов того же сегмента, которым не слали
+// (нет согласия), а эффектом считается РАЗНИЦА приростов на одного клиента.
+// Если контроля нет (все клиенты сегмента с согласием) — честно возвращаем
+// lift=null вместо выдуманного числа.
+export function campaignRoi({ campaign, members, customersById }) {
+  const growth = (m) => {
+    const cur = customersById.get(m.customerId);
+    if (!cur) return null;
+    // Снимок не может превышать текущее значение; если превышает (данные
+    // перезалили импортом), считаем прирост нулевым, а не отрицательным.
+    return {
+      revenue: Math.max(0, Number(cur.totalSpent) - Number(m.spentAtSend)),
+      orders: Math.max(0, Number(cur.orders) - Number(m.ordersAtSend)),
+    };
+  };
+
+  const side = (rows) => {
+    const g = rows.map(growth).filter(Boolean);
+    const revenue = g.reduce((s, x) => s + x.revenue, 0);
+    const orders = g.reduce((s, x) => s + x.orders, 0);
+    const buyers = g.filter((x) => x.orders > 0).length;
+    return {
+      size: g.length,
+      revenue,
+      orders,
+      buyers,
+      // Отклик — доля тех, кто купил хотя бы раз после запуска.
+      responsePct: g.length ? round1((buyers / g.length) * 100) : 0,
+      revenuePerCustomer: g.length ? Math.round(revenue / g.length) : 0,
+    };
+  };
+
+  const target = side((members || []).filter((m) => !m.control));
+  const control = side((members || []).filter((m) => m.control));
+
+  // Эффект на одного клиента = прирост у получателей минус прирост у контроля.
+  const hasControl = control.size > 0;
+  const upliftPerCustomer = hasControl
+    ? target.revenuePerCustomer - control.revenuePerCustomer
+    : null;
+  const attributedRevenue =
+    upliftPerCustomer === null
+      ? null
+      : Math.round(upliftPerCustomer * target.size);
+
+  const cost = Number(campaign?.cost || 0);
+  // ROI считаем по атрибутированной выручке: «сколько сум прироста на сум
+  // затрат». Без контроля и без затрат ROI не определён — возвращаем null,
+  // чтобы интерфейс показал прочерк, а не ноль (ноль читался бы как «не сработало»).
+  const roiPct =
+    attributedRevenue === null || cost <= 0
+      ? null
+      : round1(((attributedRevenue - cost) / cost) * 100);
+
+  return {
+    sentAt: campaign?.sentAt || null,
+    cost,
+    target,
+    control: hasControl ? control : null,
+    upliftPerCustomer,
+    attributedRevenue,
+    roiPct,
+    // Прирост без поправки на контроль — показываем отдельно и подписываем,
+    // чтобы его не приняли за эффект кампании.
+    grossRevenue: target.revenue,
+  };
+}
+
+function round1(v) {
+  return Math.round(Number(v || 0) * 10) / 10;
+}

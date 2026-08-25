@@ -14,6 +14,7 @@ import {
   scoreCustomers,
   cvmSummary,
   normalizePhone,
+  campaignRoi,
   SEGMENTS,
 } from "../services/cvm.js";
 import {
@@ -28,6 +29,7 @@ import {
   IikoLoyaltyNotConfiguredError,
 } from "../services/iikoLoyalty.js";
 import { sendTelegram, topicFor } from "../services/telegram.js";
+import { log } from "./../logger.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -286,7 +288,9 @@ r.get(
       orderBy: { createdAt: "desc" },
       take: 500,
     });
-    res.json({ items });
+    // cost — BigInt, а JSON его не сериализует: приводим к числу здесь, как и
+    // в остальных ответах модуля.
+    res.json({ items: items.map((c) => ({ ...c, cost: Number(c.cost) })) });
   })
 );
 
@@ -295,6 +299,8 @@ const CampaignSchema = z.object({
   segment: z.string().min(1).max(40), // код сегмента или "all"
   offer: z.string().max(1000).default(""),
   channel: z.enum(["telegram", "sms", "manual"]).default("manual"),
+  // Затраты на кампанию, сум — знаменатель ROI. Ноль = ROI не считается.
+  cost: z.number().int().min(0).max(100_000_000_000).default(0),
 });
 
 r.post(
@@ -304,14 +310,19 @@ r.post(
     if (!parsed.success)
       return res.status(400).json({ error: "Неверный формат кампании" });
     const created = await db.cvmCampaign.create({
-      data: { ...parsed.data, status: "draft", createdById: req.user.uid },
+      data: {
+        ...parsed.data,
+        cost: BigInt(parsed.data.cost),
+        status: "draft",
+        createdById: req.user.uid,
+      },
     });
     await logCvm(
       req,
       "cvm_campaign_create",
       `Кампания «${created.name}» (сегмент ${created.segment})`
     );
-    res.status(201).json(created);
+    res.status(201).json({ ...created, cost: Number(created.cost) });
   })
 );
 
@@ -323,6 +334,34 @@ async function audienceForSegment(segment) {
   return scored.filter(
     (c) => c.consent && (segment === "all" || c.segment === segment)
   );
+}
+
+// Аудитория + контроль одним проходом. Контроль — клиенты того же сегмента
+// БЕЗ согласия на рассылку: им не слали, значит они показывают, что происходило
+// бы и без кампании. Ограничение размера — чтобы снимок не раздувал таблицу.
+const CONTROL_LIMIT = 5000;
+async function audienceAndControl(segment) {
+  const cfg = await refreshCvmConfig(true);
+  const all = await db.customer.findMany({ take: 20000 });
+  const scored = scoreCustomers(all, Date.now(), cfg.churnDays);
+  const inSegment = scored.filter(
+    (c) => segment === "all" || c.segment === segment
+  );
+  return {
+    audience: inSegment.filter((c) => c.consent),
+    control: inSegment.filter((c) => !c.consent).slice(0, CONTROL_LIMIT),
+  };
+}
+
+function memberSnapshot(campaignId, c, control) {
+  return {
+    campaignId,
+    customerId: c.id,
+    control,
+    ordersAtSend: Number(c.orders || 0),
+    spentAtSend: BigInt(Math.trunc(Number(c.totalSpent || 0))),
+    lastOrderAtSend: c.lastOrderAt || null,
+  };
 }
 
 r.get(
@@ -350,7 +389,20 @@ r.post(
     if (!camp) return res.status(404).json({ error: "Кампания не найдена" });
     if (camp.status === "sent")
       return res.status(400).json({ error: "Кампания уже запущена" });
-    const aud = await audienceForSegment(camp.segment);
+    const { audience: aud, control } = await audienceAndControl(camp.segment);
+    // Снимок метрик на момент запуска — без него эффект кампании не посчитать.
+    // Контрольную группу пишем тем же заходом: сравнивать нужно ОДИН период.
+    await db.cvmCampaignMember
+      .createMany({
+        data: [
+          ...aud.map((c) => memberSnapshot(camp.id, c, false)),
+          ...control.map((c) => memberSnapshot(camp.id, c, true)),
+        ],
+        skipDuplicates: true,
+      })
+      .catch((e) => {
+        log.warn({ err: e.message }, "cvm: снимок аудитории не записан");
+      });
     const updated = await db.cvmCampaign.update({
       where: { id: camp.id },
       data: {
@@ -374,9 +426,75 @@ r.post(
       `Запущена кампания «${camp.name}»: аудитория ${aud.length}`
     );
     res.json({
-      campaign: updated,
+      campaign: { ...updated, cost: Number(updated.cost) },
+      control: control.length,
       audience: aud.map((c) => ({ name: c.name, phone: c.phone })),
     });
+  })
+);
+
+// Эффективность запущенной кампании: прирост у получателей против контрольной
+// группы того же сегмента (см. campaignRoi). До запуска считать нечего.
+r.get(
+  "/campaigns/:id/roi",
+  asyncHandler(async (req, res) => {
+    const camp = await db.cvmCampaign.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!camp) return res.status(404).json({ error: "Кампания не найдена" });
+    if (camp.status !== "sent")
+      return res
+        .status(400)
+        .json({ error: "Кампания ещё не запущена — считать нечего" });
+    const members = await db.cvmCampaignMember.findMany({
+      where: { campaignId: camp.id },
+      take: 30000,
+    });
+    if (!members.length) {
+      return res.json({
+        campaign: camp,
+        noSnapshot: true,
+        error:
+          "Кампания запущена до появления отчёта — снимка аудитории нет, " +
+          "эффект посчитать не по чему",
+      });
+    }
+    const ids = [...new Set(members.map((m) => m.customerId))];
+    const customers = await db.customer.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, orders: true, totalSpent: true },
+    });
+    const customersById = new Map(customers.map((c) => [c.id, c]));
+    res.json({
+      campaign: { ...camp, cost: Number(camp.cost) },
+      ...campaignRoi({ campaign: camp, members, customersById }),
+    });
+  })
+);
+
+// Затраты можно уточнить после запуска (счёт от подрядчика приходит позже).
+r.patch(
+  "/campaigns/:id",
+  requireRole("director", "finance", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ cost: z.number().int().min(0).max(100_000_000_000) })
+      .safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ error: "Неверная сумма затрат" });
+    const updated = await db.cvmCampaign
+      .update({
+        where: { id: req.params.id },
+        data: { cost: BigInt(parsed.data.cost) },
+      })
+      .catch(() => null);
+    if (!updated) return res.status(404).json({ error: "Кампания не найдена" });
+    await logCvm(
+      req,
+      "cvm_campaign_cost",
+      `Затраты кампании «${updated.name}»: ${parsed.data.cost} сум`
+    );
+    res.json({ ...updated, cost: Number(updated.cost) });
   })
 );
 
