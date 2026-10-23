@@ -685,7 +685,11 @@ async function branchCashView(bid) {
       num(r.uzumTezkor) +
       num(r.yandex);
     const total = cash + cards + num(r.transfer);
-    const diff = total - num(r.expenses) - num(r.iiko);
+    // Та же формула, что в экране «Касса» и на сводке: выручка по видам оплат
+    // минус выручка iiko. Расходы из кассы сюда НЕ входят — они уменьшают
+    // наличные в ящике, но не выручку; вычитание давало ложную «недостачу»
+    // ровно на сумму расходов.
+    const diff = total - num(r.iiko);
     return (
       `<b>${d}</b> — ${r.status === "confirmed" ? "подтверждён \u2705" : "сдан, ждёт подтверждения \u23F3"}\n` +
       `Наличные: <b>${money(cash)}</b> (фиск. ${money(r.fiscal)} + нефиск. ${money(r.nonFiscal)})\n` +

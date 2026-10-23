@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { log } from "../logger.js";
 import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
 import {
   refreshOrgConfig,
@@ -72,9 +73,17 @@ r.get(
     }
     const startOfToday = new Date(`${date}T00:00:00+05:00`); // Asia/Tashkent
 
+    // Ошибку чтения касс НЕ превращаем в пустой список: иначе сбой базы
+    // выглядит как «ни один филиал не сдал кассу» — и руководитель идёт
+    // ругать кассиров, хотя сломан сервер. Запоминаем причину и говорим о ней.
+    let cashError = "";
     const [cashRows, chkRows, pendCount, pendAgg, todoActive, todoOverdue] =
       await Promise.all([
-        db.cashReport.findMany({ where: cashWhere }).catch(() => []),
+        db.cashReport.findMany({ where: cashWhere }).catch((e) => {
+          cashError = e.message || "ошибка базы данных";
+          log.error({ err: cashError, date }, "dashboard: кассы не прочитаны");
+          return [];
+        }),
         db.shiftChecklistRun
           .findMany({ where: chkWhere, select: { branchId: true, pct: true } })
           .catch(() => []),
@@ -111,15 +120,35 @@ r.get(
     const alerts = [];
     const rows = branches.map((b) => {
       const key = String(b.id);
-      const c = cashByBranch.get(key);
-      const declared = c ? PAY_FIELDS.reduce((s, f) => s + num(c[f]), 0) : 0;
-      const iiko = c ? num(c.iiko) : 0;
-      const discrepancy = declared - iiko; // <0 недостача, >0 излишек
       const chk = chkByBranch.get(key);
       const checklistPct = chk ? Math.round(chk.sum / chk.n) : null;
+
+      // Точка без розничной кассы (цех, кейтеринг): сдавать ей нечего, и экран
+      // «Касса» её даже не предлагает. Требовать с неё кассу — значит держать
+      // вечный алерт, который невозможно закрыть. Строку оставляем ради
+      // чек-листов, но кассовых цифр у неё нет.
+      if (b.cash === false) {
+        return {
+          branchId: key,
+          branch: orgBranchName(b.id),
+          cashStatus: "na",
+          declared: null,
+          iiko: null,
+          discrepancy: null,
+          checklistPct,
+        };
+      }
+
+      const c = cashByBranch.get(key);
+      // Касса не сдана — цифр нет, а не «ноль»: «0» в колонке iiko читается
+      // как «в iiko ноль продаж», хотя в iiko просто никто не заглядывал.
+      const declared = c ? PAY_FIELDS.reduce((s, f) => s + num(c[f]), 0) : null;
+      const iiko = c ? num(c.iiko) : null;
+      const discrepancy = c ? declared - iiko : null; // <0 недостача, >0 излишек
       const status = c ? c.status : "none";
 
-      if (!c) {
+      // При сбое чтения касс не знаем, сдана касса или нет, — не утверждаем.
+      if (!c && !cashError) {
         alerts.push({
           kind: "cash_missing",
           branchId: key,
@@ -167,12 +196,24 @@ r.get(
       });
     }
 
+    if (cashError) {
+      alerts.unshift({
+        kind: "cash_unavailable",
+        text: "Не удалось прочитать кассы за день — данные ниже неполные. Проверьте сервер",
+        severity: "bad",
+      });
+    }
+
+    // Итоги — только по точкам с кассой: цех и кейтеринг кассу не сдают, и
+    // «сдали 4 из 6» при двух точках без кассы выглядело бы как недосдача.
+    const cashRowsOnly = rows.filter((x) => x.cashStatus !== "na");
     const totals = {
-      declared: rows.reduce((s, x) => s + x.declared, 0),
-      iiko: rows.reduce((s, x) => s + x.iiko, 0),
-      discrepancy: rows.reduce((s, x) => s + x.discrepancy, 0),
-      branchesReported: rows.filter((x) => x.cashStatus !== "none").length,
-      branchesTotal: rows.length,
+      declared: cashRowsOnly.reduce((s, x) => s + num(x.declared), 0),
+      iiko: cashRowsOnly.reduce((s, x) => s + num(x.iiko), 0),
+      discrepancy: cashRowsOnly.reduce((s, x) => s + num(x.discrepancy), 0),
+      branchesReported: cashRowsOnly.filter((x) => x.cashStatus !== "none")
+        .length,
+      branchesTotal: cashRowsOnly.length,
     };
 
     res.json({
@@ -180,6 +221,9 @@ r.get(
       scope: forced ? "branch" : "all",
       rows,
       totals,
+      // Только флаг: сам текст ошибки Prisma может содержать адрес сервера
+      // базы — он уходит в лог сервера, а не в браузер.
+      cashUnavailable: Boolean(cashError),
       pendingExpenses: { count: pendCount, sumUzs: pendingSum },
       todos: { active: todoActive, overdue: todoOverdue },
       alerts,
