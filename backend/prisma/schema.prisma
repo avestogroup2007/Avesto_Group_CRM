@@ -717,13 +717,23 @@ model GeneratedDocument {
   productCode   String   @default("")
   productName   String   @default("")
   qty           Decimal  @db.Decimal(18, 4)
-  status        String   @default("created") // created | error | reverted
+  // pending — записан в CRM, в iiko ещё не отправлен (отправка выключена или
+  // iiko была недоступна); posted — проведён в iiko; error — iiko отклонила.
+  // created — историческое значение до появления отправки, читается как pending.
+  status        String   @default("pending") // pending | posted | error | reverted
   error         String   @default("")
+  // Отправленный в iiko XML: без него причину отказа («какого поля не хватило»)
+  // приходится угадывать, а повторить отправку вручную нечем.
+  payload       String   @default("")
+  iikoResponse  String   @default("")
+  attempts      Int      @default(0)
+  postedAt      DateTime?
   createdAt     DateTime @default(now())
 
   @@index([taskId])
   @@index([factId])
   @@index([docType])
+  @@index([status])
 }
 
 // ── CVM: управление ценностью клиента (Customer Value Management) ────────────
@@ -768,15 +778,53 @@ model CvmCampaign {
   status      String    @default("draft") // draft | sent
   audience    Int       @default(0) // размер аудитории на момент отправки
   sentCount   Int       @default(0) // фактически отправлено
+  // Затраты на кампанию, сум (рассылка, скидка, печать) — знаменатель ROI.
+  cost        BigInt    @default(0)
   createdById String?
   createdAt   DateTime  @default(now())
   sentAt      DateTime?
+
+  members CvmCampaignMember[]
 
   @@index([status])
   @@index([segment])
 }
 
+// Участник кампании со СНИМКОМ метрик на момент отправки. Без снимка эффект
+// кампании посчитать нельзя: текущие orders/totalSpent клиента уже включают
+// всё, что было до неё. Разница «сейчас минус снимок» и есть прирост, который
+// кампания могла принести (ТЗ CVM: отчёт по эффективности).
+model CvmCampaignMember {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   CvmCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customerId String
+  // Контрольная группа: клиенты ТОГО ЖЕ сегмента, которым кампанию НЕ слали
+  // (нет согласия на рассылку). Без них «прирост выручки участников» ничего не
+  // доказывает — часть покупок случилась бы и без кампании. Разница приростов
+  // аудитории и контроля и есть эффект кампании.
+  control    Boolean @default(false)
+  // Снимок на момент отправки.
+  ordersAtSend Int    @default(0)
+  spentAtSend  BigInt @default(0)
+  lastOrderAtSend DateTime?
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId, control])
+  @@index([customerId])
+}
+
 // Конфигурация CVM (одна строка, id=1, JSON): окно оттока (дней), пороги RFM.
+// Настройки производственного модуля (одна строка id=1): отправлять ли
+// созданные документы в iiko автоматически и как именно.
+model ProductionConfig {
+  id          Int      @id @default(1)
+  data        Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
 model CvmConfig {
   id          Int      @id @default(1)
   data        Json

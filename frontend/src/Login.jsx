@@ -194,6 +194,9 @@ export default function Login({ onSuccess }) {
                 color: "#DC2626",
                 fontSize: 13,
                 border: "1px solid #FBD5D5",
+                // Сетевая ошибка объясняет причину в несколько строк — без
+                // pre-line они склеились бы в одну неразборчивую фразу.
+                whiteSpace: "pre-line",
               }}
             >
               {err}

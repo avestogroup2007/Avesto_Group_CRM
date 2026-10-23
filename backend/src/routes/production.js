@@ -20,6 +20,17 @@ import {
   isIikoNotConfigured,
 } from "../services/productionPlanner.js";
 import { PHASES, ProductionEngineError } from "../services/productionEngine.js";
+import {
+  postDocument,
+  retryPending,
+  postingSummary,
+} from "../services/productionPosting.js";
+import { planFactReport, lossesReport } from "../services/productionReports.js";
+import {
+  refreshProductionConfig,
+  saveProductionConfig,
+  ProductionSchema,
+} from "../services/productionConfig.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -454,6 +465,179 @@ r.put(
       req,
       "production_phase_map",
       `Склад фазы ${d.phase}${d.category ? ` / ${d.category}` : ""} → ${d.warehouseName || d.warehouseId}`
+    );
+    res.json(saved);
+  })
+);
+
+// ── Журнал документов и проведение в iiko (ТЗ 6, 8) ─────────────────────────
+// Документы всегда есть в CRM; здесь видно, какие из них дошли до iiko, какие
+// ждут отправки и на чём именно iiko отказала (с отправленным XML).
+const DOC_STATUSES = ["pending", "posted", "error", "reverted"];
+
+r.get(
+  "/documents",
+  CAN_PLAN,
+  asyncHandler(async (req, res) => {
+    const where = {};
+    if (req.query.task) where.taskId = String(req.query.task);
+    if (req.query.fact) where.factId = String(req.query.fact);
+    if (req.query.type) where.docType = String(req.query.type);
+    const st = String(req.query.status || "");
+    // «Ожидают» включает исторический статус created — он значил то же самое.
+    if (st === "pending") where.status = { in: ["pending", "created"] };
+    else if (DOC_STATUSES.includes(st)) where.status = st;
+
+    const take = Math.min(Number(req.query.limit) || 200, 1000);
+    const [docs, summary] = await Promise.all([
+      db.generatedDocument.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take,
+        include: { task: { select: { nodeName: true, phase: true } } },
+      }),
+      postingSummary(),
+    ]);
+    res.json({
+      summary,
+      documents: docs.map((d) => ({
+        id: d.id,
+        taskId: d.taskId,
+        factId: d.factId,
+        taskName: d.task?.nodeName || "",
+        phase: d.task?.phase || "",
+        docType: d.docType,
+        warehouseFrom: d.warehouseFrom,
+        warehouseTo: d.warehouseTo,
+        productCode: d.productCode,
+        productName: d.productName,
+        qty: Number(d.qty),
+        status: d.status === "created" ? "pending" : d.status,
+        error: d.error,
+        iikoDocId: d.iikoDocId,
+        attempts: d.attempts,
+        postedAt: d.postedAt,
+        createdAt: d.createdAt,
+      })),
+    });
+  })
+);
+
+// Отправленный XML и ответ iiko по конкретному документу — для разбора отказа.
+r.get(
+  "/documents/:id/payload",
+  CAN_PLAN,
+  asyncHandler(async (req, res) => {
+    const d = await db.generatedDocument.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, payload: true, iikoResponse: true, error: true },
+    });
+    if (!d) return res.status(404).json({ error: "Документ не найден" });
+    res.json(d);
+  })
+);
+
+// Провести (или повторить) один документ.
+r.post(
+  "/documents/:id/post",
+  CAN_PLAN,
+  asyncHandler(async (req, res) => {
+    try {
+      const row = await postDocument(req.params.id);
+      await logProd(
+        req,
+        "production_document_post",
+        `Документ ${row.docType} «${row.productName || row.productCode}» → ${row.status}`
+      );
+      res.json({ ...row, qty: Number(row.qty) });
+    } catch (e) {
+      fail(res, e);
+    }
+  })
+);
+
+// Отправить всё, что ждёт очереди (или всё по одному заданию).
+r.post(
+  "/documents/retry",
+  CAN_PLAN,
+  asyncHandler(async (req, res) => {
+    const taskId = req.body?.taskId ? String(req.body.taskId) : undefined;
+    try {
+      const out = await retryPending({ taskId, limit: req.body?.limit });
+      await logProd(
+        req,
+        "production_documents_retry",
+        `Повторная отправка: всего ${out.total}, проведено ${out.posted}, ошибок ${out.failed}`
+      );
+      res.json(out);
+    } catch (e) {
+      fail(res, e);
+    }
+  })
+);
+
+// ── Отчёты (ТЗ 6, 11) ───────────────────────────────────────────────────────
+// Период обязателен: отчёт «за всё время» по производству бессмыслен и тяжёл.
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+function period(req, res) {
+  const from = String(req.query.from || "");
+  const to = String(req.query.to || "");
+  if (!YMD.test(from) || !YMD.test(to)) {
+    res
+      .status(400)
+      .json({ error: "Укажите период (from, to) в виде ГГГГ-ММ-ДД" });
+    return null;
+  }
+  if (from > to) {
+    res.status(400).json({ error: "Начало периода позже конца" });
+    return null;
+  }
+  return { from, to, departmentId: String(req.query.department || "") };
+}
+
+r.get(
+  "/report/plan-fact",
+  CAN_FACT,
+  asyncHandler(async (req, res) => {
+    const p = period(req, res);
+    if (!p) return;
+    res.json(await planFactReport(p));
+  })
+);
+
+r.get(
+  "/report/losses",
+  CAN_FACT,
+  asyncHandler(async (req, res) => {
+    const p = period(req, res);
+    if (!p) return;
+    res.json(await lossesReport(p));
+  })
+);
+
+// ── Настройки модуля ────────────────────────────────────────────────────────
+r.get(
+  "/config",
+  CAN_PLAN,
+  asyncHandler(async (req, res) =>
+    res.json(await refreshProductionConfig(true))
+  )
+);
+
+r.put(
+  "/config",
+  requireRole("director", "sysadmin"),
+  asyncHandler(async (req, res) => {
+    const parsed = ProductionSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ error: "Неверные настройки производства" });
+    const saved = await saveProductionConfig(parsed.data, req.user.uid);
+    await logProd(
+      req,
+      "production_config",
+      `Автоотправка в iiko: ${saved.autoPost ? "вкл" : "выкл"}, перемещения: ${
+        saved.postTransfers ? "вкл" : "выкл"
+      }`
     );
     res.json(saved);
   })

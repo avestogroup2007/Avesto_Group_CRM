@@ -140,3 +140,43 @@ test("дашборд: управляющий видит только свой ф
   // Чужих филиалов в алертах «не сдана» быть не должно.
   assert.ok(!d.alerts.some((a) => a.branchId && a.branchId !== "1"));
 });
+
+// Скриншот с боя: в 23:43 у всех шести точек «Касса не сдана» и нули в колонке
+// iiko. Две из шести — цех и кейтеринг — розничной кассы не имеют вовсе, экран
+// «Касса» их не предлагает, и алерт по ним закрыть было невозможно.
+test("дашборд: точки без кассы не требуют сдачи кассы", async () => {
+  const res = await fetch(`${base}/api/dashboard?date=${DATE}`, {
+    headers: auth(directorToken),
+  });
+  const d = await res.json();
+  // В настройках по умолчанию без кассы — Наврузий цех (4) и Кейтеринг (6).
+  for (const id of ["4", "6"]) {
+    const row = d.rows.find((r) => r.branchId === id);
+    assert.equal(row.cashStatus, "na", `филиал ${id} без кассы`);
+    assert.equal(row.iiko, null);
+    assert.ok(
+      !d.alerts.some((a) => a.kind === "cash_missing" && a.branchId === id),
+      `по филиалу ${id} не должно быть алерта «не сдана»`
+    );
+  }
+  // «Сдали X из Y» считается только по точкам с кассой: их четыре.
+  assert.equal(d.totals.branchesTotal, 4);
+  assert.equal(d.totals.branchesReported, 1);
+});
+
+test("дашборд: несданная касса — пусто, а не ноль", async () => {
+  const res = await fetch(`${base}/api/dashboard?date=${DATE}`, {
+    headers: auth(directorToken),
+  });
+  const d = await res.json();
+  // Филиал 2 кассу не сдавал: «0» читался бы как «в iiko ноль продаж».
+  const b2 = d.rows.find((r) => r.branchId === "2");
+  assert.equal(b2.cashStatus, "none");
+  assert.equal(b2.declared, null);
+  assert.equal(b2.iiko, null);
+  assert.equal(b2.discrepancy, null);
+  // Итоги при этом остаются числами — их показывают крупно в шапке.
+  assert.equal(d.totals.declared, 1000000);
+  assert.equal(d.totals.iiko, 1100000);
+  assert.equal(d.cashUnavailable, false);
+});

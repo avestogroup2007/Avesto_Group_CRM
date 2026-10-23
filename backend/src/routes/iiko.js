@@ -29,24 +29,60 @@ import {
 } from "../services/iikoSync.js";
 import { sendTelegram, topicFor, esc } from "../services/telegram.js";
 import { cached } from "../services/cache.js";
-import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
+import { forcedBranch, FINANCE_FREE, NO_BRANCH } from "../util/branchScope.js";
 import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
 
 // iiko-подразделение (department), которым ограничен пользователь, или null,
 // если он видит все филиалы. Управляющий ограничен своим филиалом; бухгалтер и
-// офис — все. Бросает 403-совместимую ошибку, если филиал не сопоставлен с iiko.
+// офис — все.
+//
+// Отказов здесь ТРИ разных, и раньше все они показывались одним текстом «филиал
+// не сопоставлен с подразделением iiko». Это отправляло администратора не в ту
+// настройку: чаще всего сопоставление на месте, а филиал сотруднику просто не
+// назначен. Поэтому каждая причина называется своим текстом и говорит, что
+// именно открыть.
+function accessError(message) {
+  const e = new Error(message);
+  e.statusCode = 403;
+  return e;
+}
+
 async function forcedDepartment(user) {
   const forced = forcedBranch(user, {
     alsoFree: FINANCE_FREE,
     failClosed: true,
   });
   if (!forced) return null;
+
+  // Причина 1: сотруднику вообще не назначен филиал. Читать данные «всех
+  // филиалов по умолчанию» такой роли нельзя (fail-closed), но и молчать о
+  // причине незачем — админ должен знать, какую галочку поставить.
+  if (forced === NO_BRANCH) {
+    throw accessError(
+      "Вам не назначен филиал. Администратору: управление кадрами → " +
+        "укажите филиал сотруднику либо включите «Надзор за всеми филиалами», " +
+        "если он следит за сетью целиком"
+    );
+  }
+
   await refreshOrgConfig().catch(() => {});
   const b = orgBranchById(forced);
-  if (!b || !b.iikoDept) {
-    const e = new Error("Ваш филиал не сопоставлен с подразделением iiko");
-    e.statusCode = 403;
-    throw e;
+  // Причина 2: филиал назначен, но такого филиала нет в настройках организации
+  // (переименовали/удалили — привязка осталась висеть на старом id).
+  if (!b) {
+    throw accessError(
+      `Филиал №${forced} не найден в настройках организации. ` +
+        "Администратору: настройки организации → филиалы, либо переназначьте " +
+        "сотруднику существующий филиал"
+    );
+  }
+  // Причина 3: собственно незаполненное сопоставление с iiko.
+  if (!b.iikoDept) {
+    throw accessError(
+      `Филиал «${b.name}» не сопоставлен с подразделением iiko. ` +
+        "Администратору: настройки организации → филиалы → поле «Подразделение iiko» " +
+        "(имя Department ровно как в iiko)"
+    );
   }
   return b.iikoDept;
 }
