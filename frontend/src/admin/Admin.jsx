@@ -17,6 +17,7 @@ import {
   Download,
   Wallet,
   Trash2,
+  MapPin,
 } from "lucide-react";
 import { apiGet, apiPost, apiPatch, apiPut, apiDownload } from "../api.js";
 import { C } from "../lib/theme.js";
@@ -34,6 +35,7 @@ import {
 } from "../components/ui.jsx";
 import { AdminRoutes } from "../pages/Routes.jsx";
 import AdminChecklists from "./AdminChecklists.jsx";
+import AdminZones from "./AdminZones.jsx";
 import AdminAccess from "./AdminAccess.jsx";
 import AdminCashDict from "./AdminCashDict.jsx";
 import AdminApproval from "./AdminApproval.jsx";
@@ -273,6 +275,11 @@ function TgLinkCell({ u, patch }) {
     const v = tid.trim();
     if (v !== (u.telegramId || "")) patch(u.id, { telegramId: v });
   };
+  const [zones, setZones] = useState(u.zones || "");
+  const saveZones = () => {
+    const v = zones.trim();
+    if (v !== (u.zones || "")) patch(u.id, { zones: v });
+  };
   return (
     <div className="flex flex-col gap-1" style={{ minWidth: 170 }}>
       <input
@@ -288,6 +295,19 @@ function TgLinkCell({ u, patch }) {
         value={u.checklistBranch || ""}
         onChange={(v) => patch(u.id, { checklistBranch: v })}
         options={branchOpts}
+      />
+      {/* Рабочие зоны: несколько через запятую — своя плюс те, что сотрудник
+          контролирует или где подменяет. Пусто = все чек-листы его должности.
+          Названия должны совпадать с зонами из вкладки «Рабочие зоны». */}
+      <input
+        value={zones}
+        onChange={(e) => setZones(e.target.value)}
+        onBlur={saveZones}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        placeholder="Зоны: Зал, Туалет"
+        title="Рабочие зоны через запятую. Пусто — приходят все чек-листы должности."
+        className="rounded-lg px-2 py-1"
+        style={{ border: `1px solid ${C.line}`, fontSize: 12.5, color: C.ink }}
       />
       {/* Надзор за всей сетью без денег: продажи/аналитика по всем филиалам.
           Для старшего бармена/бригадира, контролирующего все точки. */}
@@ -1553,6 +1573,7 @@ export function AdminPanel({ s, dispatch, notify }) {
     ["sops", "Регламенты", ListChecks],
     ["cashdict", "Справочники кассы", Wallet],
     ["approval", "Согласование расходов", ShieldCheck],
+    ...(checklistsOn ? [["zones", "Рабочие зоны", MapPin]] : []),
     ...(checklistsOn ? [["checklists", "Чек-листы", ListChecks]] : []),
     ["system", "Система", Settings],
     ["audit", "Журнал безопасности", ShieldCheck],
@@ -1600,6 +1621,9 @@ export function AdminPanel({ s, dispatch, notify }) {
       {tab === "sla" && <AdminSla s={s} dispatch={dispatch} />}
       {tab === "sops" && (
         <AdminSops s={s} dispatch={dispatch} notify={notify} />
+      )}
+      {tab === "zones" && checklistsOn && (
+        <AdminZones s={s} notify={notify} />
       )}
       {tab === "checklists" && checklistsOn && (
         <AdminChecklists notify={notify} />
