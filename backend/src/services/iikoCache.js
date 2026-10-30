@@ -38,6 +38,25 @@ function memKey(kind, scope, from, to) {
   return `iiko:${kind}:${scope}:${from}:${to}`;
 }
 
+// Идущие прямо сейчас обращения к iiko: ключ → Promise. Нужны, чтобы десять
+// одновременных открытий одного отчёта не породили десять запросов к iiko
+// (у него одна сессия на пользователя — параллельные запросы её рвут).
+const inFlight = new Map();
+
+function once(key, fn) {
+  const running = inFlight.get(key);
+  if (running) return running;
+  const p = (async () => {
+    try {
+      return await fn();
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+  inFlight.set(key, p);
+  return p;
+}
+
 // Достать отчёт: память → БД → iiko. fetchFn вызывается только если данных
 // нет нигде или они протухли.
 export async function cachedReport(
@@ -52,6 +71,7 @@ export async function cachedReport(
 
   // Чтение из БД не должно ронять запрос: если база недоступна, просто идём
   // в iiko, как раньше.
+  let stale = null;
   try {
     const row = await db.iikoReportCache.findUnique({
       where: {
@@ -63,20 +83,50 @@ export async function cachedReport(
         },
       },
     });
-    const fresh = row && (!row.expiresAt || row.expiresAt > new Date());
-    if (fresh) {
-      cacheSet(mk, row.payload, closed ? CLOSED_MEM_TTL_MS : OPEN_TTL_MS);
-      return row.payload;
+    if (row) {
+      const fresh = !row.expiresAt || row.expiresAt > new Date();
+      if (fresh) {
+        cacheSet(mk, row.payload, closed ? CLOSED_MEM_TTL_MS : OPEN_TTL_MS);
+        return row.payload;
+      }
+      stale = row.payload;
     }
   } catch (e) {
     log.warn({ err: e.message, kind, scope }, "iikoCache: чтение из БД не удалось");
   }
 
-  const value = await fetchFn();
+  // Данные протухли, но они есть. Отдаём их сразу, а обновление запускаем в
+  // фоне: отчёт из iiko тянется ~17 секунд, и держать пользователя всё это
+  // время ради трёхминутной свежести незачем. Через минуту он увидит
+  // обновлённые цифры, но ждать не будет никогда.
+  if (stale !== null) {
+    once(mk, async () => {
+      try {
+        const fresh = await fetchFn();
+        cacheSet(mk, fresh, OPEN_TTL_MS);
+        await store({ kind, scope, from, to, value: fresh, closed });
+      } catch (e) {
+        log.warn(
+          { err: e.message, kind, scope },
+          "iikoCache: фоновое обновление не удалось"
+        );
+      }
+    });
+    return stale;
+  }
+
+  // Данных нет совсем — ждать придётся, но одновременные запросы схлопываем
+  // в один поход к iiko.
+  const value = await once(mk, fetchFn);
 
   cacheSet(mk, value, closed ? CLOSED_MEM_TTL_MS : OPEN_TTL_MS);
-  // Запись в БД — тоже best-effort: отчёт уже получен, терять его из-за
-  // проблемы с кэшем нельзя.
+  await store({ kind, scope, from, to, value, closed });
+  return value;
+}
+
+// Запись в БД — best-effort: отчёт уже получен, терять его из-за проблемы с
+// кэшем нельзя.
+async function store({ kind, scope, from, to, value, closed }) {
   try {
     const expiresAt = closed ? null : new Date(Date.now() + OPEN_TTL_MS);
     await db.iikoReportCache.upsert({
@@ -101,7 +151,6 @@ export async function cachedReport(
   } catch (e) {
     log.warn({ err: e.message, kind, scope }, "iikoCache: запись в БД не удалась");
   }
-  return value;
 }
 
 // Уборка протухших записей. Закрытые периоды (expiresAt = null) не трогаем —

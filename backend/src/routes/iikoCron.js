@@ -26,12 +26,44 @@ function secretEquals(got, want) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+const ymd = (d) => d.toISOString().slice(0, 10);
+const shift = (iso, days) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return ymd(d);
+};
+
 // Вчера по Ташкенту — последний полностью закрытый день.
 function yesterdayTashkent() {
+  return shift(todayTashkent(), -1);
+}
+
+// Периоды ровно в том виде, в каком их запрашивает интерфейс (пресеты
+// «Сегодня», «Вчера», «Текущая/Прошлая неделя», «Текущий/Прошлый месяц»).
+// Греть период «по вчера» бесполезно: пользователь нажимает «Текущий месяц»,
+// а это 1-е число по СЕГОДНЯ — другой ключ кэша. Неделя считается с
+// понедельника. «Текущий год» намеренно не греем: период огромный, а
+// открывают его редко — он бы занял почти всё время задания.
+function uiPeriods() {
   const today = todayTashkent();
-  const d = new Date(`${today}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
+  const yest = shift(today, -1);
+  // День недели по Ташкенту: 0 = воскресенье → приводим к понедельнику.
+  const dow = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const mondayOffset = dow === 0 ? 6 : dow - 1;
+  const curWeekFrom = shift(today, -mondayOffset);
+  const prevWeekFrom = shift(curWeekFrom, -7);
+  const prevWeekTo = shift(curWeekFrom, -1);
+  const curMonthFrom = `${today.slice(0, 7)}-01`;
+  const prevMonthTo = shift(curMonthFrom, -1);
+  const prevMonthFrom = `${prevMonthTo.slice(0, 7)}-01`;
+  return [
+    { name: "today", from: today, to: today },
+    { name: "yesterday", from: yest, to: yest },
+    { name: "curWeek", from: curWeekFrom, to: today },
+    { name: "prevWeek", from: prevWeekFrom, to: prevWeekTo },
+    { name: "curMonth", from: curMonthFrom, to: today },
+    { name: "prevMonth", from: prevMonthFrom, to: prevMonthTo },
+  ];
 }
 
 const r = Router();
@@ -56,7 +88,6 @@ r.post(
 
     await refreshOrgConfig().catch(() => {});
     const day = yesterdayTashkent();
-    const monthFrom = `${day.slice(0, 7)}-01`;
 
     // Сеть целиком + каждый сопоставленный филиал.
     const scopes = [
@@ -65,11 +96,7 @@ r.post(
         .filter((b) => b.iikoDept)
         .map((b) => ({ scope: b.iikoDept, departments: [b.iikoDept] })),
     ];
-    // Вчерашний день и месяц до вчера — то, что открывают чаще всего.
-    const periods = [
-      { from: day, to: day },
-      { from: monthFrom, to: day },
-    ];
+    const periods = uiPeriods();
 
     const done = [];
     const failed = [];
@@ -87,9 +114,9 @@ r.post(
                 departments: s.departments,
               })
           );
-          done.push(`${s.scope}:${p.from}..${p.to}`);
+          done.push(`${s.scope}/${p.name}:${p.from}..${p.to}`);
         } catch (e) {
-          failed.push({ scope: s.scope, period: `${p.from}..${p.to}`, error: e.message });
+          failed.push({ scope: s.scope, preset: p.name, period: `${p.from}..${p.to}`, error: e.message });
           log.warn(
             { err: e.message, scope: s.scope },
             "iiko-cron: прогрев не удался"
