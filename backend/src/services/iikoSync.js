@@ -174,6 +174,7 @@ const EMP_SELECT = {
   telegramId: true,
   checklistBranch: true,
   allBranches: true,
+  zones: true,
 };
 
 // Настройка прав синхронизированного сотрудника: роль, активность и привязка к
@@ -181,7 +182,7 @@ const EMP_SELECT = {
 // из iiko (source=iiko) — демо/ручные не трогаем.
 export async function updateEmployeeAccess(
   id,
-  { role, active, telegramId, checklistBranch, allBranches }
+  { role, active, telegramId, checklistBranch, allBranches, zones }
 ) {
   const existing = await db.user.findUnique({ where: { id } });
   if (!existing || existing.source !== "iiko") {
@@ -223,6 +224,22 @@ export async function updateEmployeeAccess(
   // офисных ролей и так полный обзор, флаг им не нужен.
   if (allBranches !== undefined) {
     data.allBranches = Boolean(allBranches);
+  }
+  // Рабочие зоны сотрудника: список через запятую. Их может быть несколько —
+  // зона своя плюс зоны, которые человек контролирует или где подменяет.
+  // Нормализуем: убираем пустые и дубли, иначе «Зал, зал, » даст лишние
+  // совпадения и мусор в интерфейсе.
+  if (zones !== undefined) {
+    const list = [
+      ...new Set(
+        String(zones || "")
+          .split(",")
+          .map((z) => z.trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (list.length > 20) throw new Error("Слишком много зон (максимум 20)");
+    data.zones = list.join(", ");
   }
   try {
     const updated = await db.user.update({

@@ -206,11 +206,14 @@ r.get(
         distinct: ["position"],
         take: 200,
       }),
-      db.checklistTemplate.findMany({
-        where: { zone: { not: "" } },
-        select: { zone: true },
-        distinct: ["zone"],
-        take: 200,
+      // Зоны берём из справочника: их заводят старшие должности, и выбор в
+      // редакторе должен совпадать с тем, что они завели. Уже использованные
+      // в шаблонах добавляем следом — на случай зон, заведённых до справочника.
+      db.zone.findMany({
+        where: { active: true },
+        select: { name: true },
+        orderBy: { name: "asc" },
+        take: 300,
       }),
     ]);
     const positions = [
@@ -218,8 +221,11 @@ r.get(
     ]
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "ru"));
+    // Сначала зоны из справочника, затем типовые — чтобы при пустом
+    // справочнике редактор не оказался без вариантов и работу можно было
+    // начать сразу, не заводя зоны вручную.
     const zones = [
-      ...new Set([...usedZones.map((z) => z.zone), ...DEFAULT_ZONES]),
+      ...new Set([...usedZones.map((z) => z.name), ...DEFAULT_ZONES]),
     ]
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "ru"));

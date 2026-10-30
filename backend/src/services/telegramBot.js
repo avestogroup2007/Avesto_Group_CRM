@@ -36,14 +36,32 @@ async function loadStaffTemplates(user) {
   const pos = String(user.position || "")
     .trim()
     .toLowerCase();
+  // Зоны сотрудника через запятую. Пусто = зоны не назначены, тогда сотрудник
+  // получает все чек-листы своей должности (как было до появления зон).
+  const myZones = String(user.zones || "")
+    .split(",")
+    .map((z) => z.trim().toLowerCase())
+    .filter(Boolean);
+  // Шаблон без зоны — общий для должности; шаблон с зоной приходит только
+  // тому, у кого эта зона назначена. Иначе уборщице зала падали бы чек-листы
+  // кухни, бара и туалета разом.
+  const zoneOk = (t) => {
+    const z = String(t.zone || "").trim().toLowerCase();
+    if (!z) return true;
+    if (!myZones.length) return true;
+    return myZones.includes(z);
+  };
   const role = wantRole
     ? rows.filter(
         (t) =>
           t.kind === "role" &&
-          (!t.position || t.position.trim().toLowerCase() === pos)
+          (!t.position || t.position.trim().toLowerCase() === pos) &&
+          zoneOk(t)
       )
     : [];
-  const cleaning = wantClean ? rows.filter((t) => t.kind === "cleaning") : [];
+  const cleaning = wantClean
+    ? rows.filter((t) => t.kind === "cleaning" && zoneOk(t))
+    : [];
   return { role, cleaning };
 }
 
