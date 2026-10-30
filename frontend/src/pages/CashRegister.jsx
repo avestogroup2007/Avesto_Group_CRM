@@ -27,6 +27,7 @@ import {
   CashNumField,
   EmptyState,
 } from "../components/ui.jsx";
+import CashReconcile from "../components/CashReconcile.jsx";
 
 /* ------------------------------ кассы филиалов ----------------------------- */
 const cashCalc = (r) => {
@@ -757,6 +758,14 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
         />
         <KPI label={tr("Расходы")} value={sum("expenses")} color={C.bad} />
       </div>
+
+      {/* Сверка с iiko — по филиалу и дате из формы отчёта ниже: сверяют
+          всегда конкретный день конкретной кассы. */}
+      <CashReconcile
+        date={form.date}
+        branchId={form.branchId ? String(form.branchId) : ""}
+        branchName={branchById(form.branchId)?.name || ""}
+      />
 
       {/* сейф филиала и инкассация */}
       <div
