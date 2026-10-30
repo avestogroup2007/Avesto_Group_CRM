@@ -138,7 +138,10 @@ const ReportSchema = z.object({
 
 r.get(
   "/report",
-  requireRole("director", "manager", "finance", "sysadmin"),
+  // Отчёт по чек-листам смотрят те же старшие должности, что их формируют:
+  // бухгалтер в этот список входил не везде, хотя по процессу принимает
+  // чек-листы наравне с менеджером.
+  requireRole("director", "manager", "finance", "accountant", "sysadmin"),
   asyncHandler(async (req, res) => {
     const parsed = ReportSchema.safeParse(req.query);
     if (!parsed.success) {

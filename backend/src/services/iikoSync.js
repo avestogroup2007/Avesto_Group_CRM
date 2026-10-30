@@ -7,10 +7,22 @@ import { invalidateUserAuthCache } from "../middleware/requireAuth.js";
 
 // Роль iiko (код) -> роль CRM. Ставится только при СОЗДАНИИ; при обновлении
 // роль не трогаем, чтобы не затирать ручные настройки директора/админа.
+// Коды сверены со справочником должностей Avesto (/resto/api/employees/roles).
+// Прежние MN0/MN1 в этой установке iiko не существуют вовсе — из-за них все
+// старшие сотрудники получали роль staff, и активными оставались только
+// учётки с кодом ADM (то есть служебные).
 const ROLE_MAP = {
+  RK01: "director", // Директор
+  RK02: "manager", // Менеджер по развитию
+  RK03: "manager", // Менеджер филиала
+  PR01: "manager", // Начальник производства
+  PR02: "manager", // Менеджер производства
+  KU01: "manager", // Шеф-повар — формирует и принимает чек-листы цеха
+  KU02: "manager", // Су-шеф
+  BU01: "accountant", // Главный бухгалтер
+  BU02: "accountant", // Бухгалтер
+  FN01: "finance", // Финансист
   ADM: "sysadmin", // Системный администратор
-  MN0: "manager", // Управляющий
-  MN1: "manager", // Менеджер
 };
 function crmRole(positionCode) {
   return ROLE_MAP[positionCode] || "staff";

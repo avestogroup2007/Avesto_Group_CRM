@@ -54,6 +54,16 @@ const TemplateSchema = TemplateBase.refine(hourlyWindowOk, {
   path: ["toHour"],
 });
 
+// Кто формирует и правит чек-листы: старшие должности. Шеф-повар и
+// начальник производства приходят из iiko с ролью manager (см. ROLE_MAP в
+// services/iikoSync.js), поэтому отдельной роли под них не нужно.
+const CHECKLIST_MANAGERS = [
+  "director",
+  "manager",
+  "accountant",
+  "sysadmin",
+];
+
 // Какой модуль нужен для kind шаблона.
 const MODULE_FOR = {
   role: "employeeChecklists",
@@ -90,7 +100,7 @@ r.get(
 
 r.post(
   "/",
-  requireRole("director", "sysadmin"),
+  requireRole(...CHECKLIST_MANAGERS),
   asyncHandler(async (req, res) => {
     const parsed = TemplateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -114,7 +124,7 @@ r.post(
 
 r.patch(
   "/:id",
-  requireRole("director", "sysadmin"),
+  requireRole(...CHECKLIST_MANAGERS),
   asyncHandler(async (req, res) => {
     const parsed = TemplateBase.partial().safeParse(req.body);
     if (!parsed.success) {
@@ -157,7 +167,7 @@ r.patch(
 
 r.delete(
   "/:id",
-  requireRole("director", "sysadmin"),
+  requireRole(...CHECKLIST_MANAGERS),
   asyncHandler(async (req, res) => {
     const deleted = await db.checklistTemplate
       .delete({ where: { id: req.params.id } })
