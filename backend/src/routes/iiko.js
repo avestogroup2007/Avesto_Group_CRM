@@ -424,7 +424,7 @@ r.get(
   "/attendance",
   requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
-    const { from, to, department } = req.query;
+    const { from, to, department, position } = req.query;
     const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
     if (!isDate(from) || !isDate(to)) {
       return res.status(400).json({ error: "Нужны даты from и to (ГГГГ-ММ-ДД)" });
@@ -438,7 +438,7 @@ r.get(
       cachedReport({ kind: "attendance", scope: "all", from, to }, () =>
         listAttendance({ from, to })
       ),
-      listRoles().catch(() => ({})),
+      listRoles().catch(() => ({ byCode: {}, byId: {} })),
       db.user.findMany({
         where: { iikoId: { not: null } },
         select: { iikoId: true, displayName: true, name: true },
@@ -450,7 +450,13 @@ r.get(
     );
     // Фильтр филиала применяем ПОСЛЕ кэша: отчёт из iiko один на сеть, и
     // кэшировать его отдельно под каждого управляющего было бы расточительно.
-    const scoped = dept ? rows.filter((r) => r.departmentName === dept) : rows;
+    // Должность явки резолвим по roleId: в самой явке приходит GUID.
+    const roleName = (r) => (roles.byId || {})[r.roleId] || "";
+    const scoped = rows.filter(
+      (r) =>
+        (!dept || r.departmentName === dept) &&
+        (!position || roleName(r) === String(position))
+    );
     const byEmployee = new Map();
     const byDepartment = new Map();
     for (const r of scoped) {
@@ -462,12 +468,15 @@ r.get(
           minutes: 0,
           shifts: 0,
           departments: new Set(),
+          positions: new Set(),
         });
       }
       const e = byEmployee.get(key);
       e.minutes += r.minutes;
       e.shifts += 1;
       if (r.departmentName) e.departments.add(r.departmentName);
+      const pos = roleName(r);
+      if (pos) e.positions.add(pos);
       const d = r.departmentName || "— без подразделения —";
       byDepartment.set(d, (byDepartment.get(d) || 0) + r.minutes);
     }
@@ -479,12 +488,25 @@ r.get(
         hours: Math.round((e.minutes / 60) * 10) / 10,
         shifts: e.shifts,
         departments: [...e.departments],
+        positions: [...e.positions],
       }))
       .sort((a, b) => b.minutes - a.minutes);
     res.json({
       from,
       to,
       department: dept || null,
+      position: position ? String(position) : null,
+      // Подразделения и должности, РЕАЛЬНО встречающиеся в явках периода.
+      // Списки считаются до фильтрации (по rows, а не scoped), иначе после
+      // выбора филиала выпадашка схлопнулась бы до одного пункта и вернуться
+      // к «всем» было бы нечем. Должности берём не из справочника целиком:
+      // из 34 в периоде заняты единицы, остальные были бы мусором в фильтре.
+      departments: [
+        ...new Set(rows.map((r) => r.departmentName).filter(Boolean)),
+      ].sort((a, b) => a.localeCompare(b, "ru")),
+      positions: [...new Set(rows.map(roleName).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, "ru")
+      ),
       roles,
       totals: {
         shifts: scoped.length,

@@ -27,6 +27,11 @@ export default function PayrollView({ notify, role }) {
   // Порядок строк: по подразделению удобно считать ФОТ по цехам и филиалам,
   // по должности — сравнивать ставки внутри одной профессии.
   const [sortBy, setSortBy] = useState("name");
+  // Фильтры те же, что в табеле: подразделение и должность. Значения берутся
+  // из самих строк, а не из справочника — в фильтре только то, что есть в
+  // ведомости, иначе половина пунктов давала бы пустой результат.
+  const [fDep, setFDep] = useState("");
+  const [fPos, setFPos] = useState("");
   const load = (m) => {
     setLoading(true);
     apiGet(`/api/payroll?month=${m}`)
@@ -41,7 +46,22 @@ export default function PayrollView({ notify, role }) {
   // Сотрудники без подразделения уходят вниз, иначе прочерки оказываются
   // первыми и прячут реальные группы. Внутри группы — по алфавиту.
   const cmpText = (a, b) => String(a || "").localeCompare(String(b || ""), "ru");
-  const sorted = [...rows].sort((a, b) => {
+  // Сотрудник может числиться в нескольких подразделениях (строка через
+  // запятую) — считаем совпадением, если выбранное входит в список.
+  const depList = (r) =>
+    String(r.department || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  const depOptions = [...new Set(rows.flatMap(depList))].sort(cmpText);
+  const posOptions = [
+    ...new Set(rows.map((r) => r.position).filter(Boolean)),
+  ].sort(cmpText);
+  const visible = rows.filter(
+    (r) =>
+      (!fDep || depList(r).includes(fDep)) && (!fPos || r.position === fPos)
+  );
+  const sorted = [...visible].sort((a, b) => {
     if (sortBy === "department") {
       const ad = a.department || "";
       const bd = b.department || "";
@@ -141,7 +161,7 @@ export default function PayrollView({ notify, role }) {
     URL.revokeObjectURL(a.href);
   };
 
-  const totalPay = rows.reduce((s, r) => s + (r.total || 0), 0);
+  const totalPay = visible.reduce((s, r) => s + (r.total || 0), 0);
   const inp = {
     border: `1px solid ${C.border}`,
     borderRadius: 8,
@@ -155,6 +175,26 @@ export default function PayrollView({ notify, role }) {
   return (
     <div className="space-y-4">
       <PageHeader icon={Banknote} title="ФОТ — зарплатная ведомость">
+          <NiceSelect
+            ariaLabel="Фильтр по подразделению"
+            value={fDep}
+            onChange={setFDep}
+            width={200}
+            options={[
+              { value: "", label: "Все подразделения" },
+              ...depOptions.map((d) => ({ value: d, label: d })),
+            ]}
+          />
+          <NiceSelect
+            ariaLabel="Фильтр по должности"
+            value={fPos}
+            onChange={setFPos}
+            width={200}
+            options={[
+              { value: "", label: "Все должности" },
+              ...posOptions.map((p) => ({ value: p, label: p })),
+            ]}
+          />
           <NiceSelect
             ariaLabel="Сортировка ведомости"
             value={sortBy}
@@ -220,7 +260,7 @@ export default function PayrollView({ notify, role }) {
       </PageHeader>
 
       <div className="grid grid-cols-2 gap-2">
-        <Kpi label="Сотрудников" value={String(rows.length)} tone={C.brandB} />
+        <Kpi label="Сотрудников" value={String(visible.length)} tone={C.brandB} />
         <Kpi
           label="ФОТ за месяц, сум"
           value={money(totalPay)}
@@ -238,7 +278,7 @@ export default function PayrollView({ notify, role }) {
         </p>
         {loading ? (
           <div style={{ color: C.sub, fontSize: 13 }}>Загрузка…</div>
-        ) : rows.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div style={{ color: C.sub, fontSize: 13 }}>
             Нет активных сотрудников.
           </div>

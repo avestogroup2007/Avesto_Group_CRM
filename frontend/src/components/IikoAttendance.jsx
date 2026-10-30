@@ -47,22 +47,29 @@ const hhmm = (min) =>
 // department — подразделение iiko выбранного в шапке филиала; пусто = вся сеть.
 export default function IikoAttendance({ department = "" }) {
   const [preset, setPreset] = useState("curMonth");
+  // Свой фильтр подразделения — поверх того, что выбран в шапке. Если филиал
+  // уже навязан сверху, выбор здесь не показываем, чтобы не было двух
+  // противоречащих фильтров на одном экране.
+  const [dep, setDep] = useState("");
+  const [pos, setPos] = useState("");
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const effDep = department || dep;
 
   useEffect(() => {
     const { from, to } = rangeOf(preset);
     setLoading(true);
     setErr("");
-    const dep = department
-      ? "&department=" + encodeURIComponent(department)
-      : "";
-    apiGet("/api/iiko/attendance?from=" + from + "&to=" + to + dep)
+    const q =
+      (effDep ? "&department=" + encodeURIComponent(effDep) : "") +
+      (pos ? "&position=" + encodeURIComponent(pos) : "");
+    apiGet("/api/iiko/attendance?from=" + from + "&to=" + to + q)
       .then(setData)
       .catch((e) => setErr(e.message || "Не удалось загрузить явки"))
       .finally(() => setLoading(false));
-  }, [preset, department]);
+  }, [preset, effDep, pos]);
 
   const card = { background: C.surface, border: "1px solid " + C.border };
 
@@ -88,13 +95,40 @@ export default function IikoAttendance({ department = "" }) {
             {tr("Отработанное время из iiko")}
           </h3>
         </div>
-        <NiceSelect
-          ariaLabel={tr("Период табеля")}
-          value={preset}
-          onChange={setPreset}
-          width={190}
-          options={PERIODS.map(([v, l]) => ({ value: v, label: tr(l) }))}
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          {!department && (
+            <NiceSelect
+              ariaLabel={tr("Фильтр по подразделению")}
+              value={dep}
+              onChange={setDep}
+              width={200}
+              options={[
+                { value: "", label: tr("Все подразделения") },
+                ...(data?.departments || []).map((d) => ({
+                  value: d,
+                  label: d,
+                })),
+              ]}
+            />
+          )}
+          <NiceSelect
+            ariaLabel={tr("Фильтр по должности")}
+            value={pos}
+            onChange={setPos}
+            width={200}
+            options={[
+              { value: "", label: tr("Все должности") },
+              ...(data?.positions || []).map((p) => ({ value: p, label: p })),
+            ]}
+          />
+          <NiceSelect
+            ariaLabel={tr("Период табеля")}
+            value={preset}
+            onChange={setPreset}
+            width={180}
+            options={PERIODS.map(([v, l]) => ({ value: v, label: tr(l) }))}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -196,6 +230,12 @@ export default function IikoAttendance({ department = "" }) {
                     className="pb-2 pr-2 font-semibold"
                     style={{ textAlign: "left" }}
                   >
+                    {tr("Должность")}
+                  </th>
+                  <th
+                    className="pb-2 pr-2 font-semibold"
+                    style={{ textAlign: "left" }}
+                  >
                     {tr("Подразделение")}
                   </th>
                   <th className="pb-2 pr-2 font-semibold">{tr("Смен")}</th>
@@ -213,6 +253,9 @@ export default function IikoAttendance({ department = "" }) {
                       style={{ color: C.ink, fontWeight: 600 }}
                     >
                       {e.name}
+                    </td>
+                    <td className="py-1.5 pr-2" style={{ color: C.sub }}>
+                      {(e.positions || []).join(", ") || "—"}
                     </td>
                     <td className="py-1.5 pr-2" style={{ color: C.sub }}>
                       {e.departments.join(", ") || "—"}

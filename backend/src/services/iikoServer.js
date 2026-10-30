@@ -2188,13 +2188,19 @@ export async function listRoles() {
     const blocks = [
       ...text.matchAll(/<(?:role|employeeRole)>([\s\S]*?)<\/(?:role|employeeRole)>/g),
     ].map((m) => m[1]);
+    // Два среза: по коду (в карточке сотрудника приходит код) и по id (в явках
+    // приходит roleId — GUID). Без второго должность в табеле не определить.
     const byCode = {};
+    const byId = {};
     for (const b of blocks) {
+      const id = (b.match(/<id>([^<]*)<\/id>/) || [])[1] || "";
       const code = (b.match(/<code>([^<]*)<\/code>/) || [])[1] || "";
       const name = (b.match(/<name>([^<]*)<\/name>/) || [])[1] || "";
-      if (code && name) byCode[code.trim()] = name.trim();
+      if (!name) continue;
+      if (code) byCode[code.trim()] = name.trim();
+      if (id) byId[id.trim()] = name.trim();
     }
-    return byCode;
+    return { byCode, byId };
   } finally {
     releaseKey(key);
   }

@@ -40,7 +40,9 @@ export async function syncEmployeesToDb() {
   // («KU08»), а название живёт отдельно («Официант»). Без него в интерфейсе
   // вместо должности виден код, по которому нельзя ни понять, ни отсортировать.
   // Справочник не критичен: если не отдался — остаёмся на коде, как раньше.
-  const roles = await listRoles().catch(() => ({}));
+  const roles = await listRoles()
+    .then((r) => r.byCode || {})
+    .catch(() => ({}));
   const valid = employees.filter((e) => e.iikoId);
   const blocked = valid.filter((e) => e.deleted).length;
   // Название должности по коду; в запасе — то, что прислала карточка.
