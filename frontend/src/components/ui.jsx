@@ -1,6 +1,6 @@
 // Мелкие переиспользуемые UI-компоненты (аватары, бейджи, поля, кольца,
 // селекты и календарь) — общий словарь интерфейса для всех экранов.
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useId, cloneElement, isValidElement } from "react";
 import {
   CheckCircle2,
   ChevronRight,
@@ -186,11 +186,26 @@ export function Meta({ label, value }) {
     </div>
   );
 }
-export function Field({ label, children }) {
+// Подпись связывается с полем через htmlFor/id: иначе браузер и скринридер
+// не знают, какой текст относится к полю, а менеджеры паролей не подставляют
+// значения. Если у вложенного поля своего id нет — подставляем сгенерированный.
+// Кастомные выпадашки (NiceSelect/NiceDate) — это <button>, подпись к ним
+// привязывается через aria-labelledby, поэтому им отдаём labelId.
+export function Field({ label, children, htmlFor }) {
+  const autoId = useId();
+  const id = htmlFor || autoId;
+  const labelId = `${id}-label`;
+  const child =
+    isValidElement(children) && !children.props.id
+      ? cloneElement(children, { id, labelId })
+      : children;
   return (
     <div>
-      <div
+      <label
+        id={labelId}
+        htmlFor={id}
         style={{
+          display: "block",
           fontSize: 12,
           color: C.faint,
           fontWeight: 600,
@@ -198,15 +213,17 @@ export function Field({ label, children }) {
         }}
       >
         {label}
-      </div>
-      {children}
+      </label>
+      {child}
     </div>
   );
 }
-export function Select({ value, onChange, options }) {
+export function Select({ value, onChange, options, id, labelId }) {
   // единый стандарт дизайна: все выпадающие списки программы — через NiceSelect
   return (
     <NiceSelect
+      id={id}
+      labelId={labelId}
       value={value}
       onChange={(v) => onChange(String(v))}
       options={options}
@@ -363,13 +380,24 @@ export function NiceSelect({
   width,
   placeholder,
   align = "left",
+  id,
+  labelId,
+  ariaLabel,
 }) {
   const [open, setOpen] = useState(false);
+  const autoId = useId();
+  const fieldId = id || autoId;
+  // Своя подпись (prop label) или подпись снаружи (labelId от Field) —
+  // в обоих случаях связываем её с кнопкой через aria-labelledby.
+  const ownLabelId = label ? `${fieldId}-label` : null;
+  const describedBy = labelId || ownLabelId || undefined;
   const cur = options.find((o) => String(o.value) === String(value));
   return (
     <div style={{ position: "relative", width: width || "auto" }}>
       {label && (
         <label
+          id={ownLabelId}
+          htmlFor={fieldId}
           style={{
             fontSize: 11.5,
             color: C.sub,
@@ -382,7 +410,13 @@ export function NiceSelect({
         </label>
       )}
       <button
+        id={fieldId}
         type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={describedBy}
+        aria-label={describedBy ? undefined : ariaLabel || placeholder}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className="w-full inline-flex items-center justify-between gap-2 rounded-xl px-3"
@@ -422,6 +456,8 @@ export function NiceSelect({
             }}
           />
           <div
+            role="listbox"
+            aria-labelledby={describedBy}
             className="rounded-2xl bg-white py-1.5"
             style={{
               position: "absolute",
@@ -446,6 +482,8 @@ export function NiceSelect({
                 <button
                   key={String(o.value)}
                   type="button"
+                  role="option"
+                  aria-selected={act}
                   onClick={() => {
                     onChange(o.value);
                     setOpen(false);
@@ -508,9 +546,18 @@ export function NiceDate({
   max,
   disabled,
   width,
+  id,
+  labelId,
+  ariaLabel,
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+  const autoId = useId();
+  const fieldId = id || autoId;
+  // Как и в NiceSelect: подпись своя (prop label) либо снаружи (labelId от
+  // Field) — связываем её с кнопкой-триггером через aria-labelledby.
+  const ownLabelId = label ? `${fieldId}-label` : null;
+  const describedBy = labelId || ownLabelId || undefined;
   // Позиция календаря (fixed) — считаем от кнопки и прижимаем в границы экрана,
   // чтобы календарь не вылезал за правый край страницы.
   const [pos, setPos] = useState(null);
@@ -567,6 +614,8 @@ export function NiceDate({
     <div ref={wrapRef} style={{ position: "relative", width: width || "auto" }}>
       {label && (
         <label
+          id={ownLabelId}
+          htmlFor={fieldId}
           style={{
             fontSize: 11.5,
             color: C.sub,
@@ -579,7 +628,12 @@ export function NiceDate({
         </label>
       )}
       <button
+        id={fieldId}
         type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-labelledby={describedBy}
+        aria-label={describedBy ? undefined : ariaLabel || "Выбрать дату"}
         disabled={disabled}
         onClick={toggleOpen}
         className="w-full inline-flex items-center justify-between gap-2 rounded-xl px-3"
@@ -719,13 +773,25 @@ export function NiceDate({
   );
 }
 
-export function CashNumField({ label, value, disabled, onChange }) {
+export function CashNumField({ label, value, disabled, onChange, id, name }) {
+  const autoId = useId();
+  const fieldId = id || autoId;
   return (
     <div>
-      <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+      <label
+        htmlFor={fieldId}
+        style={{
+          display: "block",
+          fontSize: 12,
+          color: C.sub,
+          fontWeight: 600,
+        }}
+      >
         {label}
       </label>
       <input
+        id={fieldId}
+        name={name || fieldId}
         type="text"
         inputMode="numeric"
         disabled={disabled}
@@ -785,9 +851,14 @@ export function AdInput({
   onChange,
   placeholder,
   type = "text",
+  id,
+  name,
+  autoComplete,
 }) {
+  const autoId = useId();
+  const fieldId = id || autoId;
   return (
-    <label className="block">
+    <label className="block" htmlFor={fieldId}>
       {label && (
         <div
           style={{
@@ -801,6 +872,9 @@ export function AdInput({
         </div>
       )}
       <input
+        id={fieldId}
+        name={name || fieldId}
+        autoComplete={autoComplete}
         type={type}
         value={value}
         placeholder={placeholder}

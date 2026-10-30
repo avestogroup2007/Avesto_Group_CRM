@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "CashReport" ADD COLUMN     "cardTransfer" BIGINT NOT NULL DEFAULT 0,
+ADD COLUMN     "qr" BIGINT NOT NULL DEFAULT 0;

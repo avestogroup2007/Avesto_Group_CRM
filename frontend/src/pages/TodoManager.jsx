@@ -142,12 +142,20 @@ export default function TodoManagerView({ notify }) {
       className="flex items-start gap-2.5 rounded-xl bg-white p-3 cursor-pointer"
       style={{ border: `1px solid ${C.border}` }}
     >
+      {/* Главное действие строки. Область нажатия доведена до 44×44 — иконка
+          остаётся 20 px, растёт только кликабельная зона (отрицательные поля
+          гасят прирост высоты строки). Задачи отмечают и с планшета в цеху. */}
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           toggleDone(t);
         }}
-        className="shrink-0 mt-0.5"
+        className="shrink-0 inline-flex items-center justify-center"
+        style={{ minWidth: 44, minHeight: 44, margin: "-10px -8px -10px -10px" }}
+        aria-label={
+          t.status === "done" ? "Вернуть в работу" : "Отметить готовым"
+        }
         title={t.status === "done" ? "Вернуть в работу" : "Отметить готовым"}
       >
         {t.status === "done" ? (
@@ -195,11 +203,15 @@ export default function TodoManagerView({ notify }) {
         </div>
       </div>
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           toggleStar(t);
         }}
-        className="shrink-0"
+        className="shrink-0 inline-flex items-center justify-center"
+        style={{ minWidth: 44, minHeight: 44, margin: "-10px -10px -10px -8px" }}
+        aria-label={t.important ? "Снять отметку «важное»" : "Отметить важным"}
+        aria-pressed={!!t.important}
         title="Важное"
       >
         <Star

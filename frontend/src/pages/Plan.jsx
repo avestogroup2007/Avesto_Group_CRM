@@ -182,6 +182,9 @@ export default function PlanView({ notify, role }) {
                       <td className="py-1.5 pr-2 text-right">
                         {canEdit ? (
                           <input
+                            id={`plan-${r.branchId}-revenue`}
+                            name={`plan-${r.branchId}-revenue`}
+                            aria-label={`План выручки — ${r.branch}`}
                             value={edits[r.branchId]?.revenue ?? ""}
                             onChange={(e) => setEdit(r.branchId, { revenue: e.target.value })}
                             style={inp}
@@ -214,6 +217,9 @@ export default function PlanView({ notify, role }) {
                       <td className="py-1.5 pr-2 text-right">
                         {canEdit ? (
                           <input
+                            id={`plan-${r.branchId}-expense`}
+                            name={`plan-${r.branchId}-expense`}
+                            aria-label={`План расходов — ${r.branch}`}
                             value={edits[r.branchId]?.expense ?? ""}
                             onChange={(e) => setEdit(r.branchId, { expense: e.target.value })}
                             style={inp}

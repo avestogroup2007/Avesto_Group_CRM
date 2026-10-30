@@ -245,6 +245,9 @@ export default function PayrollView({ notify, role }) {
                     <td className="py-1.5 pr-2 text-right">
                       {canEdit ? (
                         <select
+                          id={`payroll-${r.userId}-mode`}
+                          name={`payroll-${r.userId}-mode`}
+                          aria-label={`Режим оплаты — ${r.name}`}
                           value={r.mode}
                           onChange={(e) =>
                             setRow(r.userId, { mode: e.target.value })
@@ -263,6 +266,9 @@ export default function PayrollView({ notify, role }) {
                     <td className="py-1.5 pr-2 text-right">
                       {canEdit ? (
                         <input
+                          id={`payroll-${r.userId}-rate`}
+                          name={`payroll-${r.userId}-rate`}
+                          aria-label={`Ставка — ${r.name}`}
                           value={r.rate}
                           onChange={(e) =>
                             setRow(r.userId, { rate: e.target.value })
@@ -277,6 +283,9 @@ export default function PayrollView({ notify, role }) {
                     <td className="py-1.5 pr-2 text-right">
                       {canEdit ? (
                         <input
+                          id={`payroll-${r.userId}-hours`}
+                          name={`payroll-${r.userId}-hours`}
+                          aria-label={`Часы — ${r.name}`}
                           value={r.mode === "hourly" ? r.hours : ""}
                           disabled={r.mode !== "hourly"}
                           onChange={(e) =>
@@ -298,6 +307,9 @@ export default function PayrollView({ notify, role }) {
                     <td className="py-1.5 pr-2 text-right">
                       {canEdit ? (
                         <input
+                          id={`payroll-${r.userId}-bonus`}
+                          name={`payroll-${r.userId}-bonus`}
+                          aria-label={`Премия — ${r.name}`}
                           value={r.bonus}
                           onChange={(e) =>
                             setRow(r.userId, { bonus: e.target.value })
@@ -312,6 +324,9 @@ export default function PayrollView({ notify, role }) {
                     <td className="py-1.5 pr-2 text-right">
                       {canEdit ? (
                         <input
+                          id={`payroll-${r.userId}-penalty`}
+                          name={`payroll-${r.userId}-penalty`}
+                          aria-label={`Штраф — ${r.name}`}
                           value={r.penalty}
                           onChange={(e) =>
                             setRow(r.userId, { penalty: e.target.value })

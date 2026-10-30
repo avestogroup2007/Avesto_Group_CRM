@@ -623,12 +623,18 @@ export function AutomationView({ rules, setRules, log, setLog, now }) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
             <input
+              id="automation-rule-name"
+              name="ruleName"
+              aria-label="Название правила"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Название правила"
               style={inpSt}
             />
             <select
+              id="automation-rule-trigger"
+              name="ruleTrigger"
+              aria-label="Условие срабатывания правила"
               value={trigIdx}
               onChange={(e) => setTrigIdx(Number(e.target.value))}
               style={inpSt}

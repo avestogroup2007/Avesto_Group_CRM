@@ -193,7 +193,16 @@ function useIikoSales({ from, to, department }) {
         // Активность персонала: кто чаще открывает заказы (по официанту).
         const staffMap = {};
         byStaff.forEach((r) => {
-          const name = r["OrderWaiter"] || r["Waiter"] || r["Cashier"] || "—";
+          // Ключ приходит от iiko как имя поля группировки: сервер группирует
+          // по «OrderWaiter.Name» (короткого «OrderWaiter» в схеме OLAP нет).
+          // Прежние варианты оставлены для совместимости с другими сборками iiko.
+          const name =
+            r["OrderWaiter.Name"] ||
+            r["OrderWaiter"] ||
+            r["WaiterName"] ||
+            r["Waiter"] ||
+            r["Cashier"] ||
+            "—";
           if (!staffMap[name]) staffMap[name] = { name, checks: 0, revenue: 0 };
           staffMap[name].checks += num(r["UniqOrderId"]);
           staffMap[name].revenue += rev(r);

@@ -9,6 +9,7 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { refreshOrgConfig, orgBranches } from "../services/orgConfig.js";
+import { realPeopleWhere } from "../util/people.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -23,7 +24,7 @@ r.get(
   asyncHandler(async (req, res) => {
     await refreshOrgConfig().catch(() => {});
     const users = await db.user.findMany({
-      where: { active: true, role: { notIn: ["owner", "vendor"] } },
+      where: realPeopleWhere(),
       select: { id: true, displayName: true, name: true },
       orderBy: { displayName: "asc" },
       take: 1000,

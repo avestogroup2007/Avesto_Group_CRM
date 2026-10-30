@@ -1828,8 +1828,12 @@ function MoneyView({ s, me, branchScope }) {
                 />
               </div>
               <div>
-                <label style={lblSt}>Статья / тип</label>
+                <label htmlFor="money-category" style={lblSt}>
+                  Статья / тип
+                </label>
                 <input
+                  id="money-category"
+                  name="category"
                   list="money-cats"
                   value={form.category}
                   onChange={(e) => setF("category", e.target.value)}
@@ -1858,8 +1862,12 @@ function MoneyView({ s, me, branchScope }) {
                 />
               </div>
               <div>
-                <label style={lblSt}>Контрагент / на что</label>
+                <label htmlFor="money-counterparty" style={lblSt}>
+                  Контрагент / на что
+                </label>
                 <input
+                  id="money-counterparty"
+                  name="counterparty"
                   list="money-cp"
                   value={form.counterparty}
                   onChange={(e) => setF("counterparty", e.target.value)}
@@ -1923,8 +1931,12 @@ function MoneyView({ s, me, branchScope }) {
                 </>
               )}
               <div>
-                <label style={lblSt}>Сумма</label>
+                <label htmlFor="money-amount" style={lblSt}>
+                  Сумма
+                </label>
                 <input
+                  id="money-amount"
+                  name="amount"
                   type="number"
                   value={form.amount}
                   onChange={(e) => setF("amount", e.target.value)}
@@ -1973,8 +1985,12 @@ function MoneyView({ s, me, branchScope }) {
                 />
               </div>
               <div className="col-span-2 md:col-span-4">
-                <label style={lblSt}>Комментарий</label>
+                <label htmlFor="money-comment" style={lblSt}>
+                  Комментарий
+                </label>
                 <input
+                  id="money-comment"
+                  name="comment"
                   value={form.comment}
                   onChange={(e) => setF("comment", e.target.value)}
                   style={inpSt}

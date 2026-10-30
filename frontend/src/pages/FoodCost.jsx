@@ -215,9 +215,16 @@ export default function FoodCostView({ notify, role }) {
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <span style={{ fontSize: 12.5, color: C.sub }}>ФК% по умолчанию</span>
+          <label
+            htmlFor="foodcost-default-pct"
+            style={{ fontSize: 12.5, color: C.sub }}
+          >
+            ФК% по умолчанию
+          </label>
           {canEdit ? (
             <input
+              id="foodcost-default-pct"
+              name="defaultPct"
               value={cfg.defaultPct}
               onChange={(e) =>
                 setCfg((c) => ({ ...c, defaultPct: e.target.value }))
@@ -358,6 +365,8 @@ export default function FoodCostView({ notify, role }) {
                         <td className="py-1.5 pr-2 text-right">
                           {canEdit ? (
                             <input
+                              name={`dish-cost-${r.name}`}
+                              aria-label={`Себестоимость единицы — ${r.name}`}
                               value={cfg.dishCost?.[r.name] ?? ""}
                               placeholder={r.source === "dish" ? "" : "—"}
                               onChange={(e) =>

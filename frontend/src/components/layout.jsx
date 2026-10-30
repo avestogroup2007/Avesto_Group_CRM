@@ -529,21 +529,35 @@ export function TopBar({
         </button>
       )}
       <div className="ml-auto flex items-center gap-2 sm:gap-3 relative">
+        {/* ПЕРЕКЛЮЧАТЕЛЬ ТЕМЫ ВРЕМЕННО СКРЫТ.
+            Инфраструктура темы готова (lib/theme.js: палитры LIGHT/DARK,
+            syncTheme), но в экранах остаётся ~370 захардкоженных светлых
+            цветов (bg-white, background:"#fff", градиенты). Пока они не
+            переведены на токены, тёмная тема даёт нечитаемый контент.
+            Включать кнопку только после перевода цветов на токены. */}
         <div
+          role="group"
+          aria-label={tr("Язык интерфейса")}
           className="flex rounded-xl overflow-hidden shrink-0"
           style={{ border: `1px solid ${C.border}` }}
         >
           {["ru", "uz"].map((lg) => (
             <button
               key={lg}
+              type="button"
+              aria-pressed={LANG === lg}
               onClick={() =>
                 dispatch({ type: "SET_SETTING", key: "lang", value: lg })
               }
-              className="px-2.5 py-1.5 font-bold"
+              className="px-3 font-bold"
               style={{
                 background: LANG === lg ? C.brandA : "#fff",
                 color: LANG === lg ? "#fff" : C.sub,
                 fontSize: 12.5,
+                // Минимум 44×44 — норма для пальца: CRM открывают с планшета
+                // в цеху, а прежние 37×31 промахивались мимо.
+                minHeight: 44,
+                minWidth: 44,
               }}
             >
               {lg === "ru" ? "RU" : "UZ"}

@@ -9,6 +9,7 @@ import { db } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
+import { realPeopleWhere } from "../util/people.js";
 import {
   PayrollSchema,
   refreshPayrollConfig,
@@ -40,7 +41,9 @@ r.get(
 
     const [users, entries] = await Promise.all([
       db.user.findMany({
-        where: { active: true, role: { notIn: ["owner", "vendor"] } },
+        // Без служебных учёток iiko и уволенных: ведомость — это те, кому
+        // реально начисляют, а не все пользователи iiko-сервера.
+        where: realPeopleWhere(),
         select: { id: true, displayName: true, name: true, position: true },
         orderBy: { displayName: "asc" },
       }),

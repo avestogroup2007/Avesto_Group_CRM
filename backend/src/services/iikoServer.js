@@ -1063,9 +1063,12 @@ export async function salesReport({ from, to, departments }) {
       groupByRowFields: ["HourOpen"],
     }).catch(() => []);
     // По официанту заказа — активность персонала (кто чаще открывает заказы).
+    // Поле именно «OrderWaiter.Name»: короткого «OrderWaiter» в схеме OLAP нет,
+    // на него сервер отвечает 400 «Unknown OLAP field», и раздел молча пустел,
+    // потому что ошибку глушит catch ниже.
     const byStaff = await runOlap(key, {
       ...opts,
-      groupByRowFields: ["OrderWaiter"],
+      groupByRowFields: ["OrderWaiter.Name"],
     }).catch(() => []);
     // Час + блюдо — чтобы по клику на час показать, что продавалось в этот час.
     const byHourDish = await runOlap(key, {
@@ -2066,6 +2069,82 @@ export async function supplierDebtOlap({ from, to, department = "" }) {
       // сопоставить «Торговое предприятие», «Сумма прихода» и т.п. с кодами.
       columnsDetail: names.map((n) => `${n} = ${cols[n]?.name || ""}`),
     };
+  } finally {
+    releaseKey(key);
+  }
+}
+
+// ── Сверка кассы с iiko ──────────────────────────────────────────────────────
+// Продажи в разрезе «день × подразделение × тип оплаты». Это основа сверки:
+// против каждой строки ставится то, что сдал управляющий в отчёте по кассе.
+// Сумма берётся со скидкой (DishDiscountSumInt) — именно её видит касса.
+export async function salesByPayType({ from, to, departments }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const rows = await runOlap(key, {
+      from,
+      to,
+      departments,
+      groupByRowFields: ["OpenDate.Typed", "Department", "PayTypes"],
+    });
+    return rows.map((r) => ({
+      date: r["OpenDate.Typed"] || "",
+      department: r.Department || "",
+      payType: r.PayTypes || "",
+      sum: Math.round(Number(r.DishDiscountSumInt) || 0),
+      orders: Math.round(Number(r.UniqOrderId) || 0),
+    }));
+  } finally {
+    releaseKey(key);
+  }
+}
+
+// Кассовые смены за период: кто открыл/закрыл, расхождение по денежному ящику,
+// внесения и изъятия. В продажах этого нет — только здесь.
+// Эндпоинт v2; короткого /resto/api/cashshifts/list на сервере нет (404).
+export async function cashShifts({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const url =
+      `${BASE}/resto/api/v2/cashshifts/list?key=${encodeURIComponent(key)}` +
+      `&openDateFrom=${encodeURIComponent(from)}` +
+      `&openDateTo=${encodeURIComponent(to)}&status=ANY`;
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`iiko cashshifts → ${res.status} ${text.slice(0, 200)}`);
+    }
+    let arr;
+    try {
+      arr = JSON.parse(text);
+    } catch {
+      throw new Error("iiko вернул не JSON по кассовым сменам");
+    }
+    if (!Array.isArray(arr)) return [];
+    return arr.map((s) => ({
+      id: s.id,
+      sessionNumber: s.sessionNumber,
+      cashRegNumber: s.cashRegNumber,
+      pointOfSaleId: s.pointOfSaleId || null,
+      openDate: s.openDate || null,
+      closeDate: s.closeDate || null,
+      acceptDate: s.acceptDate || null,
+      managerId: s.managerId || null,
+      responsibleUserId: s.responsibleUserId || null,
+      startCash: Math.round(Number(s.sessionStartCash) || 0),
+      payOrders: Math.round(Number(s.payOrders) || 0),
+      salesCash: Math.round(Number(s.salesCash) || 0),
+      salesCard: Math.round(Number(s.salesCard) || 0),
+      salesCredit: Math.round(Number(s.salesCredit) || 0),
+      payIn: Math.round(Number(s.payIn) || 0),
+      payOut: Math.round(Number(s.payOut) || 0),
+      cashRemain: Math.round(Number(s.cashRemain) || 0),
+      // Расхождение по денежному ящику, посчитанное самой iiko.
+      cashDiff: Math.round(Number(s.cashDiff) || 0),
+      status: s.sessionStatus || "",
+    }));
   } finally {
     releaseKey(key);
   }

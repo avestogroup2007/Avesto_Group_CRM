@@ -151,6 +151,11 @@ model CashReport {
   payme       BigInt    @default(0)
   uzumTezkor  BigInt    @default(0)
   yandex      BigInt    @default(0)
+  // QR-оплата и перевод на карту: в iiko это отдельные типы оплаты с заметными
+  // оборотами (за октябрь 2026 — 105 млн и 32,5 млн сум). Без своих полей их
+  // некуда было записать, и сверка с iiko всегда показывала расхождение.
+  qr          BigInt    @default(0)
+  cardTransfer BigInt   @default(0)
   transfer    BigInt    @default(0)
   expenses    BigInt    @default(0)
   iiko        BigInt    @default(0)

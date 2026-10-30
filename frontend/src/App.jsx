@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { Building2, Archive, X, Info, Loader2 } from "lucide-react";
 import { apiGet, apiPost } from "./api.js";
-import { FONT, C } from "./lib/theme.js";
+import { FONT, C, syncTheme } from "./lib/theme.js";
 import { NiceSelect, ScrollTopButton } from "./components/ui.jsx";
 import { usePersisted } from "./lib/hooks.js";
 import { detectAnomalies, visibleTasks, applyFilters } from "./lib/tasks.js";
@@ -316,6 +316,8 @@ export default function App({ authUser, onLogout }) {
 
   syncOrg(s);
   syncLang(s);
+  // Тема (светлая/тёмная) — до отрисовки детей, как и язык.
+  syncTheme(s);
   // Действующий пользователь — из реальной авторизации (сервер). Демо-список
   // сотрудников убран; филиальная привязка появится при синхронизации кадров.
   const me = authUser
@@ -525,6 +527,7 @@ export default function App({ authUser, onLogout }) {
                   <div className="ml-auto flex items-center gap-2">
                     {canPickBranch ? (
                       <NiceSelect
+                        ariaLabel={tr("Фильтр по филиалу")}
                         value={branchScope}
                         width={186}
                         align="right"

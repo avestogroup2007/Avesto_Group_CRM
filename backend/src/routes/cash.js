@@ -10,6 +10,8 @@ import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
 import { sendTelegram, esc, topicFor } from "../services/telegram.js";
+import { reconcileDay } from "../services/cashReconcile.js";
+import { IikoNotConfiguredError } from "../services/iikoServer.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -214,6 +216,40 @@ r.get(
       take: 500,
     });
     res.json({ items: items.map(ser) });
+  })
+);
+
+
+// Сверка кассы с iiko за день: ?date=YYYY-MM-DD&branch=<id>.
+// Возвращает по каждому типу оплаты «пробито в iiko ↔ сдал управляющий ↔
+// разница», плюс сводку по кассовым сменам (расхождение ящика, изъятия,
+// незакрытые смены). Управляющий видит только свой филиал.
+r.get(
+  "/reconcile",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  asyncHandler(async (req, res) => {
+    const date = String(req.query.date || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "Нужна дата в формате YYYY-MM-DD" });
+    }
+    const forced = forcedBranch(req.user, {
+      alsoFree: FINANCE_FREE,
+      failClosed: true,
+    });
+    const branchId = String(forced || req.query.branch || "");
+    if (!branchId) {
+      return res.status(400).json({ error: "Укажите филиал" });
+    }
+    const report = await db.cashReport.findFirst({ where: { branchId, date } });
+    try {
+      res.json(await reconcileDay({ date, branchId, report }));
+    } catch (e) {
+      if (e instanceof IikoNotConfiguredError) {
+        return res.status(503).json({ error: e.message });
+      }
+      if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
+      throw e;
+    }
   })
 );
 

@@ -25,6 +25,7 @@ import {
   NiceSelect,
   NiceDate,
   CashNumField,
+  EmptyState,
 } from "../components/ui.jsx";
 
 /* ------------------------------ кассы филиалов ----------------------------- */
@@ -610,19 +611,38 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
       </div>
     </div>
   );
+  // Цвет метрики — в точке-акценте рядом с подписью, а НЕ в самой цифре:
+  // раскрашенные числа нельзя сравнивать глазом, а красная сумма расходов
+  // читается как ошибка, хотя это обычный показатель (skill ui-ux-pro-max:
+  // visual-hierarchy, color-not-decorative-only). Цифры — табличные (.tnum),
+  // чтобы разряды выстраивались в колонку.
   const KPI = ({ label, value, color }) => (
     <div
-      className="rounded-2xl bg-white p-4"
-      style={{ border: `1px solid ${C.border}` }}
+      className="rounded-2xl p-4"
+      style={{ background: C.surface, border: `1px solid ${C.border}` }}
     >
-      <div style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}>
-        {label}
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className="shrink-0"
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 99,
+            background: color || C.faint,
+          }}
+        />
+        <span
+          className="min-w-0 truncate"
+          style={{ fontSize: 12, color: C.faint, fontWeight: 600 }}
+        >
+          {label}
+        </span>
       </div>
       <div
-        className="font-extrabold mt-0.5"
+        className="font-extrabold mt-0.5 tnum"
         style={{
           fontSize: 18,
-          color: color || C.ink,
+          color: C.ink,
           overflowWrap: "break-word",
           lineHeight: 1.15,
         }}
@@ -734,17 +754,26 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
         className="rounded-2xl bg-white p-4 sm:p-5"
         style={{ border: `1px solid ${C.border}` }}
       >
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <Lock size={17} color={C.brandA} />
-          <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
-            {tr("Сейф филиала и передача денег")}
-          </h3>
+        {/* Подсказка — отдельной строкой под заголовком, а не в одну строку с
+            ним: мелкий серый текст рядом с крупным заголовком ломает иерархию
+            и читается как часть названия (skill: visual-hierarchy,
+            whitespace-balance). */}
+        <div className="mb-3">
+          <div className="flex items-center gap-2">
+            <Lock size={17} color={C.brandA} className="shrink-0" />
+            <h3 className="font-bold" style={{ color: C.ink, fontSize: 16 }}>
+              {tr("Сейф филиала и передача денег")}
+            </h3>
+          </div>
           {!isMgr && !fBranch && (
-            <span style={{ fontSize: 12, color: C.faint }}>
+            <p
+              className="mt-1"
+              style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5 }}
+            >
               {tr(
                 "выберите филиал вверху, чтобы видеть сейф и передавать деньги",
               )}
-            </span>
+            </p>
           )}
         </div>
 
@@ -907,9 +936,11 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
           {tr("Передачи за период")}
         </div>
         {hoSorted.length === 0 && (
-          <div style={{ fontSize: 13, color: C.faint }}>
-            {tr("Передач за период нет")}
-          </div>
+          <EmptyState
+            icon={Lock}
+            title={tr("Передач за период нет")}
+            hint={tr("Передачи денег из сейфа появятся здесь после инкассации.")}
+          />
         )}
         <div className="space-y-1.5">
           {hoSorted.map((h) => (
@@ -1072,6 +1103,7 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
                 {tr("Филиал")}
               </label>
               <NiceSelect
+                ariaLabel={tr("Филиал")}
                 value={form.branchId}
                 disabled={isMgr}
                 onChange={(v) => setForm((f) => ({ ...f, branchId: +v }))}
@@ -1266,11 +1298,21 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
           </div>
 
           <div className="mb-4">
-            <label style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>
+            <label
+              htmlFor="cash-report-comment"
+              style={{
+                display: "block",
+                fontSize: 12,
+                color: C.sub,
+                fontWeight: 600,
+              }}
+            >
               {tr("Комментарий")}{" "}
               {live.diff !== 0 && <span style={{ color: C.bad }}>*</span>}
             </label>
             <textarea
+              id="cash-report-comment"
+              name="comment"
               value={form.comment || ""}
               disabled={!editable}
               rows={2}
@@ -1338,9 +1380,12 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
           </div>
         )}
         {sorted.length === 0 && (
-          <div style={{ fontSize: 13, color: C.faint }}>
-            {tr("Нет отчётов за выбранный период")}
-          </div>
+          <EmptyState
+            title={tr("Нет отчётов за выбранный период")}
+            hint={tr(
+              "Измените период вверху или сдайте отчёт по кассе за день — он появится в списке.",
+            )}
+          />
         )}
 
         {sorted.length > 0 && (

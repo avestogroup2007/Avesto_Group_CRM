@@ -158,6 +158,7 @@ export default function Procurement({ notify, role }) {
             Филиал:
           </span>
           <NiceSelect
+            ariaLabel="Филиал (склад)"
             value={store}
             onChange={setStore}
             options={storeOptions}
@@ -508,6 +509,7 @@ function StockTab({ store = "" }) {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <NiceSelect
+          ariaLabel="Период расхода"
           value={days}
           onChange={setDays}
           options={[
@@ -1093,6 +1095,7 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
             Филиал:
           </span>
           <NiceSelect
+            ariaLabel="Филиал (склад) в отчёте"
             value={wh}
             onChange={setWh}
             options={[
@@ -1114,6 +1117,7 @@ ${(iikoDiag.columnsDetail || iikoDiag.columnsSample || []).join("\n") || "—"}`
             Филиал:
           </span>
           <NiceSelect
+            ariaLabel="Торговое предприятие (филиал)"
             value={dept}
             onChange={(v) => {
               setDept(v);
@@ -1575,6 +1579,7 @@ function ConfigTab({ notify, canConfig }) {
           Метод минимального остатка
         </div>
         <NiceSelect
+          ariaLabel="Метод минимального остатка"
           value={cfg.stockMethod}
           onChange={(v) => set("stockMethod", v)}
           options={[
