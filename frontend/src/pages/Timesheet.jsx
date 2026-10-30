@@ -74,8 +74,14 @@ function TimesheetView({ s, me, now, branchScope }) {
 
   return (
     <div className="space-y-5 max-w-4xl">
-      {/* Реальный табель из iiko — часы по сотрудникам и подразделениям. */}
-      <IikoAttendance />
+      {/* Реальный табель из iiko — часы по сотрудникам и подразделениям.
+          Фильтр филиала в шапке экрана действует и здесь: иначе выбор филиала
+          ни на что не влиял бы, а это выглядит как сломанный фильтр. */}
+      <IikoAttendance
+        department={
+          branchScope ? branchById(branchScope)?.iikoDept || "" : ""
+        }
+      />
       <div
         className="rounded-xl px-4 py-3"
         style={{

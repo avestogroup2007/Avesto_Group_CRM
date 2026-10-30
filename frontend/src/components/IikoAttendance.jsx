@@ -44,7 +44,8 @@ const hours = (min) => Math.round(min / 60).toLocaleString("ru-RU");
 const hhmm = (min) =>
   Math.floor(min / 60) + " ч " + String(min % 60).padStart(2, "0") + " мин";
 
-export default function IikoAttendance() {
+// department — подразделение iiko выбранного в шапке филиала; пусто = вся сеть.
+export default function IikoAttendance({ department = "" }) {
   const [preset, setPreset] = useState("curMonth");
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
@@ -54,11 +55,14 @@ export default function IikoAttendance() {
     const { from, to } = rangeOf(preset);
     setLoading(true);
     setErr("");
-    apiGet("/api/iiko/attendance?from=" + from + "&to=" + to)
+    const dep = department
+      ? "&department=" + encodeURIComponent(department)
+      : "";
+    apiGet("/api/iiko/attendance?from=" + from + "&to=" + to + dep)
       .then(setData)
       .catch((e) => setErr(e.message || "Не удалось загрузить явки"))
       .finally(() => setLoading(false));
-  }, [preset]);
+  }, [preset, department]);
 
   const card = { background: C.surface, border: "1px solid " + C.border };
 

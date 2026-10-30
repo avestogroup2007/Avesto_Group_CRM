@@ -424,12 +424,16 @@ r.get(
   "/attendance",
   requireRole("director", "finance", "accountant", "sysadmin", "manager"),
   handleIiko(async (req, res) => {
-    const { from, to } = req.query;
+    const { from, to, department } = req.query;
     const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
     if (!isDate(from) || !isDate(to)) {
       return res.status(400).json({ error: "Нужны даты from и to (ГГГГ-ММ-ДД)" });
     }
-    const dept = await forcedDepartment(req.user);
+    // Управляющему филиал навязан; офис может выбрать филиал сам — иначе
+    // фильтр «Все филиалы» в шапке на этом экране ни на что не влиял бы.
+    const dept =
+      (await forcedDepartment(req.user)) ||
+      (department ? String(department) : null);
     const [rows, roles, users] = await Promise.all([
       cachedReport({ kind: "attendance", scope: "all", from, to }, () =>
         listAttendance({ from, to })
