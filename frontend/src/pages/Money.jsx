@@ -1463,8 +1463,13 @@ function MoneyView({ s, me, branchScope }) {
     const rate = form.currency === "UZS" ? 1 : Number(form.rate) || 0;
     if (form.currency !== "UZS" && !(rate > 0))
       return setErr("Укажите курс к суму");
+    // Те же два условия проверяет сервер — здесь они только ради понятной
+    // ошибки до отправки. Без счёта и юрлица перечисление потом не сверить
+    // ни с банковской выпиской, ни с юрлицом.
     if (form.paymentType === "Перечисление" && !form.legalEntity)
       return setErr("Для перечисления укажите юр. лицо");
+    if (form.paymentType === "Перечисление" && !form.account)
+      return setErr("Для перечисления укажите счёт");
     // Филиал: либо из оргструктуры (числовой id), либо доп. из справочника (d:Имя).
     let branchId = null;
     let branchName = "";
@@ -1881,12 +1886,18 @@ function MoneyView({ s, me, branchScope }) {
                 </datalist>
               </div>
               <div>
+                {/* Только наличные и перечисление: потратить деньги физически
+                    можно либо из сейфа, либо переводом по реквизитам. Humo,
+                    Uzcard, Click, Payme — это чем платит ГОСТЬ на кассе, они
+                    приходят из iiko в кассовый отчёт и расходом быть не могут.
+                    Берём пересечение со справочником: если там остались старые
+                    значения, они в выбор не попадут. */}
                 <NiceSelect
                   label="Тип оплаты"
                   value={form.paymentType}
                   width="100%"
                   onChange={(v) => setF("paymentType", v)}
-                  options={dnames("paymentType").map((c) => ({
+                  options={["Наличные", "Перечисление"].map((c) => ({
                     value: c,
                     label: c,
                   }))}
@@ -1896,7 +1907,7 @@ function MoneyView({ s, me, branchScope }) {
                 <>
                   <div>
                     <NiceSelect
-                      label="Юр. лицо"
+                      label="Юр. лицо *"
                       value={form.legalEntity}
                       width="100%"
                       onChange={(v) => {
@@ -1914,7 +1925,7 @@ function MoneyView({ s, me, branchScope }) {
                   </div>
                   <div>
                     <NiceSelect
-                      label="Счёт"
+                      label="Счёт *"
                       value={form.account}
                       width="100%"
                       onChange={(v) => setF("account", v)}

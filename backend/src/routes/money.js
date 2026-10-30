@@ -38,14 +38,15 @@ const DEFAULT_CATEGORIES = [
   "Налоги",
   "Прочее",
 ];
-const DEFAULT_PAY_TYPES = [
-  "Наличные",
-  "Перечисление",
-  "Карта",
-  "Click",
-  "Payme",
-  "Прочее",
-];
+// Способов ФАКТИЧЕСКОГО движения денег в компании ровно два: наличные из
+// сейфа филиала и перечисление по реквизитам, которое проводит бухгалтер.
+// Humo/Uzcard/Click/Payme — это способы, которыми ГОСТЬ платит на кассе; они
+// приходят из iiko в кассовый отчёт и расходовать их нельзя. Держать их в
+// выборе «Учёта денег» — приглашение завести операцию, которой в реальности
+// не существует, поэтому список сведён к двум.
+const PAY_CASH = "Наличные";
+const PAY_TRANSFER = "Перечисление";
+const DEFAULT_PAY_TYPES = [PAY_CASH, PAY_TRANSFER];
 const DEFAULT_DDS = [
   "Выручка",
   "Инкассация с филиала",
@@ -703,7 +704,7 @@ const CreateSchema = z.object({
   direction: z.enum(["income", "expense"]),
   category: z.string().min(1).max(200),
   ddsArticle: z.string().default(""),
-  paymentType: z.string().default("Наличные"),
+  paymentType: z.enum([PAY_CASH, PAY_TRANSFER]).default(PAY_CASH),
   legalEntity: z.string().default(""),
   account: z.string().default(""),
   counterparty: z.string().max(300).default(""),
@@ -731,6 +732,23 @@ r.post(
       return res.status(400).json({ error: "Неверный формат движения" });
     }
     const d = parsed.data;
+    // Перечисление идёт по реквизитам, значит всегда известно, С КАКОГО счёта
+    // и ОТ КАКОГО (или НА КАКОЕ) юрлица прошли деньги. Без этого проводку
+    // потом не привязать ни к выписке банка, ни к юрлицу — операция повисает
+    // без следа. Проверяем на сервере, а не только в форме: иначе ограничение
+    // обходится прямым запросом к API.
+    if (d.paymentType === PAY_TRANSFER) {
+      if (!d.account.trim()) {
+        return res
+          .status(400)
+          .json({ error: "Для перечисления укажите счёт" });
+      }
+      if (!d.legalEntity.trim()) {
+        return res
+          .status(400)
+          .json({ error: "Для перечисления укажите юр. лицо" });
+      }
+    }
     const rate = d.currency === "UZS" ? 1 : d.rate;
     const amountUzs = toUzs(d.amount, rate);
     // Приходы согласования не требуют. Расход становится заявкой (pending),
@@ -1038,7 +1056,7 @@ const RecurringSchema = z.object({
   direction: z.enum(["income", "expense"]).default("expense"),
   category: z.string().min(1).max(200),
   ddsArticle: z.string().default(""),
-  paymentType: z.string().default("Наличные"),
+  paymentType: z.enum([PAY_CASH, PAY_TRANSFER]).default(PAY_CASH),
   legalEntity: z.string().default(""),
   account: z.string().default(""),
   counterparty: z.string().max(300).default(""),
