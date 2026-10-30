@@ -2,7 +2,7 @@
 // сотрудников, заводим/обновляем учётные записи, уволенных в iiko блокируем.
 import bcrypt from "bcrypt";
 import { db } from "../db.js";
-import { listEmployees } from "./iikoServer.js";
+import { listEmployees, listRoles } from "./iikoServer.js";
 import { invalidateUserAuthCache } from "../middleware/requireAuth.js";
 
 // Роль iiko (код) -> роль CRM. Ставится только при СОЗДАНИИ; при обновлении
@@ -36,8 +36,16 @@ const OFFICE_ROLES = new Set([
 // последовательных запросов на N сотрудников).
 export async function syncEmployeesToDb() {
   const { employees } = await listEmployees();
+  // Справочник должностей: в карточке сотрудника iiko присылает только код
+  // («KU08»), а название живёт отдельно («Официант»). Без него в интерфейсе
+  // вместо должности виден код, по которому нельзя ни понять, ни отсортировать.
+  // Справочник не критичен: если не отдался — остаёмся на коде, как раньше.
+  const roles = await listRoles().catch(() => ({}));
   const valid = employees.filter((e) => e.iikoId);
   const blocked = valid.filter((e) => e.deleted).length;
+  // Название должности по коду; в запасе — то, что прислала карточка.
+  const positionName = (e) =>
+    roles[(e.positionCode || "").trim()] || e.position || "";
 
   const existing = await db.user.findMany({
     where: { iikoId: { in: valid.map((e) => e.iikoId) } },
@@ -56,7 +64,7 @@ export async function syncEmployeesToDb() {
         data: {
           displayName: e.name,
           login: e.login || ex.login,
-          position: e.position,
+          position: positionName(e),
           positionCode: e.positionCode || "",
           iikoDepartment: dept,
           iikoDeleted: e.deleted,
@@ -94,7 +102,7 @@ export async function syncEmployeesToDb() {
         displayName: e.name,
         passwordHash,
         role,
-        position: e.position,
+        position: positionName(e),
         positionCode: e.positionCode || "",
         iikoId: e.iikoId,
         iikoDepartment: dept,

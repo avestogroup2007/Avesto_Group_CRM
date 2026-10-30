@@ -2149,3 +2149,35 @@ export async function cashShifts({ from, to }) {
     releaseKey(key);
   }
 }
+
+// ── Справочник должностей iiko ───────────────────────────────────────────────
+// /resto/api/employees/roles отдаёт XML: код должности → название
+// («KU08» → «Официант», «PR05» → «Помощник кондитера»). В карточке сотрудника
+// iiko присылает только код, поэтому без этого справочника в интерфейсе
+// вместо должности виден код.
+export async function listRoles() {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/employees/roles?key=${encodeURIComponent(key)}`
+    );
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`iiko roles → ${res.status} ${text.slice(0, 200)}`);
+    }
+    // Обёртка записи у разных сборок называется по-разному — читаем мягко.
+    const blocks = [
+      ...text.matchAll(/<(?:role|employeeRole)>([\s\S]*?)<\/(?:role|employeeRole)>/g),
+    ].map((m) => m[1]);
+    const byCode = {};
+    for (const b of blocks) {
+      const code = (b.match(/<code>([^<]*)<\/code>/) || [])[1] || "";
+      const name = (b.match(/<name>([^<]*)<\/name>/) || [])[1] || "";
+      if (code && name) byCode[code.trim()] = name.trim();
+    }
+    return byCode;
+  } finally {
+    releaseKey(key);
+  }
+}

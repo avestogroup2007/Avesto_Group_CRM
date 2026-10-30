@@ -44,7 +44,16 @@ r.get(
         // Без служебных учёток iiko и уволенных: ведомость — это те, кому
         // реально начисляют, а не все пользователи iiko-сервера.
         where: realPeopleWhere(),
-        select: { id: true, displayName: true, name: true, position: true },
+        // iikoDepartment — подразделение из iiko: без него не видно, кто где
+        // работает, и ведомость нельзя сгруппировать по филиалам/цехам.
+        select: {
+          id: true,
+          displayName: true,
+          name: true,
+          position: true,
+          positionCode: true,
+          iikoDepartment: true,
+        },
         orderBy: { displayName: "asc" },
       }),
       db.payrollEntry.findMany({ where: { month } }),
@@ -68,6 +77,11 @@ r.get(
         userId: u.id,
         name: u.displayName || u.name || "—",
         position: u.position || "",
+        positionCode: u.positionCode || "",
+        // Подразделения из iiko приходят строкой через запятую (сотрудник может
+        // числиться в нескольких) — отдаём как есть, интерфейс покажет и
+        // отсортирует по первому.
+        department: u.iikoDepartment || "",
         mode: rate.mode,
         rate: num(rate.amount),
         hours,

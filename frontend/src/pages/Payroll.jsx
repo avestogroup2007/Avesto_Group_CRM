@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { Banknote, Download, Save } from "lucide-react";
 import { apiGet, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Kpi, PageHeader } from "../components/ui.jsx";
+import { Kpi, PageHeader, NiceSelect } from "../components/ui.jsx";
 
 const money = (n) => Number(n || 0).toLocaleString("ru-RU");
 const thisMonth = () => new Date().toISOString().slice(0, 7);
@@ -24,6 +24,9 @@ export default function PayrollView({ notify, role }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Порядок строк: по подразделению удобно считать ФОТ по цехам и филиалам,
+  // по должности — сравнивать ставки внутри одной профессии.
+  const [sortBy, setSortBy] = useState("name");
   const load = (m) => {
     setLoading(true);
     apiGet(`/api/payroll?month=${m}`)
@@ -34,6 +37,26 @@ export default function PayrollView({ notify, role }) {
   useEffect(() => {
     load(month);
   }, [month]);
+
+  // Сотрудники без подразделения уходят вниз, иначе прочерки оказываются
+  // первыми и прячут реальные группы. Внутри группы — по алфавиту.
+  const cmpText = (a, b) => String(a || "").localeCompare(String(b || ""), "ru");
+  const sorted = [...rows].sort((a, b) => {
+    if (sortBy === "department") {
+      const ad = a.department || "";
+      const bd = b.department || "";
+      if (!ad !== !bd) return ad ? -1 : 1;
+      const d = cmpText(ad, bd);
+      if (d) return d;
+    } else if (sortBy === "position") {
+      const d = cmpText(a.position, b.position);
+      if (d) return d;
+    } else if (sortBy === "total") {
+      const d = (b.total || 0) - (a.total || 0);
+      if (d) return d;
+    }
+    return cmpText(a.name, b.name);
+  });
 
   const setRow = (userId, patch) =>
     setRows((rs) =>
@@ -132,6 +155,18 @@ export default function PayrollView({ notify, role }) {
   return (
     <div className="space-y-4">
       <PageHeader icon={Banknote} title="ФОТ — зарплатная ведомость">
+          <NiceSelect
+            ariaLabel="Сортировка ведомости"
+            value={sortBy}
+            onChange={setSortBy}
+            width={190}
+            options={[
+              { value: "name", label: "По алфавиту" },
+              { value: "department", label: "По подразделению" },
+              { value: "position", label: "По должности" },
+              { value: "total", label: "По сумме к выплате" },
+            ]}
+          />
           <button
             onClick={() => setMonth((m) => shiftMonth(m, -1))}
             className="rounded-lg px-2.5 py-1.5 font-bold"
@@ -218,6 +253,12 @@ export default function PayrollView({ notify, role }) {
                   >
                     Сотрудник
                   </th>
+                  <th
+                    className="pb-2 pr-2 font-semibold"
+                    style={{ textAlign: "left" }}
+                  >
+                    Подразделение
+                  </th>
                   <th className="pb-2 pr-2 font-semibold">Режим</th>
                   <th className="pb-2 pr-2 font-semibold">Ставка</th>
                   <th className="pb-2 pr-2 font-semibold">Часы</th>
@@ -227,7 +268,7 @@ export default function PayrollView({ notify, role }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr
                     key={r.userId}
                     style={{ borderTop: `1px solid ${C.line}` }}
@@ -241,6 +282,9 @@ export default function PayrollView({ notify, role }) {
                           {r.position}
                         </div>
                       ) : null}
+                    </td>
+                    <td className="py-1.5 pr-2" style={{ color: C.sub }}>
+                      {r.department || "—"}
                     </td>
                     <td className="py-1.5 pr-2 text-right">
                       {canEdit ? (
