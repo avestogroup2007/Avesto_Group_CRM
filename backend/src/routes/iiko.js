@@ -28,7 +28,7 @@ import {
   updateEmployeeAccess,
 } from "../services/iikoSync.js";
 import { sendTelegram, topicFor, esc } from "../services/telegram.js";
-import { cached } from "../services/cache.js";
+import { cachedReport } from "../services/iikoCache.js";
 import { forcedBranch, FINANCE_FREE } from "../util/branchScope.js";
 import { refreshOrgConfig, orgBranchById } from "../services/orgConfig.js";
 
@@ -51,14 +51,9 @@ async function forcedDepartment(user) {
   return b.iikoDept;
 }
 
-// TTL кэша отчёта: закрытые дни не меняются (6 часов), период с «сегодня»
-// может пополняться продажами (3 минуты). Сегодня — по Asia/Tashkent.
-function reportTtl(to) {
-  const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Tashkent",
-  });
-  return String(to) < today ? 6 * 60 * 60 * 1000 : 3 * 60 * 1000;
-}
+// Срок жизни отчётов теперь решает services/iikoCache.js: закрытые периоды
+// хранятся в БД бессрочно (данные за прошедший день не меняются), период с
+// «сегодня» — коротко. Поэтому локальный reportTtl здесь больше не нужен.
 
 const r = Router();
 r.use(requireAuth);
@@ -110,8 +105,9 @@ r.post(
     const dept = (await forcedDepartment(req.user)) || department;
     const departments = dept ? [dept] : undefined;
     res.json(
-      await cached(`olap:${from}:${to}:${dept || "all"}`, reportTtl(to), () =>
-        salesReport({ from, to, departments })
+      await cachedReport(
+        { kind: "olap", scope: dept || "all", from, to },
+        () => salesReport({ from, to, departments })
       )
     );
   })
@@ -135,9 +131,8 @@ r.post(
     }
     const dept = (await forcedDepartment(req.user)) || department;
     const departments = dept ? [dept] : undefined;
-    const rows = await cached(
-      `foodcost:${from}:${to}:${dept || "all"}`,
-      reportTtl(to),
+    const rows = await cachedReport(
+      { kind: "foodcost", scope: dept || "all", from, to },
       () => foodCostSales({ from, to, departments })
     );
     const cfg = await refreshFoodCostConfig(true);
@@ -169,8 +164,9 @@ r.post(
     }
     const dept = (await forcedDepartment(req.user)) || department;
     res.json(
-      await cached(`pnl:${from}:${to}:${dept || "all"}`, reportTtl(to), () =>
-        pnlReport({ from, to, department: dept || undefined })
+      await cachedReport(
+        { kind: "pnl", scope: dept || "all", from, to },
+        () => pnlReport({ from, to, department: dept || undefined })
       )
     );
   })
@@ -188,9 +184,14 @@ r.post(
     }
     const dept = (await forcedDepartment(req.user)) || department;
     res.json(
-      await cached(
-        `risky:${from}:${to}:${dept || "all"}:${discountPct ?? "def"}`,
-        reportTtl(to),
+      await cachedReport(
+        {
+          kind: "risky",
+          // Процент скидки входит в scope: при другом пороге это другой отчёт.
+          scope: `${dept || "all"}:${discountPct ?? "def"}`,
+          from,
+          to,
+        },
         () =>
           riskyReport({
             from,
@@ -240,7 +241,7 @@ r.post(
       return res.status(400).json({ error: "Нужны параметры from и to" });
     }
     res.json(
-      await cached(`prodrep:${from}:${to}`, reportTtl(to), () =>
+      await cachedReport({ kind: "prodrep", scope: "all", from, to }, () =>
         productionReport({ from, to })
       )
     );

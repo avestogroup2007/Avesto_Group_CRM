@@ -73,6 +73,10 @@ const EnvSchema = z.object({
   // check). Внешний планировщик шлёт его в заголовке X-Cron-Secret. Пусто =
   // авто-проверка отключена (эндпоинт отвечает 503).
   PROCUREMENT_CRON_SECRET: z.string().min(1).optional(),
+  // Секрет крон-эндпоинта прогрева кэша iiko (POST /api/iiko-cron/warm).
+  // Ночной прогрев избавляет от 17-секундного ожидания у первого
+  // пользователя утром. Пусто = прогрев отключён (эндпоинт отвечает 503).
+  IIKO_WARM_SECRET: z.string().min(1).optional(),
   PUBLIC_BASE_URL: z.string().url().optional(),
   // Адрес веб-приложения — для кнопки «Открыть CRM» (Mini App) в Telegram-боте.
   PUBLIC_APP_URL: z.string().url().optional(),

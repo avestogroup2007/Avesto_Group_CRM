@@ -802,3 +802,31 @@ model ProcurementAlert {
   @@unique([productId, kind, day])
   @@index([day])
 }
+
+// ── Постоянный кэш отчётов iiko ─────────────────────────────────────────────
+// Зачем в БД, а не в памяти: процесс на Render засыпает после ~15 минут
+// простоя (см. DEPLOY.md), поэтому in-memory кэш почти всегда холодный — и
+// каждое утро первый же пользователь заново выкачивает из iiko весь период.
+// Запросы к OLAP тяжёлые (один отчёт продаж — семь срезов подряд, у iiko
+// одна сессия на пользователя и запросы идут последовательно).
+//
+// Отчёты за ЗАКРЫТЫЕ дни не меняются, поэтому хранятся бессрочно и повторно
+// из iiko не тянутся. Период, задевающий сегодняшний день, живёт коротко:
+// продажи ещё дописываются.
+model IikoReportCache {
+  // kind — вид отчёта (olap | pnl | foodcost | risky | prodrep),
+  // scope — подразделение iiko или «all» для всей сети.
+  kind      String
+  scope     String
+  periodFrom String
+  periodTo  String
+  payload   Json
+  fetchedAt DateTime @default(now())
+  // Момент, после которого запись считается устаревшей. Для закрытых периодов
+  // null — такие данные не протухают.
+  expiresAt DateTime?
+
+  @@id([kind, scope, periodFrom, periodTo])
+  @@index([expiresAt])
+  @@index([fetchedAt])
+}

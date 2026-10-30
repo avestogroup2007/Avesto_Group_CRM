@@ -41,6 +41,7 @@ import productionRoutes from "./routes/production.js";
 import todoRoutes from "./routes/todos.js";
 import todosCronRoutes from "./routes/todosCron.js";
 import procurementCronRoutes from "./routes/procurementCron.js";
+import iikoCronRoutes from "./routes/iikoCron.js";
 import telegramRoutes, { telegramWebhook } from "./routes/telegram.js";
 import aiRoutes from "./routes/ai.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
@@ -182,6 +183,7 @@ app.use("/api/todos", todoRoutes);
 // Крон-напоминания — свой секрет в заголовке, без пользовательской авторизации.
 app.use("/api/todos-cron", todosCronRoutes);
 app.use("/api/procurement-cron", procurementCronRoutes);
+app.use("/api/iiko-cron", iikoCronRoutes);
 
 // Обработка 404 и ошибок — всегда последними. Sentry ставится перед нашим
 // обработчиком: ошибка сначала уходит в мониторинг, затем клиенту как обычно.
