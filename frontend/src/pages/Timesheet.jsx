@@ -5,6 +5,7 @@ import { tr } from "../lib/i18n.js";
 import { D, TZ, fmtWork, fmtWorkH, fmtDateTime } from "../lib/format.js";
 import { userById, branchById } from "../lib/org.js";
 import { Avatar } from "../components/ui.jsx";
+import IikoAttendance from "../components/IikoAttendance.jsx";
 
 /* --------------------------- учёт рабочего времени ------------------------- */
 function TimesheetView({ s, me, now, branchScope }) {
@@ -73,6 +74,8 @@ function TimesheetView({ s, me, now, branchScope }) {
 
   return (
     <div className="space-y-5 max-w-4xl">
+      {/* Реальный табель из iiko — часы по сотрудникам и подразделениям. */}
+      <IikoAttendance />
       <div
         className="rounded-xl px-4 py-3"
         style={{
@@ -82,8 +85,9 @@ function TimesheetView({ s, me, now, branchScope }) {
           fontSize: 13,
         }}
       >
-        ⚠️ Данные этого раздела пока хранятся локально в этом браузере и не
-        видны с других устройств. Перенос на сервер — в дорожной карте.
+        ⚠️ Блоки ниже («Моё рабочее время», «Сотрудники», «Последние смены») —
+        старый локальный учёт: он хранится только в этом браузере. Для отчётов
+        пользуйтесь таблицей выше: она берёт явки прямо из iiko.
       </div>
       {/* моё время */}
       <div

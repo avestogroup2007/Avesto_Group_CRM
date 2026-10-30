@@ -17,6 +17,8 @@ import {
   productionReport,
   productionSample,
   foodCostSales,
+  listAttendance,
+  listRoles,
 } from "../services/iikoServer.js";
 import {
   refreshFoodCostConfig,
@@ -409,6 +411,93 @@ r.patch(
     } catch (e) {
       res.status(400).json({ error: e.message || "Не удалось обновить" });
     }
+  })
+);
+
+
+// Учёт рабочего времени из iiko: ?from=YYYY-MM-DD&to=YYYY-MM-DD.
+// Явки (/resto/api/employees/attendance) содержат начало и конец смены и
+// подразделение, в котором смена открыта, — этого достаточно для табеля:
+// часы по сотруднику, по подразделению и список самих смен.
+// Управляющий ограничен своим филиалом, офис видит всю сеть.
+r.get(
+  "/attendance",
+  requireRole("director", "finance", "accountant", "sysadmin", "manager"),
+  handleIiko(async (req, res) => {
+    const { from, to } = req.query;
+    const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+    if (!isDate(from) || !isDate(to)) {
+      return res.status(400).json({ error: "Нужны даты from и to (ГГГГ-ММ-ДД)" });
+    }
+    const dept = await forcedDepartment(req.user);
+    const [rows, roles, users] = await Promise.all([
+      cachedReport({ kind: "attendance", scope: "all", from, to }, () =>
+        listAttendance({ from, to })
+      ),
+      listRoles().catch(() => ({})),
+      db.user.findMany({
+        where: { iikoId: { not: null } },
+        select: { iikoId: true, displayName: true, name: true },
+      }),
+    ]);
+    // Имя сотрудника по его id в iiko: в явках приходит только employeeId.
+    const nameByIiko = new Map(
+      users.map((u) => [u.iikoId, u.displayName || u.name || ""])
+    );
+    // Фильтр филиала применяем ПОСЛЕ кэша: отчёт из iiko один на сеть, и
+    // кэшировать его отдельно под каждого управляющего было бы расточительно.
+    const scoped = dept ? rows.filter((r) => r.departmentName === dept) : rows;
+    const byEmployee = new Map();
+    const byDepartment = new Map();
+    for (const r of scoped) {
+      const key = r.employeeId;
+      if (!byEmployee.has(key)) {
+        byEmployee.set(key, {
+          employeeId: key,
+          name: nameByIiko.get(key) || "— не найден в CRM —",
+          minutes: 0,
+          shifts: 0,
+          departments: new Set(),
+        });
+      }
+      const e = byEmployee.get(key);
+      e.minutes += r.minutes;
+      e.shifts += 1;
+      if (r.departmentName) e.departments.add(r.departmentName);
+      const d = r.departmentName || "— без подразделения —";
+      byDepartment.set(d, (byDepartment.get(d) || 0) + r.minutes);
+    }
+    const employees = [...byEmployee.values()]
+      .map((e) => ({
+        employeeId: e.employeeId,
+        name: e.name,
+        minutes: e.minutes,
+        hours: Math.round((e.minutes / 60) * 10) / 10,
+        shifts: e.shifts,
+        departments: [...e.departments],
+      }))
+      .sort((a, b) => b.minutes - a.minutes);
+    res.json({
+      from,
+      to,
+      department: dept || null,
+      roles,
+      totals: {
+        shifts: scoped.length,
+        open: scoped.filter((r) => r.open).length,
+        minutes: scoped.reduce((a, r) => a + r.minutes, 0),
+        employees: employees.length,
+      },
+      byDepartment: [...byDepartment.entries()]
+        .map(([name, minutes]) => ({
+          name,
+          minutes,
+          hours: Math.round((minutes / 60) * 10) / 10,
+        }))
+        .sort((a, b) => b.minutes - a.minutes),
+      employees,
+      shifts: scoped.slice(0, 500),
+    });
   })
 );
 

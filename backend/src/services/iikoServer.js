@@ -767,7 +767,16 @@ export async function productionSample({ from, to }) {
     if (res.status === 401) invalidateKey(key);
     if (!res.ok) {
       throw new Error(
-        `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
+        res.status === 404
+          ? // Весь набор /documents/export/* на сервере отсутствует, хотя
+            // остальные v2-эндпоинты работают: значит на этой установке iiko
+            // не включён API документов (отдельный модуль лицензии). В коде
+            // это не чинится — нужен доступ на стороне iiko.
+            "iiko не отдаёт документы производства: на сервере не включён API " +
+            "документов (/resto/api/v2/documents). Отчёт и акт приготовления " +
+            "заработают после подключения этого модуля в iiko — остальные " +
+            "разделы (продажи, себестоимость, номенклатура) не затронуты."
+          : `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
       );
     }
     // Первый документ целиком — этого достаточно, чтобы увидеть схему.
@@ -800,7 +809,16 @@ export async function productionReport({ from, to }) {
     if (res.status === 401) invalidateKey(key);
     if (!res.ok) {
       throw new Error(
-        `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
+        res.status === 404
+          ? // Весь набор /documents/export/* на сервере отсутствует, хотя
+            // остальные v2-эндпоинты работают: значит на этой установке iiko
+            // не включён API документов (отдельный модуль лицензии). В коде
+            // это не чинится — нужен доступ на стороне iiko.
+            "iiko не отдаёт документы производства: на сервере не включён API " +
+            "документов (/resto/api/v2/documents). Отчёт и акт приготовления " +
+            "заработают после подключения этого модуля в iiko — остальные " +
+            "разделы (продажи, себестоимость, номенклатура) не затронуты."
+          : `iiko production export → ${res.status} ${text.slice(0, 300)}`.trim()
       );
     }
     let docs = [];
@@ -2177,6 +2195,65 @@ export async function listRoles() {
       if (code && name) byCode[code.trim()] = name.trim();
     }
     return byCode;
+  } finally {
+    releaseKey(key);
+  }
+}
+
+// ── Явки сотрудников (учёт рабочего времени) ────────────────────────────────
+// /resto/api/employees/attendance отдаёт XML по явкам за период: кто, в каком
+// подразделении, с какого по какое время. Параметры именно from/to — варианты
+// dateFrom/dateTo и openDateFrom/openDateTo этот сервер отвергает (400).
+//
+// personalDateFrom/personalDateTo — отметки самого сотрудника (приход/уход),
+// dateFrom/dateTo — зачтённое время смены. Для учёта часов берём зачтённое, а
+// личные отметки отдаём рядом: по ним видно опоздания и ранние уходы.
+export async function listAttendance({ from, to }) {
+  if (!iikoConfigured()) throw new IikoNotConfiguredError();
+  const key = await acquireKey();
+  try {
+    const res = await fetch(
+      `${BASE}/resto/api/employees/attendance?key=${encodeURIComponent(key)}` +
+        `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    );
+    const text = await res.text();
+    if (res.status === 401) invalidateKey(key);
+    if (!res.ok) {
+      throw new Error(`iiko attendance → ${res.status} ${text.slice(0, 200)}`);
+    }
+    // [^] вместо [\s\S] — в строке для RegExp обратные слэши пришлось бы
+    // экранировать дважды, и линтер справедливо ругается на лишний escape.
+    const tag = (b, name) => {
+      const m = b.match(new RegExp("<" + name + ">([^]*?)</" + name + ">"));
+      return m ? m[1].trim() : "";
+    };
+    const blocks = [
+      ...text.matchAll(/<attendance>([\s\S]*?)<\/attendance>/g),
+    ].map((m) => m[1]);
+    return blocks.map((b) => {
+      const dateFrom = tag(b, "dateFrom");
+      const dateTo = tag(b, "dateTo");
+      const ms =
+        dateFrom && dateTo
+          ? new Date(dateTo).getTime() - new Date(dateFrom).getTime()
+          : 0;
+      return {
+        id: tag(b, "id"),
+        employeeId: tag(b, "employeeId"),
+        roleId: tag(b, "roleId"),
+        departmentId: tag(b, "departmentId"),
+        departmentName: tag(b, "departmentName"),
+        attendanceType: tag(b, "attendanceType"),
+        dateFrom,
+        dateTo,
+        personalDateFrom: tag(b, "personalDateFrom"),
+        personalDateTo: tag(b, "personalDateTo"),
+        // Минуты зачтённого времени; отрицательные и абсурдные значения
+        // отбрасываем, чтобы одна кривая запись не испортила итог за месяц.
+        minutes: ms > 0 && ms < 36 * 60 * 60 * 1000 ? Math.round(ms / 60000) : 0,
+        open: Boolean(dateFrom) && !dateTo,
+      };
+    });
   } finally {
     releaseKey(key);
   }
