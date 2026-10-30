@@ -37,7 +37,12 @@ const cashCalc = (r) => {
     (r.click || 0) +
     (r.payme || 0) +
     (r.uzumTezkor || 0) +
-    (r.yandex || 0);
+    (r.yandex || 0) +
+    // QR и перевод на карту — такие же безналичные поступления. Без них
+    // введённые суммы не попадали бы в итог, и «Разница с iiko» показывала
+    // бы недостачу там, где касса сошлась.
+    (r.qr || 0) +
+    (r.cardTransfer || 0);
   const total = cash + acq + (r.transfer || 0);
   return { cash, acq, total, diff: total - (r.iiko || 0) };
 };
@@ -186,6 +191,8 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
     payme: 0,
     uzumTezkor: 0,
     yandex: 0,
+    qr: 0,
+    cardTransfer: 0,
     debt: 0,
     noPay: 0,
     expenses: 0,
@@ -276,6 +283,8 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
       payme: form.payme || 0,
       uzumTezkor: form.uzumTezkor || 0,
       yandex: form.yandex || 0,
+      qr: form.qr || 0,
+      cardTransfer: form.cardTransfer || 0,
       transfer: form.transfer || 0,
       expenses: form.expenses || 0,
       iiko: form.iiko || 0,
@@ -1149,6 +1158,11 @@ function CashRegisterView({ s, me, dispatch, notify, branchScope }) {
             {inp("Payme", "payme")}
             {inp("Uzum Tezkor", "uzumTezkor")}
             {inp("Yandex Еда", "yandex")}
+            {/* В iiko это отдельные типы оплаты с заметным оборотом (за
+                октябрь 2026 — 105 млн и 32,5 млн сум). Без них сверка с
+                кассой не сходилась бы никогда. */}
+            {inp(tr("QR оплата"), "qr")}
+            {inp(tr("Перевод на карту"), "cardTransfer")}
           </div>
 
           <div

@@ -75,6 +75,8 @@ const MONEY_FIELDS = [
   "payme",
   "uzumTezkor",
   "yandex",
+  "qr",
+  "cardTransfer",
   "transfer",
   "expenses",
   "iiko",
@@ -96,6 +98,10 @@ const ReportSchema = z.object({
   payme: int,
   uzumTezkor: int,
   yandex: int,
+  // QR-оплата и перевод на карту: в iiko это отдельные типы с заметным
+  // оборотом, без своих полей сверка с кассой не сходилась бы никогда.
+  qr: int,
+  cardTransfer: int,
   transfer: int,
   expenses: int,
   iiko: int,

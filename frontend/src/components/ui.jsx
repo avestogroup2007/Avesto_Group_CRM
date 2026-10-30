@@ -195,9 +195,17 @@ export function Field({ label, children, htmlFor }) {
   const autoId = useId();
   const id = htmlFor || autoId;
   const labelId = `${id}-label`;
+  // labelId нужен только нашим компонентам (NiceSelect/NiceDate): они рисуют
+  // <button> и связываются с подписью через aria-labelledby. Нативным полям
+  // его передавать нельзя — React ругается на неизвестный DOM-атрибут
+  // («React does not recognize the labelId prop»). Признак DOM-элемента —
+  // строковый type (<input>, <select>), у компонентов там функция.
   const child =
     isValidElement(children) && !children.props.id
-      ? cloneElement(children, { id, labelId })
+      ? cloneElement(
+          children,
+          typeof children.type === "string" ? { id } : { id, labelId }
+        )
       : children;
   return (
     <div>
