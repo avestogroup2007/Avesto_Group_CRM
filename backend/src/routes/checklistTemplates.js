@@ -10,6 +10,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { requireRole } from "../middleware/requireRole.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { refreshModules, moduleEnabled } from "../services/modules.js";
+import { listRoles } from "../services/iikoServer.js";
 
 const r = Router();
 r.use(requireAuth);
@@ -38,6 +39,9 @@ const hourlyWindowOk = (d) =>
 const TemplateBase = z.object({
   kind: z.enum(["role", "cleaning"]),
   position: z.string().max(120).default(""),
+  // Рабочая зона: зал, кухня, бар, туалет и т.п. Пусто — чек-лист на всю
+  // должность. Список зон не фиксирован: у цеха и у магазина они разные.
+  zone: z.string().max(120).default(""),
   title: z.string().min(1).max(200),
   items: z.array(ItemSchema).min(1).max(40),
   scheduleType: z.enum(["daily", "shift", "hourly"]).default("daily"),
@@ -64,7 +68,14 @@ r.get(
     if (req.query.kind) where.kind = String(req.query.kind);
     const items = await db.checklistTemplate.findMany({
       where,
-      orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }],
+      // Порядок «должность → зона» даёт готовую группировку в интерфейсе:
+      // все чек-листы уборщицы идут подряд, внутри — по зонам.
+      orderBy: [
+        { kind: "asc" },
+        { position: "asc" },
+        { zone: "asc" },
+        { createdAt: "asc" },
+      ],
       take: 500,
     });
     res.json({
@@ -158,6 +169,51 @@ r.delete(
       `Удалён шаблон чек-листа «${deleted.title}» (${deleted.kind})`
     );
     res.json({ ok: true });
+  })
+);
+
+
+// Справочники для редактора шаблонов: должности и зоны.
+//
+// Должности тянутся из iiko, а не вводятся руками: при ручном вводе
+// «Официант» и «официант» становятся разными чек-листами, и сотруднику
+// ничего не назначается. Если iiko недоступен — отдаём должности, уже
+// заведённые у сотрудников в CRM, чтобы редактор не остался пустым.
+//
+// Зоны не фиксированы в коде: у цеха и у магазина они разные. Отдаём уже
+// использованные плюс типовой набор, а завести новую можно вводом.
+const DEFAULT_ZONES = ["Зал", "Кухня", "Бар", "Туалет", "Склад", "Витрина", "Цех"];
+r.get(
+  "/meta",
+  asyncHandler(async (req, res) => {
+    const [roles, usedPositions, usedZones] = await Promise.all([
+      listRoles()
+        .then((r) => Object.values(r.byCode || {}))
+        .catch(() => []),
+      db.user.findMany({
+        where: { position: { not: "" } },
+        select: { position: true },
+        distinct: ["position"],
+        take: 200,
+      }),
+      db.checklistTemplate.findMany({
+        where: { zone: { not: "" } },
+        select: { zone: true },
+        distinct: ["zone"],
+        take: 200,
+      }),
+    ]);
+    const positions = [
+      ...new Set([...roles, ...usedPositions.map((u) => u.position)]),
+    ]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ru"));
+    const zones = [
+      ...new Set([...usedZones.map((z) => z.zone), ...DEFAULT_ZONES]),
+    ]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ru"));
+    res.json({ positions, zones });
   })
 );
 

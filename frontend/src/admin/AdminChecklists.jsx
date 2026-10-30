@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { PlusCircle, Trash2, Camera } from "lucide-react";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../api.js";
 import { C } from "../lib/theme.js";
-import { Field, AdCard } from "../components/ui.jsx";
+import { Field, AdCard, NiceSelect } from "../components/ui.jsx";
 
 const inp = {
   border: `1px solid ${C.border}`,
@@ -21,6 +21,7 @@ function blankTemplate(kind) {
   return {
     kind,
     position: "",
+    zone: "",
     title: "",
     items: [{ text: "", needPhoto: false }],
     scheduleType: kind === "cleaning" ? "hourly" : "shift",
@@ -32,6 +33,15 @@ function blankTemplate(kind) {
 
 function Editor({ kind, notify, onSaved }) {
   const [t, setT] = useState(blankTemplate(kind));
+  // Должности и зоны — из справочника, а не вводом: при ручном наборе
+  // «Официант» и «официант» дают разные чек-листы, и сотруднику не
+  // назначается ничего.
+  const [meta, setMeta] = useState({ positions: [], zones: [] });
+  useEffect(() => {
+    apiGet("/api/checklist-templates/meta")
+      .then((d) => setMeta({ positions: d.positions || [], zones: d.zones || [] }))
+      .catch(() => setMeta({ positions: [], zones: [] }));
+  }, []);
   const setItem = (i, patch) =>
     setT((x) => ({
       ...x,
@@ -63,14 +73,32 @@ function Editor({ kind, notify, onSaved }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {kind === "role" && (
           <Field label="Должность">
-            <input
-              style={inp}
+            <NiceSelect
+              ariaLabel="Должность чек-листа"
               value={t.position}
-              placeholder="Например: Официант"
-              onChange={(e) => setT({ ...t, position: e.target.value })}
+              width="100%"
+              onChange={(v) => setT({ ...t, position: v })}
+              options={[
+                { value: "", label: "— все должности —" },
+                ...meta.positions.map((p) => ({ value: p, label: p })),
+              ]}
             />
           </Field>
         )}
+        {/* Зона нужна обоим видам: у уборщицы это зал/кухня/бар/туалет, у
+            санитарного обхода — те же помещения. Пусто = на всю должность. */}
+        <Field label="Рабочая зона">
+          <NiceSelect
+            ariaLabel="Рабочая зона чек-листа"
+            value={t.zone}
+            width="100%"
+            onChange={(v) => setT({ ...t, zone: v })}
+            options={[
+              { value: "", label: "— вся должность —" },
+              ...meta.zones.map((z) => ({ value: z, label: z })),
+            ]}
+          />
+        </Field>
         <Field label="Название чек-листа">
           <input
             style={inp}
@@ -216,6 +244,12 @@ function TemplateList({ items, kind, notify, onChanged }) {
             <b>{t.title}</b>
             {t.position ? (
               <span style={{ color: C.faint }}> · {t.position}</span>
+            ) : null}
+            {t.zone ? (
+              <span style={{ color: C.brandA, fontWeight: 600 }}>
+                {" "}
+                · {t.zone}
+              </span>
             ) : null}
             <span style={{ color: C.faint }}>
               {" "}

@@ -435,7 +435,14 @@ model ModuleConfig {
 model ChecklistTemplate {
   id           String   @id @default(cuid())
   kind         String // role | cleaning
-  position     String   @default("") // для role: должность (произвольная строка)
+  // Должность берётся из справочника iiko (34 роли), а не вводится руками:
+  // иначе «Официант» и «официант» — разные чек-листы, и сотруднику ничего не
+  // назначится. Хранится название должности в том виде, как его отдаёт iiko.
+  position     String   @default("")
+  // Рабочая зона: у одной должности их несколько (уборщица — зал, кухня, бар,
+  // туалет), и для каждой свой список работ. Пусто = чек-лист для должности
+  // целиком, без привязки к месту.
+  zone         String   @default("")
   title        String
   items        Json // [{ text, needPhoto }]
   scheduleType String   @default("daily") // daily | shift | hourly
