@@ -1,11 +1,24 @@
 // Производство: автогенерация документов iiko по техкарте.
-// Три режима в одном разделе (ТЗ 14.3):
-//   Задания   — расчёт по изделию, предпросмотр плана и запуск (ТЗ 5.1)
-//   Монитор   — план/состав/ввод факта по отделу (ТЗ 5.4)
+// Режимы в одном разделе (ТЗ 14.3):
+//   Задания     — расчёт по изделию, предпросмотр плана и запуск (ТЗ 5.1)
+//   Монитор     — план/состав/ввод факта по отделу (ТЗ 5.4)
 //   Конструктор — разовый состав заказного изделия (ТЗ 5.2)
+//   Документы   — журнал документов и их проведение в iiko (ТЗ 6, 8)
+//   Отчёты      — план/факт и недовыработка по этапам (ТЗ 6, 11)
 import { useState, useEffect, useCallback } from "react";
-import { Factory, RefreshCw, Play, Plus, Trash2, Check } from "lucide-react";
-import { apiGet, apiPost } from "../api.js";
+import {
+  Factory,
+  RefreshCw,
+  Play,
+  Plus,
+  Trash2,
+  Check,
+  Send,
+  FileText,
+  BarChart3,
+  AlertTriangle,
+} from "lucide-react";
+import { apiGet, apiPost, apiPut } from "../api.js";
 import { C } from "../lib/theme.js";
 import { Kpi, PageHeader, NiceSelect, NiceDate } from "../components/ui.jsx";
 
@@ -50,6 +63,10 @@ export default function ProductionView({ notify, role }) {
   const canPlan = ["director", "finance", "accountant", "sysadmin"].includes(
     role,
   );
+  // Отчёты — офису и управляющему (он же бригадир на мониторе отдела). Линейному
+  // персоналу вкладку не показываем: сервер её всё равно закроет, а пустая
+  // кнопка с ошибкой выглядит как поломка.
+  const canReport = canPlan || role === "manager";
   const [tab, setTab] = useState(canPlan ? "tasks" : "monitor");
   const [health, setHealth] = useState(null);
   const [err, setErr] = useState("");
@@ -83,6 +100,8 @@ export default function ProductionView({ notify, role }) {
           ["tasks", "Задания"],
           ["monitor", "Монитор отдела"],
           ["constructor", "Конструктор"],
+          ...(canPlan ? [["documents", "Документы"]] : []),
+          ...(canReport ? [["reports", "Отчёты"]] : []),
         ].map(([k, lbl]) => (
           <button
             key={k}
@@ -156,6 +175,8 @@ export default function ProductionView({ notify, role }) {
       {tab === "constructor" && (
         <ConstructorTab notify={notify} canPlan={canPlan} />
       )}
+      {tab === "documents" && canPlan && <DocumentsTab notify={notify} />}
+      {tab === "reports" && canReport && <ReportsTab />}
     </div>
   );
 }
@@ -1100,6 +1121,725 @@ function ConstructorTab({ notify, canPlan }) {
       </Box>
 
       {plan && <PlanView plan={plan} />}
+    </div>
+  );
+}
+
+// ── Документы: журнал и проведение в iiko (ТЗ 6, 8) ─────────────────────────
+// Документы всегда есть в CRM. Здесь видно, какие дошли до iiko, какие ждут и
+// на чём именно iiko отказала — вместе с отправленным XML, иначе причину отказа
+// приходится угадывать.
+const DOC_LABEL = {
+  TRANSFER: "Перемещение",
+  PRODUCTION_ACT: "Акт приготовления",
+  DISASSEMBLY_ACT: "Акт разбора",
+};
+const DOC_STATUS = {
+  pending: { label: "Ждёт отправки", color: "#B45309", bg: "#FFFBEB" },
+  posted: { label: "Проведён", color: "#15803D", bg: "#F0FDF4" },
+  error: { label: "Ошибка", color: "#DC2626", bg: "#FEF2F2" },
+  reverted: { label: "Отменён", color: "#6B7280", bg: "#F9FAFB" },
+};
+
+function StatusChip({ status }) {
+  const s = DOC_STATUS[status] || DOC_STATUS.pending;
+  return (
+    <span
+      className="rounded-md px-1.5 py-0.5 font-semibold"
+      style={{ fontSize: 11, color: s.color, background: s.bg }}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+function DocumentsTab({ notify }) {
+  const [data, setData] = useState(null);
+  const [cfg, setCfg] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const [payload, setPayload] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const q = filter ? `?status=${filter}` : "";
+      const [d, c] = await Promise.all([
+        apiGet(`/api/production/documents${q}`),
+        apiGet("/api/production/config").catch(() => null),
+      ]);
+      setData(d);
+      setCfg(c);
+      setErr("");
+    } catch (e) {
+      setErr(e.message || "Не удалось загрузить журнал");
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function saveCfg(patch) {
+    try {
+      const next = { ...cfg, ...patch };
+      setCfg(await apiPut("/api/production/config", next));
+      notify?.("Настройки сохранены");
+    } catch (e) {
+      notify?.(e.message || "Не удалось сохранить", "error");
+    }
+  }
+
+  async function postOne(id) {
+    setBusy(id);
+    try {
+      const row = await apiPost(`/api/production/documents/${id}/post`, {});
+      notify?.(
+        row.status === "posted"
+          ? "Документ проведён в iiko"
+          : `Не проведён: ${row.error}`,
+        row.status === "posted" ? "success" : "error",
+      );
+      await load();
+    } catch (e) {
+      notify?.(e.message || "Ошибка отправки", "error");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function retryAll() {
+    setBusy("all");
+    try {
+      const out = await apiPost("/api/production/documents/retry", {});
+      notify?.(
+        `Отправлено ${out.total}: проведено ${out.posted}, ошибок ${out.failed}`,
+        out.failed ? "error" : "success",
+      );
+      await load();
+    } catch (e) {
+      notify?.(e.message || "Ошибка отправки", "error");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function showPayload(id) {
+    try {
+      setPayload(await apiGet(`/api/production/documents/${id}/payload`));
+    } catch (e) {
+      notify?.(e.message || "Не удалось загрузить", "error");
+    }
+  }
+
+  const s = data?.summary || {};
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Kpi label="Ждут отправки" value={num(s.pending)} tone={C.warn} />
+        <Kpi label="Проведены в iiko" value={num(s.posted)} tone={C.ok} />
+        <Kpi
+          label="Ошибки"
+          value={num(s.error)}
+          tone={s.error ? C.bad : C.sub}
+        />
+        <Kpi label="Отменены" value={num(s.reverted)} tone={C.sub} />
+      </div>
+
+      {cfg && (
+        <Box>
+          <div
+            className="font-semibold"
+            style={{ fontSize: 13, marginBottom: 8 }}
+          >
+            Отправка документов в iiko
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <label
+              className="flex items-center gap-2"
+              style={{ fontSize: 12.5, color: C.sub }}
+              title="Проводить документы в iiko сразу после ввода факта отделом"
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.autoPost)}
+                onChange={(e) => saveCfg({ autoPost: e.target.checked })}
+              />
+              Проводить автоматически по факту
+            </label>
+            <label
+              className="flex items-center gap-2"
+              style={{ fontSize: 12.5, color: C.sub }}
+              title="Не каждая сборка iiko принимает перемещения через API — акты при этом проводятся"
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(cfg.postTransfers)}
+                onChange={(e) => saveCfg({ postTransfers: e.target.checked })}
+              />
+              Отправлять перемещения
+            </label>
+            <button
+              onClick={retryAll}
+              disabled={busy === "all"}
+              className="rounded-lg px-3 py-1.5 font-semibold text-white inline-flex items-center gap-1.5"
+              style={{
+                fontSize: 12,
+                background: C.brandA,
+                opacity: busy ? 0.6 : 1,
+              }}
+            >
+              <Send size={13} />
+              {busy === "all" ? "Отправка…" : "Отправить всё, что ждёт"}
+            </button>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.sub, marginTop: 8 }}>
+            Пока автопроведение выключено, документы копятся в журнале и не
+            теряются — включите его, когда схема документов iiko подтверждена, и
+            нажмите «Отправить всё, что ждёт».
+          </div>
+        </Box>
+      )}
+
+      {err && <ErrBox text={err} />}
+
+      <Box>
+        <div
+          className="flex items-center justify-between"
+          style={{ marginBottom: 10 }}
+        >
+          <div className="font-semibold" style={{ fontSize: 13 }}>
+            Журнал документов
+          </div>
+          <NiceSelect
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "", label: "Все" },
+              { value: "pending", label: "Ждут отправки" },
+              { value: "error", label: "С ошибкой" },
+              { value: "posted", label: "Проведённые" },
+            ]}
+          />
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="w-full" style={{ fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ color: C.sub, textAlign: "left" }}>
+                <th className="py-1.5">Тип</th>
+                <th>Номенклатура</th>
+                <th>Кол-во</th>
+                <th>Склад</th>
+                <th>Статус</th>
+                <th>Попыток</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.documents || []).map((d) => (
+                <tr key={d.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td className="py-1.5">
+                    {DOC_LABEL[d.docType] || d.docType}
+                  </td>
+                  <td>
+                    {d.productName || d.productCode}
+                    {d.taskName ? (
+                      <div style={{ color: C.sub, fontSize: 11 }}>
+                        {d.taskName}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td>{num(d.qty)}</td>
+                  <td style={{ color: C.sub, fontSize: 11.5 }}>
+                    {d.warehouseFrom ? `${d.warehouseFrom} → ` : ""}
+                    {d.warehouseTo || "—"}
+                  </td>
+                  <td>
+                    <StatusChip status={d.status} />
+                    {d.error ? (
+                      <div
+                        style={{ color: "#DC2626", fontSize: 11, marginTop: 2 }}
+                      >
+                        {d.error}
+                      </div>
+                    ) : null}
+                    {d.iikoDocId ? (
+                      <div style={{ color: C.sub, fontSize: 11, marginTop: 2 }}>
+                        № {d.iikoDocId}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ color: C.sub }}>{d.attempts || 0}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    {d.status !== "posted" && (
+                      <button
+                        onClick={() => postOne(d.id)}
+                        disabled={busy === d.id}
+                        className="rounded-lg px-2 py-1 font-semibold"
+                        style={{
+                          fontSize: 11.5,
+                          border: `1px solid ${C.border}`,
+                          color: C.brandA,
+                        }}
+                      >
+                        {busy === d.id ? "…" : "Отправить"}
+                      </button>
+                    )}
+                    {(d.error || d.status === "posted") && (
+                      <button
+                        onClick={() => showPayload(d.id)}
+                        className="rounded-lg px-2 py-1"
+                        style={{
+                          fontSize: 11.5,
+                          border: `1px solid ${C.border}`,
+                          color: C.sub,
+                          marginLeft: 6,
+                        }}
+                        title="Показать отправленный XML и ответ iiko"
+                      >
+                        XML
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!data?.documents?.length && (
+                <tr>
+                  <td colSpan={7} style={{ color: C.sub, padding: "14px 0" }}>
+                    Документов нет. Они появляются, когда отдел вводит факт по
+                    заданию.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Box>
+
+      {payload && (
+        <Box>
+          <div
+            className="flex items-center justify-between"
+            style={{ marginBottom: 8 }}
+          >
+            <div className="font-semibold" style={{ fontSize: 13 }}>
+              Что ушло в iiko и что она ответила
+            </div>
+            <button
+              onClick={() => setPayload(null)}
+              className="rounded-lg px-2 py-1"
+              style={{
+                fontSize: 11.5,
+                border: `1px solid ${C.border}`,
+                color: C.sub,
+              }}
+            >
+              Закрыть
+            </button>
+          </div>
+          <pre
+            style={{
+              fontSize: 11,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+              background: "#F9FAFB",
+              padding: 10,
+              borderRadius: 10,
+              maxHeight: 240,
+              overflow: "auto",
+            }}
+          >
+            {payload.payload || "Документ ещё не отправлялся"}
+          </pre>
+          {payload.iikoResponse ? (
+            <pre
+              style={{
+                fontSize: 11,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+                background: "#FEF2F2",
+                padding: 10,
+                borderRadius: 10,
+                marginTop: 8,
+                maxHeight: 200,
+                overflow: "auto",
+              }}
+            >
+              {payload.iikoResponse}
+            </pre>
+          ) : null}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+// ── Отчёты: план/факт и недовыработка по этапам (ТЗ 6, 11) ──────────────────
+function monthStart() {
+  const d = today();
+  return `${d.slice(0, 8)}01`;
+}
+
+function ReportsTab() {
+  const [kind, setKind] = useState("plan-fact");
+  const [from, setFrom] = useState(monthStart());
+  const [to, setTo] = useState(today());
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(
+        await apiGet(`/api/production/report/${kind}?from=${from}&to=${to}`),
+      );
+      setErr("");
+    } catch (e) {
+      setErr(e.message || "Не удалось построить отчёт");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [kind, from, to]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="space-y-4">
+      <Box>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex gap-1">
+            {[
+              ["plan-fact", "План / факт", BarChart3],
+              ["losses", "Недовыработка", AlertTriangle],
+            ].map(([k, lbl, Icon]) => (
+              <button
+                key={k}
+                onClick={() => setKind(k)}
+                className="rounded-lg px-2.5 py-1.5 font-semibold inline-flex items-center gap-1.5"
+                style={{
+                  fontSize: 12,
+                  border: `1px solid ${kind === k ? C.brandA : C.border}`,
+                  color: kind === k ? C.brandA : C.sub,
+                  background: kind === k ? "#F5F3FF" : "#fff",
+                }}
+              >
+                <Icon size={13} />
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <NiceDate label="С" value={from} onChange={setFrom} />
+          <NiceDate label="По" value={to} onChange={setTo} />
+          <button
+            onClick={load}
+            className="rounded-lg px-3 py-1.5 font-semibold text-white"
+            style={{ fontSize: 12, background: C.brandA }}
+          >
+            Построить
+          </button>
+        </div>
+      </Box>
+
+      {err && <ErrBox text={err} />}
+      {loading && <div style={{ color: C.sub, fontSize: 13 }}>Считаем…</div>}
+
+      {data && kind === "plan-fact" && <PlanFactReport rep={data} />}
+      {data && kind === "losses" && <LossesReport rep={data} />}
+    </div>
+  );
+}
+
+// Процент выполнения одной строкой: цвет несёт смысл, а не украшение.
+function DonePct({ value }) {
+  const v = Number(value || 0);
+  const color = v >= 100 ? "#15803D" : v >= 90 ? "#B45309" : "#DC2626";
+  return (
+    <span className="font-semibold" style={{ color }}>
+      {v}%
+    </span>
+  );
+}
+
+function GroupTable({ title, rows, labelHead }) {
+  return (
+    <Box>
+      <div className="font-semibold" style={{ fontSize: 13, marginBottom: 8 }}>
+        {title}
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table className="w-full" style={{ fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ color: C.sub, textAlign: "left" }}>
+              <th className="py-1.5">{labelHead}</th>
+              <th>План</th>
+              <th>Факт</th>
+              <th>Отклонение</th>
+              <th>Выполнено</th>
+              <th>Заданий</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((g) => (
+              <tr key={g.key} style={{ borderTop: `1px solid ${C.border}` }}>
+                <td className="py-1.5">{g.label}</td>
+                <td>{num(g.planQty)}</td>
+                <td>{num(g.factQty)}</td>
+                <td style={{ color: g.deviation < 0 ? "#DC2626" : C.sub }}>
+                  {g.deviation > 0 ? "+" : ""}
+                  {num(g.deviation)}
+                </td>
+                <td>
+                  <DonePct value={g.donePct} />
+                </td>
+                <td style={{ color: C.sub }}>
+                  {num(g.tasks)}
+                  {g.retries ? ` (${num(g.retries)} до-задан.)` : ""}
+                </td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr>
+                <td colSpan={6} style={{ color: C.sub, padding: "12px 0" }}>
+                  За период данных нет
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Box>
+  );
+}
+
+function PlanFactReport({ rep }) {
+  const t = rep.total || {};
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Kpi label="Заданий за период" value={num(t.tasks)} tone={C.brandA} />
+        <Kpi label="План" value={num(t.planQty)} tone={C.sub} />
+        <Kpi label="Факт" value={num(t.factQty)} tone={C.brandB} />
+        <Kpi
+          label="Выполнено"
+          value={`${t.donePct || 0}%`}
+          tone={t.donePct >= 100 ? C.ok : t.donePct >= 90 ? C.warn : C.bad}
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Kpi label="Закрыто" value={num(t.done)} tone={C.ok} />
+        <Kpi
+          label="До-заданий из-за недостачи"
+          value={num(t.retries)}
+          tone={t.retries ? C.warn : C.sub}
+        />
+        <Kpi label="Коррекций факта" value={num(t.corrections)} tone={C.sub} />
+      </div>
+
+      <GroupTable title="По этапам" rows={rep.byPhase || []} labelHead="Этап" />
+      <GroupTable
+        title="По отделам"
+        rows={rep.byDepartment || []}
+        labelHead="Отдел"
+      />
+      <GroupTable
+        title="По изделиям"
+        rows={(rep.byProduct || []).slice(0, 50)}
+        labelHead="Изделие"
+      />
+
+      <Box>
+        <div
+          className="font-semibold"
+          style={{ fontSize: 13, marginBottom: 8 }}
+        >
+          С чего начинать разбор — наибольшая недовыработка
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="w-full" style={{ fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ color: C.sub, textAlign: "left" }}>
+                <th className="py-1.5">Изделие</th>
+                <th>Этап</th>
+                <th>Отдел</th>
+                <th>План</th>
+                <th>Факт</th>
+                <th>Не хватило</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(rep.worst || []).map((r) => (
+                <tr key={r.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td className="py-1.5">{r.nodeName}</td>
+                  <td>
+                    <span
+                      className="rounded-md px-1.5 py-0.5 font-semibold text-white"
+                      style={{
+                        fontSize: 10.5,
+                        background: PHASE_COLOR[r.phase] || "#6B7280",
+                      }}
+                    >
+                      {r.phaseLabel}
+                    </span>
+                  </td>
+                  <td style={{ color: C.sub }}>{r.departmentName || "—"}</td>
+                  <td>
+                    {num(r.planQty)} {r.unit}
+                  </td>
+                  <td>{num(r.factQty)}</td>
+                  <td style={{ color: "#DC2626", fontWeight: 600 }}>
+                    {num(-r.deviation)}
+                  </td>
+                </tr>
+              ))}
+              {!rep.worst?.length && (
+                <tr>
+                  <td colSpan={6} style={{ color: C.sub, padding: "12px 0" }}>
+                    Недовыработки за период нет — весь план закрыт.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Box>
+    </div>
+  );
+}
+
+function LossesReport({ rep }) {
+  const t = rep.total || {};
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Kpi label="План за период" value={num(t.planQty)} tone={C.sub} />
+        <Kpi
+          label="Недовыработка"
+          value={num(t.shortQty)}
+          tone={t.shortQty ? C.bad : C.ok}
+        />
+        <Kpi
+          label="Доля недовыработки"
+          value={`${t.shortPct || 0}%`}
+          tone={C.brandB}
+        />
+        <Kpi
+          label="Заданий с недостачей"
+          value={num(t.shortTasks)}
+          tone={C.sub}
+        />
+      </div>
+
+      <Box>
+        <div
+          className="font-semibold"
+          style={{ fontSize: 13, marginBottom: 4 }}
+        >
+          Недовыработка по этапам
+        </div>
+        <div style={{ fontSize: 11.5, color: C.sub, marginBottom: 8 }}>
+          Недовыработка — это план минус факт. Массы входа и выхода не
+          вычитаются: у узлов разные единицы измерения (кг, шт, л).
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="w-full" style={{ fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ color: C.sub, textAlign: "left" }}>
+                <th className="py-1.5">Этап</th>
+                <th>План</th>
+                <th>Факт</th>
+                <th>Не хватило</th>
+                <th>Доля</th>
+                <th>Заданий</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(rep.byPhase || []).map((g) => (
+                <tr
+                  key={g.phase}
+                  style={{ borderTop: `1px solid ${C.border}` }}
+                >
+                  <td className="py-1.5">
+                    <span
+                      className="rounded-md px-1.5 py-0.5 font-semibold text-white"
+                      style={{
+                        fontSize: 10.5,
+                        background: PHASE_COLOR[g.phase] || "#6B7280",
+                      }}
+                    >
+                      {g.label}
+                    </span>
+                  </td>
+                  <td>{num(g.planQty)}</td>
+                  <td>{num(g.factQty)}</td>
+                  <td style={{ color: g.shortQty ? "#DC2626" : C.sub }}>
+                    {num(g.shortQty)}
+                  </td>
+                  <td>{g.shortPct}%</td>
+                  <td style={{ color: C.sub }}>
+                    {num(g.shortTasks)} из {num(g.tasks)}
+                  </td>
+                </tr>
+              ))}
+              {!rep.byPhase?.length && (
+                <tr>
+                  <td colSpan={6} style={{ color: C.sub, padding: "12px 0" }}>
+                    За период данных нет
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Box>
+
+      <Box>
+        <div
+          className="font-semibold"
+          style={{ fontSize: 13, marginBottom: 4 }}
+        >
+          <FileText size={13} style={{ display: "inline", marginRight: 6 }} />
+          Расход сырья по документам перемещения
+        </div>
+        <div style={{ fontSize: 11.5, color: C.sub, marginBottom: 8 }}>
+          Непроведённые документы отмечены отдельно: пока они не в iiko, остатки
+          там расходятся с фактическим расходом.
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="w-full" style={{ fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ color: C.sub, textAlign: "left" }}>
+                <th className="py-1.5">Номенклатура</th>
+                <th>Кол-во</th>
+                <th>Документов</th>
+                <th>Не проведено</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(rep.materials || []).map((m) => (
+                <tr key={m.code} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td className="py-1.5">{m.name}</td>
+                  <td>{num(m.qty)}</td>
+                  <td style={{ color: C.sub }}>{num(m.docs)}</td>
+                  <td style={{ color: m.notPosted ? "#B45309" : C.sub }}>
+                    {num(m.notPosted)}
+                  </td>
+                </tr>
+              ))}
+              {!rep.materials?.length && (
+                <tr>
+                  <td colSpan={4} style={{ color: C.sub, padding: "12px 0" }}>
+                    Перемещений за период нет
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Box>
     </div>
   );
 }

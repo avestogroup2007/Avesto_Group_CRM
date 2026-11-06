@@ -139,3 +139,34 @@ test("mgmtChecksView: сводка содержит все филиалы и к�
   const actions = keyboard.flat().map((b) => b.callback_data);
   assert.ok(actions.includes("mgr|menu"));
 });
+
+// Бот считал расхождение как «выручка − расходы из кассы − iiko», тогда как
+// экран «Касса» и сводка — «выручка − iiko». Расход из кассы уменьшает наличные
+// в ящике, но не выручку, поэтому бот показывал ложную недостачу ровно на
+// сумму расходов.
+test("касса в боте: расходы из кассы не дают ложной недостачи", async () => {
+  const { db } = await import("../src/db.js");
+  const { branchCashView } = _internals;
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Tashkent",
+  });
+  // Выручка 1 000 000 совпадает с iiko, при этом из кассы потрачено 50 000.
+  await db.cashReport.deleteMany({ where: { branchId: "1", date: today } });
+  const rep = await db.cashReport.create({
+    data: {
+      branchId: "1",
+      date: today,
+      status: "submitted",
+      userId: "bot-test",
+      fiscal: 1000000n,
+      iiko: 1000000n,
+      expenses: 50000n,
+    },
+  });
+  try {
+    const { text } = await branchCashView(1);
+    assert.match(text, /Расхождение с iiko: <b>0 сум<\/b>/);
+  } finally {
+    await db.cashReport.delete({ where: { id: rep.id } });
+  }
+});

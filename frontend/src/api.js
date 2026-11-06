@@ -32,6 +32,37 @@ function authHeaders(extra) {
   return h;
 }
 
+// Полный адрес, по которому браузер обращается к API. Нужен в тексте сетевой
+// ошибки: «Failed to fetch» чаще всего значит, что фронт собран с одним адресом
+// бэкенда, а бэкенд отвечает по другому — и без адреса это не увидеть.
+function apiUrl(path) {
+  const u = `${BASE}${path}`;
+  try {
+    return new URL(u, window.location.href).href;
+  } catch {
+    return u;
+  }
+}
+
+// Обёртка над fetch. fetch бросает TypeError («Failed to fetch») только когда
+// ОТВЕТА НЕ БЫЛО ВООБЩЕ: сервер не запущен, страница по https обращается к http,
+// либо запрос ушёл на другой домен и его не пропустил CORS. Коды ответов сюда не
+// попадают — их разбирает parseError. Поэтому здесь называем именно эти причины
+// и адрес, по которому стучались, вместо сырого браузерного текста.
+async function request(path, opts) {
+  const url = apiUrl(path);
+  try {
+    return await fetch(url, opts);
+  } catch {
+    throw new Error(
+      `Сервер CRM не отвечает по адресу ${url}.\n\n` +
+        "Обычно это одно из трёх: бэкенд не запущен (проверьте pm2 на сервере); " +
+        "адрес фронтенда не совпадает с настройкой FRONTEND_URL бэкенда, и запрос " +
+        "отклонён CORS; либо страница открыта по https, а API указан по http.",
+    );
+  }
+}
+
 async function parseError(res) {
   try {
     const data = await res.json();
@@ -47,7 +78,7 @@ async function parseError(res) {
 
 // Вход: сохраняет токен, возвращает данные пользователя.
 export async function login(loginName, password) {
-  const res = await fetch(`${BASE}/api/auth/login`, {
+  const res = await request("/api/auth/login", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -63,7 +94,7 @@ export async function login(loginName, password) {
 export async function me() {
   if (!token) return null;
   try {
-    const res = await fetch(`${BASE}/api/auth/me`, {
+    const res = await request("/api/auth/me", {
       credentials: "include",
       headers: authHeaders(),
     });
@@ -79,7 +110,7 @@ export async function me() {
 
 // Смена собственного пароля (в т.ч. обязательная при первом входе).
 export async function changePassword(currentPassword, newPassword) {
-  const res = await fetch(`${BASE}/api/auth/change-password`, {
+  const res = await request("/api/auth/change-password", {
     method: "POST",
     credentials: "include",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -91,7 +122,7 @@ export async function changePassword(currentPassword, newPassword) {
 
 export async function logout() {
   try {
-    await fetch(`${BASE}/api/auth/logout`, {
+    await request("/api/auth/logout", {
       method: "POST",
       credentials: "include",
       headers: authHeaders(),
@@ -104,7 +135,7 @@ export async function logout() {
 
 // Общие помощники для будущих защищённых запросов (задачи, кассы, iiko).
 export async function apiGet(path) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await request(path, {
     credentials: "include",
     headers: authHeaders(),
   });
@@ -113,7 +144,7 @@ export async function apiGet(path) {
 }
 
 export async function apiPost(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await request(path, {
     method: "POST",
     credentials: "include",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -124,7 +155,7 @@ export async function apiPost(path, body) {
 }
 
 export async function apiPatch(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await request(path, {
     method: "PATCH",
     credentials: "include",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -135,7 +166,7 @@ export async function apiPatch(path, body) {
 }
 
 export async function apiPut(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await request(path, {
     method: "PUT",
     credentials: "include",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -146,7 +177,7 @@ export async function apiPut(path, body) {
 }
 
 export async function apiDelete(path) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await request(path, {
     method: "DELETE",
     credentials: "include",
     headers: authHeaders(),
@@ -158,7 +189,7 @@ export async function apiDelete(path) {
 // Скачивание файла с сервера с авторизацией (например, резервной копии):
 // обычная ссылка не подходит — нужен заголовок Authorization.
 export async function apiDownload(path, fallbackName) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await request(path, {
     headers: authHeaders(),
     credentials: "include",
   });

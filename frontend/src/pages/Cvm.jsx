@@ -2,7 +2,15 @@
 // оттоком и кампаниями/офферами. Данные — ручной ввод/импорт Excel и обогащение
 // из iiko Лояльность. Три вкладки: Аналитика, Клиенты, Кампании.
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Users, RefreshCw, Upload, Send, Plus, Trash2 } from "lucide-react";
+import {
+  Users,
+  RefreshCw,
+  Upload,
+  Send,
+  Plus,
+  Trash2,
+  TrendingUp,
+} from "lucide-react";
 import { apiGet, apiPost, apiPut, apiDelete } from "../api.js";
 import { C } from "../lib/theme.js";
 import { Kpi, PageHeader, NiceSelect } from "../components/ui.jsx";
@@ -672,15 +680,30 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
     segment: "at_risk",
     offer: "",
     channel: "manual",
+    cost: "",
   });
+  // Отчёт по эффективности раскрывается по клику: считается по снимку
+  // аудитории, снятому в момент запуска, поэтому есть только у запущенных.
+  const [roiFor, setRoiFor] = useState("");
+  const [roi, setRoi] = useState(null);
+  const [roiErr, setRoiErr] = useState("");
   const create = async () => {
     if (!form.name) {
       notify && notify("Введите название кампании");
       return;
     }
     try {
-      await apiPost("/api/cvm/campaigns", form);
-      setForm({ name: "", segment: "at_risk", offer: "", channel: "manual" });
+      await apiPost("/api/cvm/campaigns", {
+        ...form,
+        cost: Math.max(0, Math.round(Number(form.cost) || 0)),
+      });
+      setForm({
+        name: "",
+        segment: "at_risk",
+        offer: "",
+        channel: "manual",
+        cost: "",
+      });
       reload();
     } catch (e) {
       notify && notify(e.message || "Ошибка");
@@ -689,7 +712,11 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
   const send = async (id) => {
     try {
       const out = await apiPost(`/api/cvm/campaigns/${id}/send`, {});
-      notify && notify(`Кампания запущена: аудитория ${out.campaign.audience}`);
+      notify &&
+        notify(
+          `Кампания запущена: аудитория ${out.campaign.audience}` +
+            (out.control ? `, контрольная группа ${out.control}` : ""),
+        );
       reload();
     } catch (e) {
       notify && notify(e.message || "Ошибка");
@@ -700,6 +727,21 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
     borderRadius: 8,
     padding: "5px 8px",
     fontSize: 12.5,
+  };
+  const showRoi = async (id) => {
+    if (roiFor === id) {
+      setRoiFor("");
+      setRoi(null);
+      return;
+    }
+    setRoiFor(id);
+    setRoi(null);
+    setRoiErr("");
+    try {
+      setRoi(await apiGet(`/api/cvm/campaigns/${id}/roi`));
+    } catch (e) {
+      setRoiErr(e.message || "Не удалось посчитать");
+    }
   };
   const segLabel = (k) =>
     k === "all"
@@ -732,6 +774,14 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
             onChange={(e) => setForm({ ...form, offer: e.target.value })}
             placeholder="Оффер (напр. −20% на возврат)"
             style={{ ...inp, width: 260 }}
+          />
+          <input
+            value={form.cost}
+            onChange={(e) => setForm({ ...form, cost: e.target.value })}
+            placeholder="Затраты, сум"
+            inputMode="numeric"
+            title="Затраты на кампанию — без них ROI посчитать не по чему"
+            style={{ ...inp, width: 130 }}
           />
           <button
             onClick={create}
@@ -772,6 +822,7 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
                     Оффер
                   </th>
                   <th className="pb-2 pr-2 font-semibold">Аудитория</th>
+                  <th className="pb-2 pr-2 font-semibold">Затраты</th>
                   <th
                     className="pb-2 font-semibold"
                     style={{ textAlign: "left" }}
@@ -799,11 +850,31 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
                       {c.status === "sent" ? money(c.audience) : "—"}
                     </td>
                     <td
+                      className="py-1.5 pr-2 text-right"
+                      style={{ color: C.sub }}
+                    >
+                      {c.cost ? money(c.cost) : "—"}
+                    </td>
+                    <td
                       className="py-1.5"
                       style={{ display: "flex", alignItems: "center", gap: 8 }}
                     >
                       {c.status === "sent" ? (
-                        <span style={{ color: C.ok }}>запущена</span>
+                        <>
+                          <span style={{ color: C.ok }}>запущена</span>
+                          <button
+                            onClick={() => showRoi(c.id)}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold"
+                            style={{
+                              border: `1px solid ${C.border}`,
+                              color: C.brandA,
+                              fontSize: 11.5,
+                            }}
+                          >
+                            <TrendingUp size={12} />
+                            {roiFor === c.id ? "Скрыть" : "Эффект"}
+                          </button>
+                        </>
                       ) : canEdit ? (
                         <button
                           onClick={() => send(c.id)}
@@ -822,11 +893,124 @@ function CampaignsTab({ campaigns, reload, canEdit, notify, segments }) {
             </table>
           </div>
         )}
+        {roiFor && (
+          <RoiPanel roi={roi} error={roiErr} onClose={() => setRoiFor("")} />
+        )}
         <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>
-          «Запустить» фиксирует аудиторию сегмента с согласием на связь и
-          уведомляет команду. Персональная рассылка — по выгруженному списку
-          через ваш канал (Telegram/SMS).
+          «Запустить» фиксирует аудиторию сегмента с согласием на связь, снимает
+          метрики участников и контрольной группы и уведомляет команду.
+          Персональная рассылка — по выгруженному списку через ваш канал
+          (Telegram/SMS).
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Эффект кампании: прирост у получателей против контрольной группы того же
+// сегмента. Мы намеренно НЕ показываем «прирост выручки» как результат
+// кампании, когда контроля нет: часть покупок случилась бы и без неё, и такая
+// цифра врёт в пользу маркетинга.
+function RoiPanel({ roi, error, onClose }) {
+  const cell = { fontSize: 12.5, color: C.sub };
+  if (error) {
+    return (
+      <div
+        className="rounded-xl p-3"
+        style={{ border: `1px solid ${C.line}`, marginTop: 10, ...cell }}
+      >
+        {error}
+      </div>
+    );
+  }
+  if (!roi) {
+    return <div style={{ ...cell, marginTop: 10 }}>Считаем эффект…</div>;
+  }
+  if (roi.noSnapshot) {
+    return (
+      <div
+        className="rounded-xl p-3"
+        style={{ border: `1px solid ${C.line}`, marginTop: 10, ...cell }}
+      >
+        {roi.error}
+      </div>
+    );
+  }
+  const t = roi.target || {};
+  const c = roi.control;
+  return (
+    <div
+      className="rounded-xl p-3"
+      style={{ border: `1px solid ${C.line}`, marginTop: 10 }}
+    >
+      <div
+        className="flex items-center justify-between"
+        style={{ marginBottom: 8 }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 13, color: C.ink }}>
+          Эффект кампании
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg px-2 py-1"
+          style={{
+            border: `1px solid ${C.border}`,
+            color: C.sub,
+            fontSize: 11.5,
+          }}
+        >
+          Закрыть
+        </button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Kpi label="Получателей" value={money(t.size)} tone={C.brandA} />
+        <Kpi
+          label="Купили после запуска"
+          value={`${money(t.buyers)} · ${t.responsePct}%`}
+          tone={C.brandB}
+        />
+        <Kpi
+          label="Эффект (за вычетом контроля)"
+          value={
+            roi.attributedRevenue === null
+              ? "—"
+              : `${money(roi.attributedRevenue)} сум`
+          }
+          tone={C.ok}
+        />
+        <Kpi
+          label="ROI"
+          value={roi.roiPct === null ? "—" : `${roi.roiPct}%`}
+          tone={roi.roiPct === null ? C.sub : roi.roiPct >= 0 ? C.ok : C.bad}
+        />
+      </div>
+      <div
+        style={{
+          fontSize: 11.5,
+          color: C.faint,
+          marginTop: 8,
+          lineHeight: 1.6,
+        }}
+      >
+        Прирост у получателей: <b>{money(t.revenue)} сум</b> (
+        {money(t.revenuePerCustomer)} на клиента).{" "}
+        {c ? (
+          <>
+            Контрольная группа: {money(c.size)} чел.,{" "}
+            {money(c.revenuePerCustomer)} сум на клиента — столько выросли бы и
+            без кампании. Эффектом считается разница.
+          </>
+        ) : (
+          <>
+            Контрольной группы нет (у всех клиентов сегмента есть согласие на
+            рассылку), поэтому эффект и ROI не считаются: прирост нельзя
+            приписать кампании. Оставьте часть сегмента без рассылки, чтобы
+            измерить результат.
+          </>
+        )}
+        {roi.cost
+          ? ` Затраты: ${money(roi.cost)} сум.`
+          : " Затраты не указаны — ROI не считается."}
       </div>
     </div>
   );

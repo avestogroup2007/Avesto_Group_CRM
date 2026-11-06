@@ -23,7 +23,14 @@ const curMonth = () =>
     .toLocaleDateString("en-CA", { timeZone: "Asia/Tashkent" })
     .slice(0, 7);
 
+// Сумма в ячейке таблицы: null — «нет данных» (касса не сдана или у точки нет
+// кассы), и тогда это прочерк, а не «0»: ноль в колонке iiko читается как
+// «в iiko ноль продаж».
+const cell = (n) => (n == null ? "—" : money(n));
+
 const CASH_STATUS = {
+  // Цех, кейтеринг: розничной кассы нет — сдавать нечего.
+  na: { label: "Нет кассы", bg: "#F3F4F6", fg: "#6B7280" },
   none: { label: "Не сдана", bg: "#FEE2E2", fg: "#DC2626" },
   submitted: { label: "Сдана", bg: "#FEF3C7", fg: "#B45309" },
   confirmed: { label: "Подтверждена", bg: "#DCFCE7", fg: "#15803D" },
@@ -288,23 +295,27 @@ export default function DashboardView({ dispatch }) {
                         className="py-2 pr-2 text-right"
                         style={{ color: C.ink }}
                       >
-                        {money(row.declared)}
+                        {cell(row.declared)}
                       </td>
                       <td
                         className="py-2 pr-2 text-right"
                         style={{ color: C.sub }}
                       >
-                        {money(row.iiko)}
+                        {cell(row.iiko)}
                       </td>
                       <td
                         className="py-2 pr-2 text-right"
                         style={{
                           color:
-                            disc === 0 ? C.faint : disc < 0 ? C.bad : "#15803D",
+                            disc == null || disc === 0
+                              ? C.faint
+                              : disc < 0
+                                ? C.bad
+                                : "#15803D",
                           fontWeight: 700,
                         }}
                       >
-                        {disc === 0
+                        {disc == null || disc === 0
                           ? "—"
                           : `${disc > 0 ? "+" : ""}${money(disc)}`}
                       </td>
