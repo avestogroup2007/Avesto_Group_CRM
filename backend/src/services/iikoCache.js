@@ -59,10 +59,7 @@ function once(key, fn) {
 
 // Достать отчёт: память → БД → iiko. fetchFn вызывается только если данных
 // нет нигде или они протухли.
-export async function cachedReport(
-  { kind, scope, from, to },
-  fetchFn
-) {
+export async function cachedReport({ kind, scope, from, to }, fetchFn) {
   const closed = periodClosed(to);
   const mk = memKey(kind, scope, from, to);
 
@@ -92,7 +89,10 @@ export async function cachedReport(
       stale = row.payload;
     }
   } catch (e) {
-    log.warn({ err: e.message, kind, scope }, "iikoCache: чтение из БД не удалось");
+    log.warn(
+      { err: e.message, kind, scope },
+      "iikoCache: чтение из БД не удалось"
+    );
   }
 
   // Данные протухли, но они есть. Отдаём их сразу, а обновление запускаем в
@@ -149,7 +149,10 @@ async function store({ kind, scope, from, to, value, closed }) {
       update: { payload: value, fetchedAt: new Date(), expiresAt },
     });
   } catch (e) {
-    log.warn({ err: e.message, kind, scope }, "iikoCache: запись в БД не удалась");
+    log.warn(
+      { err: e.message, kind, scope },
+      "iikoCache: запись в БД не удалась"
+    );
   }
 }
 

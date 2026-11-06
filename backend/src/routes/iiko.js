@@ -107,9 +107,8 @@ r.post(
     const dept = (await forcedDepartment(req.user)) || department;
     const departments = dept ? [dept] : undefined;
     res.json(
-      await cachedReport(
-        { kind: "olap", scope: dept || "all", from, to },
-        () => salesReport({ from, to, departments })
+      await cachedReport({ kind: "olap", scope: dept || "all", from, to }, () =>
+        salesReport({ from, to, departments })
       )
     );
   })
@@ -166,9 +165,8 @@ r.post(
     }
     const dept = (await forcedDepartment(req.user)) || department;
     res.json(
-      await cachedReport(
-        { kind: "pnl", scope: dept || "all", from, to },
-        () => pnlReport({ from, to, department: dept || undefined })
+      await cachedReport({ kind: "pnl", scope: dept || "all", from, to }, () =>
+        pnlReport({ from, to, department: dept || undefined })
       )
     );
   })
@@ -415,7 +413,6 @@ r.patch(
   })
 );
 
-
 // Учёт рабочего времени из iiko: ?from=YYYY-MM-DD&to=YYYY-MM-DD.
 // Явки (/resto/api/employees/attendance) содержат начало и конец смены и
 // подразделение, в котором смена открыта, — этого достаточно для табеля:
@@ -428,7 +425,9 @@ r.get(
     const { from, to, department, position } = req.query;
     const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
     if (!isDate(from) || !isDate(to)) {
-      return res.status(400).json({ error: "Нужны даты from и to (ГГГГ-ММ-ДД)" });
+      return res
+        .status(400)
+        .json({ error: "Нужны даты from и to (ГГГГ-ММ-ДД)" });
     }
     // Управляющему филиал навязан; офис может выбрать филиал сам — иначе
     // фильтр «Все филиалы» в шапке на этом экране ни на что не влиял бы.

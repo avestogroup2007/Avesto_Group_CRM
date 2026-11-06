@@ -16,7 +16,11 @@ import crypto from "node:crypto";
 import { env } from "../env.js";
 import { asyncHandler } from "../util/asyncHandler.js";
 import { salesReport, iikoConfigured } from "../services/iikoServer.js";
-import { cachedReport, pruneExpired, todayTashkent } from "../services/iikoCache.js";
+import {
+  cachedReport,
+  pruneExpired,
+  todayTashkent,
+} from "../services/iikoCache.js";
 import { refreshOrgConfig, orgBranches } from "../services/orgConfig.js";
 import { log } from "./../logger.js";
 
@@ -81,9 +85,7 @@ r.post(
       return res.status(403).json({ error: "Неверный секрет" });
     }
     if (!iikoConfigured()) {
-      return res
-        .status(503)
-        .json({ error: "Интеграция iiko не настроена" });
+      return res.status(503).json({ error: "Интеграция iiko не настроена" });
     }
 
     await refreshOrgConfig().catch(() => {});
@@ -116,7 +118,12 @@ r.post(
           );
           done.push(`${s.scope}/${p.name}:${p.from}..${p.to}`);
         } catch (e) {
-          failed.push({ scope: s.scope, preset: p.name, period: `${p.from}..${p.to}`, error: e.message });
+          failed.push({
+            scope: s.scope,
+            preset: p.name,
+            period: `${p.from}..${p.to}`,
+            error: e.message,
+          });
           log.warn(
             { err: e.message, scope: s.scope },
             "iiko-cron: прогрев не удался"

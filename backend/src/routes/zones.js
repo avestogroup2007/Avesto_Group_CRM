@@ -74,7 +74,9 @@ r.post(
       // Имя зоны уникально: чек-листы и сотрудники ссылаются на неё строкой,
       // и два «Зала» сделали бы привязку неоднозначной.
       if (e && e.code === "P2002") {
-        return res.status(409).json({ error: "Зона с таким названием уже есть" });
+        return res
+          .status(409)
+          .json({ error: "Зона с таким названием уже есть" });
       }
       throw e;
     }
@@ -105,7 +107,9 @@ r.patch(
       res.json(updated);
     } catch (e) {
       if (e && e.code === "P2002") {
-        return res.status(409).json({ error: "Зона с таким названием уже есть" });
+        return res
+          .status(409)
+          .json({ error: "Зона с таким названием уже есть" });
       }
       if (e && e.code === "P2025") {
         return res.status(404).json({ error: "Зона не найдена" });
@@ -124,7 +128,9 @@ r.delete(
     // Удалять зону, на которой висят чек-листы, нельзя: шаблоны ссылаются на
     // неё по имени и остались бы «сиротами» — сотруднику пришёл бы чек-лист
     // несуществующей зоны. Предлагаем деактивировать вместо удаления.
-    const used = await db.checklistTemplate.count({ where: { zone: zone.name } });
+    const used = await db.checklistTemplate.count({
+      where: { zone: zone.name },
+    });
     if (used > 0) {
       return res.status(409).json({
         error: `На зоне «${zone.name}» висит чек-листов: ${used}. Снимите их или отключите зону вместо удаления.`,

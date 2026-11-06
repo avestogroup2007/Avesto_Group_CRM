@@ -46,7 +46,9 @@ async function loadStaffTemplates(user) {
   // тому, у кого эта зона назначена. Иначе уборщице зала падали бы чек-листы
   // кухни, бара и туалета разом.
   const zoneOk = (t) => {
-    const z = String(t.zone || "").trim().toLowerCase();
+    const z = String(t.zone || "")
+      .trim()
+      .toLowerCase();
     if (!z) return true;
     if (!myZones.length) return true;
     return myZones.includes(z);

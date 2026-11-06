@@ -225,7 +225,6 @@ r.get(
   })
 );
 
-
 // Сверка кассы с iiko за день: ?date=YYYY-MM-DD&branch=<id>.
 // Возвращает по каждому типу оплаты «пробито в iiko ↔ сдал управляющий ↔
 // разница», плюс сводку по кассовым сменам (расхождение ящика, изъятия,
@@ -253,7 +252,8 @@ r.get(
       if (e instanceof IikoNotConfiguredError) {
         return res.status(503).json({ error: e.message });
       }
-      if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
+      if (e.statusCode)
+        return res.status(e.statusCode).json({ error: e.message });
       throw e;
     }
   })

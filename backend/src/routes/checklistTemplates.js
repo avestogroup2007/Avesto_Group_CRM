@@ -57,12 +57,7 @@ const TemplateSchema = TemplateBase.refine(hourlyWindowOk, {
 // Кто формирует и правит чек-листы: старшие должности. Шеф-повар и
 // начальник производства приходят из iiko с ролью manager (см. ROLE_MAP в
 // services/iikoSync.js), поэтому отдельной роли под них не нужно.
-const CHECKLIST_MANAGERS = [
-  "director",
-  "manager",
-  "accountant",
-  "sysadmin",
-];
+const CHECKLIST_MANAGERS = ["director", "manager", "accountant", "sysadmin"];
 
 // Какой модуль нужен для kind шаблона.
 const MODULE_FOR = {
@@ -182,7 +177,6 @@ r.delete(
   })
 );
 
-
 // Справочники для редактора шаблонов: должности и зоны.
 //
 // Должности тянутся из iiko, а не вводятся руками: при ручном вводе
@@ -192,7 +186,15 @@ r.delete(
 //
 // Зоны не фиксированы в коде: у цеха и у магазина они разные. Отдаём уже
 // использованные плюс типовой набор, а завести новую можно вводом.
-const DEFAULT_ZONES = ["Зал", "Кухня", "Бар", "Туалет", "Склад", "Витрина", "Цех"];
+const DEFAULT_ZONES = [
+  "Зал",
+  "Кухня",
+  "Бар",
+  "Туалет",
+  "Склад",
+  "Витрина",
+  "Цех",
+];
 r.get(
   "/meta",
   asyncHandler(async (req, res) => {

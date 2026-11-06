@@ -739,9 +739,7 @@ r.post(
     // обходится прямым запросом к API.
     if (d.paymentType === PAY_TRANSFER) {
       if (!d.account.trim()) {
-        return res
-          .status(400)
-          .json({ error: "Для перечисления укажите счёт" });
+        return res.status(400).json({ error: "Для перечисления укажите счёт" });
       }
       if (!d.legalEntity.trim()) {
         return res
